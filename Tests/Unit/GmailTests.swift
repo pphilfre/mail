@@ -219,4 +219,32 @@ final class GmailTests: XCTestCase {
         XCTAssertEqual(before, after)
         try await vault.remove(for: account.id)
     }
+    func testUncertainRemoteDraftCreationDoesNotCreateDuplicateOnRetry() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        repository.context.insert(account); try repository.context.save()
+        let draft = LocalDraft(subject: "Draft without recipient", body: "Keep me", accountID: account.id)
+        try repository.save([draft])
+        let vault = CredentialVault(service: "dispatch.test.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([
+            reply(#"{"drafts":[]}"#), reply("{}", status: 503),
+            reply(#"{"drafts":[]}"#),
+            reply(#"{"drafts":[{"id":"rDraft"}]}"#), reply(#"{"id":"rDraft"}"#)
+        ])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        for _ in 0..<2 {
+            do { try await coordinator.saveRemoteDraft(draft); XCTFail("Expected uncertain draft") }
+            catch { XCTAssertEqual(error as? GmailError, .uncertainDraft) }
+        }
+        try await coordinator.saveRemoteDraft(draft)
+        let row = try XCTUnwrap(repository.outgoing(draft.id))
+        XCTAssertEqual(row.remoteDraftID, "rDraft"); XCTAssertNil(row.lastError)
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.filter { $0.httpMethod == "POST" }.count, 1)
+        XCTAssertEqual(requests.filter { $0.httpMethod == "PUT" }.count, 1)
+        XCTAssertEqual(try repository.load().count, 1)
+        try await vault.remove(for: account.id)
+    }
 }

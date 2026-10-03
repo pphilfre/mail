@@ -26,7 +26,7 @@ struct URLSessionMailTransport: MailHTTPTransport {
 }
 
 enum GmailError: LocalizedError, Equatable {
-    case configuration, cancelled, invalidCallback, reconnect, invalidResponse, http(Int), invalidRecipients, uncertainSend, busy
+    case configuration, cancelled, invalidCallback, reconnect, invalidResponse, http(Int), invalidRecipients, uncertainSend, uncertainDraft, busy
     var errorDescription: String? {
         switch self {
         case .configuration: "Google configuration is missing or does not match the registered callback."
@@ -37,6 +37,7 @@ enum GmailError: LocalizedError, Equatable {
         case .http(let code): "Gmail request failed (HTTP \(code)). Check Gmail API access and try again."
         case .invalidRecipients: "Enter valid email addresses. Recipient and subject headers must not contain line breaks."
         case .uncertainSend: "Sending could not be confirmed. Check Sent in Gmail before creating another copy. Dispatch will not resend this message automatically."
+        case .uncertainDraft: "The Gmail draft upload could not be confirmed. Your local draft is safe. Check Gmail Drafts, then try Save to Gmail again; Dispatch will look for the existing copy before creating another."
         case .busy: "This account is already connecting."
         }
     }

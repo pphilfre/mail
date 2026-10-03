@@ -15,6 +15,9 @@ final class GmailCoordinator {
     @ObservationIgnored private let signIn = GoogleSignIn()
     @ObservationIgnored private var managers: [UUID: GmailAPI] = [:]
     @ObservationIgnored private var refreshAgain: Set<UUID> = []
+    @ObservationIgnored private var mailboxRequests: [UUID: MailboxRequest] = [:]
+    private struct MailboxRequest { let name: String; let label: String? }
+    private static let uncertainDraftMarker = "remote-draft-create-unconfirmed"
     init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport()) {
         self.repository = repository; self.vault = vault; self.transport = transport
     }
@@ -49,13 +52,14 @@ final class GmailCoordinator {
         catch { self.error = error.localizedDescription }
     }
     func syncAll() async {
+        error = nil
         do { for account in try repository.accounts() where account.providerRaw == "gmail" { await sync(account.id) } }
         catch { self.error = error.localizedDescription }
     }
     func sync(_ id: UUID) async {
         guard !syncing.contains(id) else { refreshAgain.insert(id); return }
         syncing.insert(id)
-        defer { syncing.remove(id) }
+        defer { finishWork(id) }
         repeat {
             refreshAgain.remove(id)
             do {
@@ -113,8 +117,7 @@ final class GmailCoordinator {
         guard !syncing.contains(id) else { return }
         syncing.insert(id)
         defer {
-            syncing.remove(id)
-            if refreshAgain.contains(id) { Task { await sync(id) } }
+            finishWork(id)
         }
         do {
             guard let account = try repository.account(id: id), let cursor = account.syncCursor else { return }
@@ -138,7 +141,10 @@ final class GmailCoordinator {
         do {
             let accounts = try repository.accounts().filter { (accountID == nil || $0.id == accountID) && $0.providerRaw == "gmail" }
             for account in accounts {
-                guard !syncing.contains(account.id) else { continue }
+                guard !syncing.contains(account.id) else {
+                    mailboxRequests[account.id] = MailboxRequest(name: name, label: labelID)
+                    continue
+                }
                 syncing.insert(account.id)
                 do {
                     let api = try client(account.id)
@@ -160,11 +166,17 @@ final class GmailCoordinator {
                     let page = try await api.messages(label: label, query: query)
                     let result = try await fetch(Set((page.messages ?? []).map(\.id)), accountID: account.id, api: api)
                     try repository.apply(result.messages, deleted: result.deleted, accountID: account.id)
-                    syncing.remove(account.id)
-                    if refreshAgain.contains(account.id) { await sync(account.id) }
-                } catch { syncing.remove(account.id); throw error }
+                    finishWork(account.id)
+                } catch { finishWork(account.id); throw error }
             }
         } catch { self.error = error.localizedDescription }
+    }
+    private func finishWork(_ id: UUID) {
+        syncing.remove(id)
+        if refreshAgain.contains(id) { Task { await sync(id) } }
+        else if let request = mailboxRequests.removeValue(forKey: id) {
+            Task { await loadMailbox(request.name, accountID: id, labelID: request.label) }
+        }
     }
     private func flush(_ id: UUID, api: GmailAPI) async throws {
         let pending = try repository.context.fetch(FetchDescriptor<PendingMailOperation>(predicate: #Predicate { $0.accountID == id }, sortBy: [SortDescriptor(\.createdAt)]))
@@ -207,9 +219,21 @@ final class GmailCoordinator {
         if remoteID == nil {
             let found = try await api.drafts(query: "rfc822msgid:\(row.internetMessageID)")
             remoteID = found.drafts?.first?.id
+            if remoteID == nil && row.lastError == Self.uncertainDraftMarker { throw GmailError.uncertainDraft }
         }
-        let remote = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
-        row.remoteDraftID = remote.id; try repository.context.save()
+        if remoteID == nil { row.lastError = Self.uncertainDraftMarker; try repository.context.save() }
+        do {
+            let remote = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
+            row.remoteDraftID = remote.id; row.lastError = nil; try repository.context.save()
+        } catch {
+            if remoteID == nil {
+                if let failure = error as? GmailError, case .http(let code) = failure, (400..<500).contains(code) {
+                    row.lastError = nil; try repository.context.save(); throw failure
+                }
+                throw GmailError.uncertainDraft
+            }
+            throw error
+        }
     }
     func importDraft(_ message: MailMessage) async throws -> LocalDraft {
         let accountID = message.accountID
@@ -240,6 +264,7 @@ final class GmailCoordinator {
     func send(_ draft: LocalDraft) async throws {
         guard let id = draft.accountID, let account = try repository.account(id: id), let row = try repository.outgoing(draft.id) else { throw GmailError.reconnect }
         guard row.stateRaw == "draft" else { throw GmailError.uncertainSend }
+        guard row.lastError != Self.uncertainDraftMarker else { throw GmailError.uncertainDraft }
         guard !writing.contains(id) else { throw GmailError.busy }
         writing.insert(id); defer { writing.remove(id) }
         let raw = try MailMIME.raw(draft, from: account.email)
