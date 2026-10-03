@@ -4,7 +4,7 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-Stage 1 is verified: [macOS CI](https://github.com/pphilfre/mail/actions/runs/37123967712) built the app and passed four unit tests and three UI tests. Stage 2's tag-driven IPA release is being validated before starting the storage stage. See [stage status](docs/stages.md).
+Stages 1 and 2 are verified: [Dispatch CI](https://github.com/pphilfre/mail/actions/runs/37124979822) built the renamed app and passed four unit tests and three UI tests; the IPA release pipeline is verified. Stage 3's SwiftData and Keychain implementation is undergoing validation. Gmail is the current provider priority. See [stage status](docs/stages.md).
 
 Before the provider stages, follow the [OAuth setup guide](docs/oauth-setup.md) to register Gmail and prepare the Zoho configuration from Windows.
 
@@ -55,7 +55,9 @@ Tests/                    Unit and UI tests
 scripts/                  macOS build, simulator selection, IPA packaging
 ```
 
-Foundation drafts use an atomic, protected JSON file in Application Support. Stage 3 will migrate them to SwiftData before adding real mail. OAuth credentials will live in Keychain, never in this file or SwiftData. No remote network requests occur in the foundation.
+The app opens its versioned SwiftData database in Application Support and loads cached drafts before any network work. Existing foundation JSON drafts are imported once with a durable marker; the protected original file is kept for recovery. Import failure preserves the original and surfaces a retry screen. Store failures never silently replace the database with an empty in-memory store.
+
+Shared storage includes accounts, messages, threads, Codable mail addresses, folder/label metadata, attachment metadata, outgoing messages and pending operations. Account-local provider IDs are scoped by the account UUID. Account deletion clears associated rows in one transaction. CredentialVault stores OAuth tokens only in device-local Keychain items accessible after the first unlock; it disables iCloud synchronisation and redacts diagnostic descriptions. No provider is connected yet.
 
 ## macOS commands used by CI
 

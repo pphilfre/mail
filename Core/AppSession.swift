@@ -8,9 +8,9 @@ final class AppSession {
     var sampleMessages = SampleMessage.examples
     var drafts: [LocalDraft]
     var storageError: String?
-    @ObservationIgnored private let draftStore: DraftStore
+    @ObservationIgnored private let draftStore: any DraftPersistence
 
-    init(draftStore: DraftStore = DraftStore()) {
+    init(draftStore: any DraftPersistence = DraftStore()) {
         self.draftStore = draftStore
         do {
             drafts = try draftStore.load()

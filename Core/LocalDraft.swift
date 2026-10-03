@@ -1,6 +1,6 @@
 import Foundation
 
-/// Temporary foundation format; Stage 3 will migrate these drafts into SwiftData.
+/// Composer value and legacy import format. OutgoingMessage persists it in SwiftData.
 struct LocalDraft: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var to = ""
@@ -29,7 +29,7 @@ enum DraftStoreError: LocalizedError {
     }
 }
 
-struct DraftStore: Sendable {
+struct DraftStore: Sendable, DraftPersistence {
     let fileURL: URL
 
     init(fileURL: URL? = nil) {
