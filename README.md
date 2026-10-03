@@ -31,7 +31,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow reruns build/tests, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.1.0.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`.
+The release workflow requires an already successful iOS CI run for the exact tagged commit, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.1.1.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`. If a tag is pushed before CI finishes, wait for CI and rerun the failed release workflow. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 
@@ -59,8 +59,9 @@ Foundation drafts use an atomic, protected JSON file in Application Support. Sta
 
 ```bash
 bash scripts/prepare-macos.sh
+bash scripts/build-ios.sh
 bash scripts/test-ios.sh
-bash scripts/package-ipa.sh v0.1.0
+bash scripts/package-ipa.sh v0.1.1
 ```
 
 ## Reference documentation
