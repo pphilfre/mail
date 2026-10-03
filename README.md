@@ -18,7 +18,7 @@ git commit -m "Describe your change"
 git push
 ```
 
-The runner uses macOS 26 with Xcode 26.0.1, generates the project using XcodeGen, builds for an available iOS 26+ iPhone simulator and runs unit/UI tests. XcodeGen is installed through Homebrew; its resolved version appears in the build log. Xcode's version is pinned in `scripts/prepare-macos.sh` and should only change together with a passing CI run.
+The runner uses macOS 26 with Xcode 26.6, generates the project using XcodeGen, builds for an available iOS 26+ iPhone simulator and runs unit/UI tests. XcodeGen is installed through Homebrew; its resolved version appears in the build log. Xcode's version is pinned in `scripts/prepare-macos.sh` and should only change together with a passing CI run.
 
 ## Release an IPA
 

@@ -10,7 +10,7 @@ mkdir -p build/ipa/Payload
 xcodebuild -project MailApp.xcodeproj -scheme MailApp -configuration Release \
   -destination 'generic/platform=iOS' -derivedDataPath build/ReleaseDerivedData \
   MARKETING_VERSION="${version#v}" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-  build | tee build/release-build.log
+  build 2>&1 | tee build/release-build.log
 app_path="build/ReleaseDerivedData/Build/Products/Release-iphoneos/MailApp.app"
 test -f "$app_path/MailApp"
 ditto "$app_path" build/ipa/Payload/MailApp.app

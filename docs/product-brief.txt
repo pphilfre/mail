@@ -1,0 +1,488 @@
+Build a native iOS mail app in SwiftUI for iOS 26+.
+
+The design should feel like Apple Mail with some of Notion Mail's organisation, but faster, cleaner and more native.
+
+I develop on Windows, so the project must be maintainable without Xcode locally. GitHub Actions should build it on macOS and publish an IPA release I can sideload.
+
+## Core stack
+
+Use:
+
+- Swift
+- SwiftUI
+- iOS 26+
+- Liquid Glass where appropriate
+- SwiftData for local mail storage
+- Keychain for OAuth tokens
+- Gmail REST API
+- Zoho Mail API
+- async/await
+- GitHub Actions
+- XcodeGen if useful
+
+Do not use React Native, Expo or Flutter.
+
+The app should be local-first:
+
+```text
+Gmail / Zoho
+     ↓
+Sync Engine
+     ↓
+SwiftData
+     ↓
+SwiftUI
+```
+
+The UI should always load cached mail first, then sync changes in the background.
+
+---
+
+# Stage 1 - Project foundation
+
+First create the project structure and get it building.
+
+Create something like:
+
+```text
+App/
+Core/
+Providers/
+    Gmail/
+    Zoho/
+Features/
+    Inbox/
+    Message/
+    Compose/
+    Search/
+    Accounts/
+    Settings/
+DesignSystem/
+```
+
+Use native SwiftUI throughout.
+
+Create the basic app shell with:
+
+- inbox
+- accounts
+- settings
+- message view
+- compose sheet
+
+Use Apple-style spacing, SF Symbols, native navigation and Liquid Glass sparingly.
+
+Do not continue until the project builds successfully.
+
+---
+
+# Stage 2 - Windows + GitHub Actions workflow
+
+I do not have a Mac.
+
+Make the repository editable entirely from Windows.
+
+Use XcodeGen if needed so I do not need to manually edit an `.xcodeproj`.
+
+Create:
+
+```text
+.github/workflows/ios-ci.yml
+.github/workflows/release.yml
+```
+
+CI should:
+
+1. checkout
+2. use a macOS runner
+3. generate the Xcode project
+4. build the app
+5. run tests
+
+Release workflow should run on tags such as:
+
+```text
+v0.1.0
+```
+
+and:
+
+1. build the app
+2. package an IPA
+3. create a GitHub Release
+4. attach the IPA to the release
+
+Example:
+
+```text
+MailApp-v0.1.0.ipa
+```
+
+The IPA should be suitable for sideloading where possible.
+
+Do not commit signing certificates or secrets.
+
+---
+
+# Stage 3 - Local mail database
+
+Build the local-first storage layer.
+
+Create shared models such as:
+
+```text
+MailAccount
+MailMessage
+MailThread
+MailAddress
+MailAttachment
+MailFolder
+OutgoingMessage
+PendingMailOperation
+```
+
+Store locally:
+
+- sender
+- recipients
+- subject
+- snippet
+- date
+- read state
+- starred/flagged state
+- labels/folders
+- account
+- cached body
+- attachment metadata
+
+Do not store OAuth refresh tokens in SwiftData.
+
+Store credentials in Keychain.
+
+The app should open instantly using local data.
+
+---
+
+# Stage 4 - Gmail
+
+Implement Google OAuth and Gmail API support.
+
+Do not store Gmail passwords.
+
+Support:
+
+- inbox
+- threads
+- labels
+- read/unread
+- starred
+- archive
+- trash
+- send
+- drafts
+- reply
+- reply all
+- forward
+
+Use Gmail incremental sync.
+
+Store the last:
+
+```text
+historyId
+```
+
+Then use Gmail `history.list` to fetch only changes instead of redownloading the mailbox.
+
+The Gmail provider should be separate from the SwiftUI views.
+
+---
+
+# Stage 5 - Zoho
+
+Implement Zoho OAuth 2.0 and the Zoho Mail API.
+
+Support the same common mail actions where possible.
+
+Keep Zoho-specific behaviour inside:
+
+```text
+Providers/Zoho/
+```
+
+Do not assume Gmail and Zoho behave identically.
+
+Respect Zoho's different data-centre API domains.
+
+---
+
+# Stage 6 - Unified inbox
+
+Combine all connected accounts into one local inbox.
+
+Allow filtering by account.
+
+Support:
+
+- All Mail
+- Inbox
+- Unread
+- Starred / Flagged
+- Sent
+- Drafts
+- Archive
+- Trash
+
+Inbox rows should feel similar to Apple Mail:
+
+```text
+Sender                         12:41
+Subject
+Short message preview...
+```
+
+Use native swipe actions:
+
+Right:
+
+```text
+Read / Unread
+```
+
+Left:
+
+```text
+Archive
+Delete
+More
+```
+
+---
+
+# Stage 7 - Message reader and compose
+
+Create a clean native message reader.
+
+Support:
+
+- HTML email
+- plain text
+- threads
+- attachments
+- remote image blocking
+- reply
+- reply all
+- forward
+- archive
+- delete
+
+Treat HTML email as untrusted content.
+
+Do not allow scripts.
+
+Create an Apple Mail-style compose sheet with:
+
+```text
+From
+To
+Cc/Bcc
+Subject
+Body
+```
+
+Support attachments and drafts.
+
+---
+
+# Stage 8 - Search
+
+Search the local database first.
+
+Search:
+
+- sender
+- recipient
+- subject
+- snippet
+- account
+- labels
+- attachment names
+
+Search should feel instant.
+
+Do not send a provider API request for every key press.
+
+Later we can add advanced filters such as:
+
+```text
+from:
+is:unread
+has:attachment
+account:
+```
+
+---
+
+# Stage 9 - Sync and offline support
+
+Make the app work well offline.
+
+When the user performs actions offline, queue them locally.
+
+Example:
+
+```text
+Archive message
+      ↓
+update UI immediately
+      ↓
+store pending operation
+      ↓
+internet returns
+      ↓
+sync with provider
+```
+
+Support retries and error handling.
+
+Sync when:
+
+- app launches
+- app enters foreground
+- user pulls to refresh
+- network returns
+- background refresh runs
+
+---
+
+# Stage 10 - Push notifications
+
+Add a small notification backend.
+
+Do not store the entire mailbox on the backend.
+
+Its purpose is mainly:
+
+```text
+mailbox change
+      ↓
+backend
+      ↓
+APNs
+      ↓
+iPhone
+```
+
+## Gmail
+
+Use Google's official:
+
+```text
+Gmail users.watch
+      ↓
+Google Cloud Pub/Sub
+      ↓
+backend
+      ↓
+APNs
+```
+
+Renew Gmail watches automatically before they expire.
+
+Use Gmail history IDs to determine what actually changed.
+
+## Zoho
+
+Do not invent a webhook.
+
+Research the current official Zoho Mail capabilities when implementing this stage.
+
+Use this priority:
+
+```text
+official Zoho webhook
+↓
+IMAP IDLE if appropriate
+↓
+efficient server-side polling
+```
+
+Do not continuously poll from the iPhone.
+
+---
+
+# Stage 11 - APNs
+
+Register the app for remote notifications.
+
+Store device tokens on the backend.
+
+Use APNs token-based authentication.
+
+Never place the APNs private key inside the iOS app.
+
+Push notifications should contain minimal information.
+
+For example:
+
+```text
+sender
+subject
+message ID
+account ID
+```
+
+Do not send full email bodies through APNs.
+
+Important:
+
+APNs requires Apple's proper push entitlement and provisioning.
+
+An unsigned IPA re-signed through a sideloading tool may not have working push notifications.
+
+Therefore:
+
+- the app must work fully without APNs
+- push should enable automatically when valid signing supports it
+- foreground/background sync should remain as fallback
+
+---
+
+# Stage 12 - Final polish
+
+Only after everything works, improve:
+
+- Liquid Glass
+- animations
+- haptics
+- empty states
+- loading states
+- dark mode
+- accessibility
+- account colours
+- search UX
+- message transitions
+- error states
+
+Do not sacrifice performance for visual effects.
+
+The final app should feel closer to Apple Mail than a custom web dashboard.
+
+## Working rules
+
+Work stage by stage.
+
+For each stage:
+
+1. inspect the current code
+2. implement the stage
+3. build/test it
+4. fix errors
+5. update documentation
+6. only then move to the next stage
+
+Do not rewrite working parts unnecessarily.
+
+Do not leave placeholder implementations pretending to work.
+
+If an API capability is uncertain, research its current official documentation before implementing it.

@@ -24,3 +24,5 @@ System SF typography, semantic system backgrounds/text colours, iOS accent blue,
 ## Validation boundaries
 
 Windows can inspect source and validate workflow/manifest syntax. It cannot compile SwiftUI or run an iOS simulator. Neither static checking nor a submitted workflow counts as a successful build. Record the actual CI URL and conclusion here after the first macOS run.
+
+- [Initial run](https://github.com/pphilfre/mail/actions/runs/37123680169): project generation passed; build could not start because Xcode 26.0.1's iOS platform is absent from the current runner. Pin updated to Xcode 26.6 and stderr included in build logs.

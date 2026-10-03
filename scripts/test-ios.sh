@@ -9,6 +9,6 @@ destination="platform=iOS Simulator,id=$simulator_id"
 common=(-project MailApp.xcodeproj -scheme MailApp -configuration Debug
   -destination "$destination" -derivedDataPath build/DerivedData
   CODE_SIGNING_ALLOWED=NO)
-xcodebuild "${common[@]}" build | tee build/build.log
+xcodebuild "${common[@]}" build 2>&1 | tee build/build.log
 xcodebuild "${common[@]}" test -parallel-testing-enabled NO \
-  -resultBundlePath build/Tests.xcresult | tee build/test.log
+  -resultBundlePath build/Tests.xcresult 2>&1 | tee build/test.log
