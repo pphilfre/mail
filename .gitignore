@@ -1,0 +1,15 @@
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+build/
+*.xcresult/
+.DS_Store
+*.ipa
+*.p12
+*.mobileprovision
+*.p8
+.env
+.env.*
+!.env.example
+*.log
+__pycache__/
