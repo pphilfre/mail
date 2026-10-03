@@ -86,6 +86,11 @@ final class GmailCoordinator {
         for id in ids.sorted() {
             do { messages.append(try await api.message(id)) }
             catch GmailError.http(404) { deleted.insert(id) }
+            catch {
+                // Preserve the final partial batch without advancing the sync cursor.
+                try repository.apply(messages, deleted: deleted, accountID: accountID)
+                throw error
+            }
             if messages.count == 20 { try repository.apply(messages, deleted: deleted, accountID: accountID); messages = []; deleted = [] }
         }
         return (messages, deleted)
@@ -129,8 +134,31 @@ final class GmailCoordinator {
     }
     func loadThread(_ message: MailMessage) async {
         do {
-            let thread = try await client(message.accountID).thread(message.remoteThreadID)
+            let api = try client(message.accountID)
+            let thread = try await api.thread(message.remoteThreadID)
             try repository.apply(thread.messages ?? [], accountID: message.accountID)
+            for dto in thread.messages ?? [] {
+                var html = MailMIME.content(dto.payload).html
+                guard html.localizedCaseInsensitiveContains("cid:") else { continue }
+                var budget = 10_000_000
+                for part in MailMIME.inlineImages(dto.payload) {
+                    guard let cid = part.header("Content-ID")?.trimmingCharacters(in: CharacterSet(charactersIn: "<> ")),
+                          !cid.isEmpty, let mime = part.mimeType?.lowercased(),
+                          html.localizedCaseInsensitiveContains("cid:" + cid),
+                          let size = part.body?.size, size <= min(5_000_000, budget) else { continue }
+                    let data: Data
+                    if let embedded = part.body?.data.flatMap(Base64URL.decode) { data = embedded }
+                    else if let id = part.body?.attachmentId { data = try await api.attachment(messageID: dto.id, attachmentID: id) }
+                    else { continue }
+                    guard data.count <= min(5_000_000, budget) else { continue }
+                    budget -= data.count
+                    html = html.replacingOccurrences(of: "cid:" + cid, with: "data:\(mime);base64," + data.base64EncodedString(), options: .caseInsensitive)
+                }
+                if let row = try repository.message(accountID: message.accountID, remoteID: dto.id) {
+                    row.cachedHTML = Data(html.utf8)
+                    try repository.context.save()
+                }
+            }
         } catch { self.error = error.localizedDescription }
     }
     func action(_ kind: String, message: MailMessage) {

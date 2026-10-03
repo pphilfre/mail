@@ -4,13 +4,22 @@ import XCTest
 final class DispatchUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
-    func testEmptyInboxAndAccountsAreHonest() {
+    func testWelcomeAndDrawerNavigation() {
         let app = XCUIApplication()
         app.launchArguments = ["-showSampleInbox", "NO"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Your inbox starts here"].waitForExistence(timeout: 10))
-        app.tabBars.buttons["Accounts"].tap()
+        XCTAssertTrue(app.staticTexts["Welcome to Dispatch"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Sign in with Google"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Sign in with Zoho")).firstMatch.isEnabled)
+        app.buttons["Explore sample mail"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
+        app.buttons["Accounts"].tap()
         XCTAssertTrue(app.staticTexts["No accounts connected"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Swipe right"].exists)
     }
 
     func testSampleMessageOpens() {
@@ -26,7 +35,7 @@ final class DispatchUITests: XCTestCase {
 
     func testComposeDraftSurvivesRelaunch() {
         let app = XCUIApplication()
-        app.launchArguments = ["-showSampleInbox", "NO"]
+        app.launchArguments = ["-showSampleInbox", "YES"]
         app.launch()
         app.buttons["composeButton"].tap()
         let subject = app.textFields["composeSubject"]

@@ -61,6 +61,12 @@ enum MailMIME {
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
     struct Content: Sendable { var text = ""; var html = ""; var attachments: [GmailPart] = [] }
+    static func inlineImages(_ root: GmailPart?, depth: Int = 0) -> [GmailPart] {
+        guard let root, depth < 40 else { return [] }
+        let safeTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+        let current = root.header("Content-ID") != nil && safeTypes.contains(root.mimeType?.lowercased() ?? "") ? [root] : []
+        return current + (root.parts ?? []).flatMap { inlineImages($0, depth: depth + 1) }
+    }
     static func content(_ root: GmailPart?) -> Content {
         var output = Content()
         func visit(_ part: GmailPart, depth: Int) {

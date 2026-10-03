@@ -53,8 +53,12 @@ struct GmailHistoryPage: Decodable, Sendable {
 actor GmailAPI {
     let transport: any MailHTTPTransport
     let token: @Sendable (Bool) async throws -> String
-    init(transport: any MailHTTPTransport, token: @escaping @Sendable (Bool) async throws -> String) {
+    let pause: @Sendable (TimeInterval) async throws -> Void
+    init(transport: any MailHTTPTransport, pause: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
+        try await Task.sleep(for: .seconds(seconds))
+    }, token: @escaping @Sendable (Bool) async throws -> String) {
         self.transport = transport; self.token = token
+        self.pause = pause
     }
     private func request(_ path: String, method: String = "GET", query: [String: String] = [:], body: Data? = nil) async throws -> Data {
         var url = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/" + path)!
@@ -62,14 +66,40 @@ actor GmailAPI {
         var request = URLRequest(url: url.url!)
         request.httpMethod = method; request.httpBody = body
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        for attempt in 0...1 {
-            request.setValue("Bearer " + (try await token(attempt == 1)), forHTTPHeaderField: "Authorization")
+        var refreshed = false
+        var retries = 0
+        request.setValue("Bearer " + (try await token(false)), forHTTPHeaderField: "Authorization")
+        while true {
+            try Task.checkCancellation()
             let reply = try await transport.execute(request)
-            if reply.status == 401 && attempt == 0 { continue }
+            if reply.status == 401 && !refreshed {
+                refreshed = true
+                request.setValue("Bearer " + (try await token(true)), forHTTPHeaderField: "Authorization")
+                continue
+            }
+            let reason = reply.status == 403 ? Self.errorReason(reply.data) : "forbidden"
+            let throttled = reply.status == 429 || (reply.status == 403 && ["rateLimitExceeded", "userRateLimitExceeded"].contains(reason))
+            // Retry reads only: replaying a send or draft creation can duplicate mail.
+            if method == "GET", throttled || (500...599).contains(reply.status), retries < 4 {
+                let delay = min(60, max(reply.retryAfter ?? 0, pow(2, Double(retries)) + Double.random(in: 0...0.5)))
+                retries += 1
+                try await pause(delay)
+                continue
+            }
+            if throttled && method == "GET" { throw GmailError.throttled }
+            if reply.status == 403 && method == "GET" { throw GmailError.accessDenied(reason) }
             guard (200..<300).contains(reply.status) else { throw GmailError.http(reply.status) }
             return reply.data
         }
-        throw GmailError.reconnect
+    }
+    static func errorReason(_ data: Data) -> String {
+        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let error = object?["error"] as? [String: Any]
+        let reasons = error?["errors"] as? [[String: Any]]
+        let reason = reasons?.first?["reason"] as? String ?? "forbidden"
+        // Do not expose arbitrary server content or credentials in errors.
+        let known = ["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded", "domainPolicy", "insufficientPermissions", "accessNotConfigured", "forbidden"]
+        return known.contains(reason) ? reason : "forbidden"
     }
     private func get<T: Decodable & Sendable>(_ type: T.Type, _ path: String, query: [String: String] = [:]) async throws -> T {
         try JSONDecoder().decode(type, from: await request(path, query: query))
@@ -91,6 +121,11 @@ actor GmailAPI {
     }
     func thread(_ id: String) async throws -> GmailThreadDTO {
         try await get(GmailThreadDTO.self, "threads/" + component(id), query: ["format": "full"])
+    }
+    func attachment(messageID: String, attachmentID: String) async throws -> Data {
+        let body = try await get(GmailBody.self, "messages/" + component(messageID) + "/attachments/" + component(attachmentID))
+        guard let data = body.data.flatMap(Base64URL.decode) else { throw GmailError.invalidResponse }
+        return data
     }
     func history(since: String, page: String? = nil) async throws -> GmailHistoryPage {
         var query = ["startHistoryId": since, "maxResults": "500"]; query["pageToken"] = page

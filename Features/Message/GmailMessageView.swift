@@ -10,6 +10,8 @@ struct GmailMessageView: View {
     @Query private var attachments: [MailAttachment]
     @Query private var accounts: [MailAccount]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
+    @AppStorage("remoteImages") private var remoteImages = false
+    @State private var loadImagesOnce = false
     @State private var composing: LocalDraft?
     @State private var localError: String?
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
@@ -20,9 +22,17 @@ struct GmailMessageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject).font(.title2.bold())
+                if !remoteImages && !loadImagesOnce && thread.contains(where: { $0.cachedHTML != nil }) {
+                    HStack {
+                        Label("Remote images are off", systemImage: "photo").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Load images") { loadImagesOnce = true }.font(.caption.bold())
+                    }
+                }
                 ForEach(thread) { row in
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
+                            SenderAvatar(email: row.senderEmail, name: row.sender.displayName)
                             VStack(alignment: .leading) {
                                 Text(row.sender.displayName).font(.headline)
                                 Text(row.senderEmail).font(.caption).foregroundStyle(.secondary)
@@ -32,7 +42,8 @@ struct GmailMessageView: View {
                         }
                         Text("To: " + row.to.map(\.email).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
                         if !row.cc.isEmpty { Text("Cc: " + row.cc.map(\.email).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary) }
-                        Text(bodyText(row)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                        MailBodyView(html: row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText(row), remoteImages: remoteImages || loadImagesOnce)
+                            .padding(.horizontal, -16)
                         ForEach(attachments.filter { $0.messageID == row.id }) { attachment in
                             Label("\(attachment.filename) · \(attachment.byteCount.formatted()) bytes", systemImage: "paperclip").font(.caption)
                         }
@@ -70,8 +81,8 @@ struct GmailMessageView: View {
                     }
                 }
                 if let error = localError ?? runtime.gmail?.error { Text(error).foregroundStyle(.red) }
-                Text("HTML is shown as text. Remote images are blocked.").font(.caption).foregroundStyle(.secondary)
-            }.padding(20)
+
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Message").navigationBarTitleDisplayMode(.inline)
         .toolbar {

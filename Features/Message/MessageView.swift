@@ -15,15 +15,12 @@ struct MessageView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
-                Text(message.body)
-                    .font(.body).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                MailBodyView(html: nil, text: message.body, remoteImages: false)
                 Label("Sample message", systemImage: "info.circle")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             .padding(MailStyle.contentPadding)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Message")
         .navigationBarTitleDisplayMode(.inline)

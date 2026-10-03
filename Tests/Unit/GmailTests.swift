@@ -69,6 +69,49 @@ final class GmailTests: XCTestCase {
         XCTAssertEqual(requests[2].url?.path, "/gmail/v1/users/me/messages/abc/trash")
         XCTAssertTrue(requests[3].url!.absoluteString.contains("includeSpamTrash=true"))
     }
+    func testRateLimitedReadRetriesAndRecovers() async throws {
+        let transport = FixtureTransport([
+            reply(#"{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}"#, status: 403),
+            reply("{}", status: 429),
+            reply(#"{"emailAddress":"me@example.com","historyId":"1"}"#)
+        ])
+        let api = GmailAPI(transport: transport, pause: { _ in }) { _ in "token" }
+        let profile = try await api.profile()
+        XCTAssertEqual(profile.emailAddress, "me@example.com")
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 3)
+    }
+    func testRateLimitRetriesAreBounded() async throws {
+        let transport = FixtureTransport(Array(repeating: reply("{}", status: 429), count: 5))
+        let api = GmailAPI(transport: transport, pause: { _ in }) { _ in "token" }
+        do { _ = try await api.profile(); XCTFail("Expected throttling") }
+        catch { XCTAssertEqual(error as? GmailError, .throttled) }
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 5)
+    }
+    func testPermissionDeniedDoesNotRetry() async throws {
+        let transport = FixtureTransport([reply(#"{"error":{"errors":[{"reason":"insufficientPermissions"}]}}"#, status: 403)])
+        let api = GmailAPI(transport: transport, pause: { _ in XCTFail("Must not back off for permissions") }) { _ in "token" }
+        do { _ = try await api.profile(); XCTFail("Expected access error") }
+        catch { XCTAssertEqual(error as? GmailError, .accessDenied("insufficientPermissions")) }
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 1)
+    }
+    func testSendIsNotReplayedOnServerFailure() async throws {
+        let transport = FixtureTransport([reply("{}", status: 503)])
+        let api = GmailAPI(transport: transport, pause: { _ in XCTFail("Must not replay sending") }) { _ in "token" }
+        do { _ = try await api.send(raw: "mail", threadID: nil); XCTFail("Expected server error") }
+        catch { XCTAssertEqual(error as? GmailError, .http(503)) }
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 1)
+    }
+    func testInlineImagesExcludeActiveContentAndKeepNestedImages() {
+        let image = GmailPart(mimeType: "image/png", headers: [GmailHeader(name: "Content-ID", value: "<logo>")])
+        let active = GmailPart(mimeType: "image/svg+xml", headers: [GmailHeader(name: "Content-ID", value: "<active>")])
+        let root = GmailPart(mimeType: "multipart/related", parts: [image, active])
+        XCTAssertEqual(MailMIME.inlineImages(root).count, 1)
+        XCTAssertEqual(MailMIME.inlineImages(root).first?.header("Content-ID"), "<logo>")
+    }
     func testHistoryUsesSpecificChangesAndOpaqueCursor() async throws {
         let transport = FixtureTransport([reply(#"{"history":[{"messagesAdded":[{"message":{"id":"one","threadId":"t"}}],"messagesDeleted":[{"message":{"id":"two"}}],"labelsRemoved":[{"message":{"id":"three"},"labelIds":["INBOX"]}]}],"nextPageToken":"next","historyId":"184467440737095516160"}"#)])
         let api = GmailAPI(transport: transport) { _ in "token" }
