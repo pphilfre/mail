@@ -33,6 +33,7 @@ final class GmailCoordinator {
             let credentials = try await signIn.connect(configuration: GoogleConfiguration.load(), transport: transport)
             let temporary = GmailAPI(transport: transport) { _ in credentials.accessToken }
             let profile = try await temporary.profile()
+            guard MailMIME.valid(profile.emailAddress) else { throw GmailError.invalidResponse }
             let existing = try repository.accounts().first { $0.identity == "gmail:\(profile.emailAddress.lowercased())" }
             let account = existing ?? MailAccount(provider: .gmail, email: profile.emailAddress)
             try await vault.save(credentials, for: account.id)
@@ -110,7 +111,11 @@ final class GmailCoordinator {
     }
     func loadOlder(_ id: UUID) async {
         guard !syncing.contains(id) else { return }
-        syncing.insert(id); defer { syncing.remove(id) }
+        syncing.insert(id)
+        defer {
+            syncing.remove(id)
+            if refreshAgain.contains(id) { Task { await sync(id) } }
+        }
         do {
             guard let account = try repository.account(id: id), let cursor = account.syncCursor else { return }
             let api = try client(id); let page = try await api.messages(page: cursor)
@@ -129,6 +134,38 @@ final class GmailCoordinator {
         do { try repository.enqueue(kind, message: message); Task { await sync(message.accountID) } }
         catch { self.error = error.localizedDescription }
     }
+    func loadMailbox(_ name: String, accountID: UUID? = nil, labelID: String? = nil) async {
+        do {
+            let accounts = try repository.accounts().filter { (accountID == nil || $0.id == accountID) && $0.providerRaw == "gmail" }
+            for account in accounts {
+                guard !syncing.contains(account.id) else { continue }
+                syncing.insert(account.id)
+                do {
+                    let api = try client(account.id)
+                    let label: String?
+                    let query: String?
+                    if let labelID { label = labelID; query = nil }
+                    else {
+                        switch name {
+                        case "Inbox": label = "INBOX"; query = nil
+                        case "Unread": label = "UNREAD"; query = nil
+                        case "Starred": label = "STARRED"; query = nil
+                        case "Sent": label = "SENT"; query = nil
+                        case "Drafts": label = "DRAFT"; query = nil
+                        case "Trash": label = "TRASH"; query = nil
+                        case "Archive": label = nil; query = "-in:inbox -in:sent -in:drafts -in:trash -in:spam"
+                        default: label = nil; query = nil
+                        }
+                    }
+                    let page = try await api.messages(label: label, query: query)
+                    let result = try await fetch(Set((page.messages ?? []).map(\.id)), accountID: account.id, api: api)
+                    try repository.apply(result.messages, deleted: result.deleted, accountID: account.id)
+                    syncing.remove(account.id)
+                    if refreshAgain.contains(account.id) { await sync(account.id) }
+                } catch { syncing.remove(account.id); throw error }
+            }
+        } catch { self.error = error.localizedDescription }
+    }
     private func flush(_ id: UUID, api: GmailAPI) async throws {
         let pending = try repository.context.fetch(FetchDescriptor<PendingMailOperation>(predicate: #Predicate { $0.accountID == id }, sortBy: [SortDescriptor(\.createdAt)]))
         for operation in pending {
@@ -141,7 +178,12 @@ final class GmailCoordinator {
                 case "archive": try await api.modify(operation.targetRemoteID, remove: ["INBOX"])
                 case "trash": try await api.trash(operation.targetRemoteID)
                 case "restore": try await api.trash(operation.targetRemoteID, restore: true)
-                default: throw GmailError.invalidResponse
+                default:
+                    if operation.kindRaw.hasPrefix("labelAdd:") {
+                        try await api.modify(operation.targetRemoteID, add: [String(operation.kindRaw.dropFirst(9))])
+                    } else if operation.kindRaw.hasPrefix("labelRemove:") {
+                        try await api.modify(operation.targetRemoteID, remove: [String(operation.kindRaw.dropFirst(12))])
+                    } else { throw GmailError.invalidResponse }
                 }
                 repository.context.delete(operation); try repository.context.save()
             } catch GmailError.http(404) {

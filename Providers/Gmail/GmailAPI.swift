@@ -83,6 +83,7 @@ actor GmailAPI {
     func messages(page: String? = nil, label: String? = nil, query: String? = nil) async throws -> GmailMessagePage {
         var values = ["maxResults": "100"]
         values["pageToken"] = page; values["labelIds"] = label; values["q"] = query
+        if label == "TRASH" || label == "SPAM" { values["includeSpamTrash"] = "true" }
         return try await get(GmailMessagePage.self, "messages", query: values)
     }
     func message(_ id: String) async throws -> GmailMessageDTO {
@@ -116,7 +117,8 @@ actor GmailAPI {
     }
     func saveDraft(id: String?, raw: String, threadID: String?) async throws -> GmailDraftDTO {
         var message = ["raw": raw]; message["threadId"] = threadID
-        let data = try await request(id.map { "drafts/" + $0 } ?? "drafts", method: id == nil ? "POST" : "PUT",
+        let path = try id.map { "drafts/" + (try component($0)) } ?? "drafts"
+        let data = try await request(path, method: id == nil ? "POST" : "PUT",
             body: JSONSerialization.data(withJSONObject: ["message": message]))
         return try JSONDecoder().decode(GmailDraftDTO.self, from: data)
     }

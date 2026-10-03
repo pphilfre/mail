@@ -29,6 +29,7 @@ enum MailMIME {
         return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".") && !parts[1].hasPrefix(".") && !parts[1].hasSuffix(".")
     }
     static func decodedHeader(_ value: String) -> String {
+        let value = value.replacingOccurrences(of: "(?<=\\?=)[\\t\\r\\n ]+(?==\\?)", with: "", options: .regularExpression)
         guard let regex = try? NSRegularExpression(pattern: "=\\?([^?]+)\\?([bBqQ])\\?([^?]*)\\?=") else { return value }
         var result = value
         for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
@@ -113,7 +114,7 @@ enum MailMIME {
     }
     static func raw(_ draft: LocalDraft, from: String, requireRecipient: Bool = true) throws -> String {
         let values = [draft.to, draft.cc, draft.bcc, draft.subject, from, draft.inReplyTo ?? "", draft.referencesHeader ?? ""]
-        guard !values.contains(where: { $0.contains("\r") || $0.contains("\n") }), valid(from),
+        guard !values.contains(where: { $0.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }), valid(from),
               (!requireRecipient || !addresses(draft.to).isEmpty) else { throw GmailError.invalidRecipients }
         let recipientLists = [addresses(draft.to), addresses(draft.cc), addresses(draft.bcc)]
         guard recipientLists.flatMap({ $0 }).allSatisfy({ valid($0.email) }) else { throw GmailError.invalidRecipients }

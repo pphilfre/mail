@@ -9,6 +9,7 @@ struct GmailMessageView: View {
     @Query(sort: \MailMessage.receivedAt) private var allMessages: [MailMessage]
     @Query private var attachments: [MailAttachment]
     @Query private var accounts: [MailAccount]
+    @Query(sort: \MailFolder.name) private var folders: [MailFolder]
     @State private var composing: LocalDraft?
     @State private var localError: String?
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
@@ -83,6 +84,15 @@ struct GmailMessageView: View {
                     Button("Archive", systemImage: "archivebox") { runtime.gmail?.action("archive", message: message); dismiss() }
                     Button(message.isTrash ? "Restore" : "Move to Trash", systemImage: "trash") {
                         runtime.gmail?.action(message.isTrash ? "restore" : "trash", message: message); dismiss()
+                    }
+                    Menu("Labels") {
+                        ForEach(folders.filter { $0.accountID == message.accountID && $0.kindRaw == "user" }) { folder in
+                            Button {
+                                runtime.gmail?.action((message.folderIDs.contains(folder.remoteID) ? "labelRemove:" : "labelAdd:") + folder.remoteID, message: message)
+                            } label: {
+                                Label(folder.name, systemImage: message.folderIDs.contains(folder.remoteID) ? "checkmark" : "tag")
+                            }
+                        }
                     }
                 }
             }

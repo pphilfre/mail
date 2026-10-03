@@ -133,7 +133,16 @@ struct InboxView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Inbox")
-        .refreshable { await runtime.gmail?.syncAll() }
+        .onChange(of: mailbox) { _, _ in loadMailbox() }
+        .onChange(of: accountFilter) { _, _ in labelFilter = nil; loadMailbox() }
+        .onChange(of: labelFilter) { _, _ in loadMailbox() }
+        .refreshable {
+            await runtime.gmail?.syncAll()
+            if !accounts.isEmpty { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+        }
+    }
+    private func loadMailbox() {
+        Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 }
 

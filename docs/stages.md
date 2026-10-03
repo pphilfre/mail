@@ -7,7 +7,7 @@ The brief requires implementation, build/test, fixes and documentation at each s
 | 1 — Foundation | Complete | [macOS CI passed](https://github.com/pphilfre/mail/actions/runs/37123967712): simulator build, 4 unit tests and 3 UI tests. |
 | 2 — Windows / Actions | Complete | [Dispatch release passed](https://github.com/pphilfre/mail/actions/runs/37125945882), including device build, IPA packaging and upload. |
 | 3 — SwiftData | Complete | [Storage CI passed](https://github.com/pphilfre/mail/actions/runs/37127210621), including actual simulator Keychain access. |
-| 4 — Gmail | In progress | Public OAuth configuration supplied. Native OAuth, Gmail REST and incremental sync are the current focus. |
+| 4 — Gmail | Implemented; validation pending | Native OAuth/PKCE, REST DTOs, cached inbox/threads/labels, incremental sync, queued actions, drafts and sending. Full suite is being rerun after MIME validation fix. |
 | 5 — Zoho | Not started | OAuth client and data centre; verify official provider capabilities. |
 | 6 — Unified inbox | Not started | Real cached account data and queued actions. |
 | 7 — Reader / compose | Not started | Untrusted HTML, attachments, provider send/reply and drafts. |
@@ -39,3 +39,13 @@ Windows can inspect source and validate workflow/manifest syntax. It cannot comp
 - Keychain items use `AfterFirstUnlockThisDeviceOnly`, with no synchronisation or shared access group. Actual vault round-trip/rotation/isolation tests run on the simulator.
 - Tests cover database reopening, bodies/recipients/attachment metadata, account isolation and cleanup, successful and corrupt draft migration, and persisted composer edits.
 - [First Stage 3 run](https://github.com/pphilfre/mail/actions/runs/37126136774): compiler, SwiftData tests and UI tests passed; live Keychain tests exposed `errSecMissingEntitlement` in the unsigned simulator app. Simulator-only ad-hoc signing and explicit test entitlements added, with built signing metadata captured in CI logs. Device signing is unaffected.
+- [Stage 3 passed](https://github.com/pphilfre/mail/actions/runs/37127210621): simulator build and all 15 tests, including live Keychain round-trip and account isolation.
+
+## Stage 4 implementation
+
+- Public Google iOS client and reverse-client callback are included through XcodeGen. Native browser OAuth checks state and uses PKCE S256; tokens remain in device-only Keychain.
+- Gmail REST runs behind a transport protocol with Sendable DTOs. Views read SwiftData, and history sync commits its cursor only after the last successful page. Expired history IDs trigger reconciliation of cached mail.
+- Read/star/archive/trash/restore and custom-label changes are durable optimistic operations. Local drafts, Gmail drafts, text MIME sending, replies, reply-all and text forwarding are implemented. Interrupted or uncertain sends remain protected from automatic resend.
+- Initial All Mail/Inbox fetch and mailbox selection cache recent mail; older All Mail pages load on demand. Rich HTML and attachment transfer remain Stage 7. Zoho and push are deferred at the user's request.
+- [First Gmail test run](https://github.com/pphilfre/mail/actions/runs/37129179809): app compiled; 23 of 24 unit tests and all three UI tests passed. A header-injection test found Swift's CRLF grapheme handling could bypass character checks. Scalar-based control-character validation replaces those checks; the full suite must pass before release.
+- Real Google consent and email delivery require the signed device smoke test in [OAuth setup](oauth-setup.md); CI never logs into a personal account or sends real mail.

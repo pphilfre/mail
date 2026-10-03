@@ -4,9 +4,9 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-Stages 1 and 2 are verified: [Dispatch CI](https://github.com/pphilfre/mail/actions/runs/37124979822) built the renamed app and passed four unit tests and three UI tests; the IPA release pipeline is verified. Stage 3 passed SwiftData and actual simulator Keychain tests in https://github.com/pphilfre/mail/actions/runs/37127210621. Gmail integration is implemented and undergoing macOS validation. Gmail is the current provider priority. See [stage status](docs/stages.md).
+Stages 1 and 2 are verified: [Dispatch CI](https://github.com/pphilfre/mail/actions/runs/37124979822) built the renamed app and passed four unit tests and three UI tests; the IPA release pipeline is verified. Stage 3 passed [SwiftData and actual simulator Keychain tests](https://github.com/pphilfre/mail/actions/runs/37127210621). Gmail integration is implemented and undergoing macOS validation. Gmail is the current provider priority. See [stage status](docs/stages.md).
 
-Before the provider stages, follow the [OAuth setup guide](docs/oauth-setup.md) to register Gmail and prepare the Zoho configuration from Windows.
+Your supplied Google iOS client is configured. Follow the [OAuth setup guide](docs/oauth-setup.md) to confirm Gmail API access, your test user and the registered Dispatch bundle ID. Zoho is deferred.
 
 The foundation includes Inbox, Accounts, Settings, a sample message reader, and a compose sheet that saves real on-device drafts. Sample messages are opt-in under Settings and clearly labelled. Connect Gmail in Accounts. Cached messages, threads, labels, incremental sync, read/star/archive/trash, sending, drafts, reply/reply-all and text forwarding are implemented. See [Gmail details and limitations](Providers/Gmail/README.md). Live login and mail delivery require an installed, signed device build and your configured Google test user.
 
@@ -27,11 +27,11 @@ The runner uses macOS 26 with Xcode 26.6, generates the project using XcodeGen, 
 After the intended commit passes CI:
 
 ```powershell
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-The release workflow requires an already successful iOS CI run for the exact tagged commit, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.1.1.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`. If a tag is pushed before CI finishes, wait for CI and rerun the failed release workflow. The historical `v0.1.0` tag predates the Dispatch rename.
+The release workflow requires an already successful iOS CI run for the exact tagged commit, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.2.0.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`. If a tag is pushed before CI finishes, wait for CI and rerun the failed release workflow. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 
@@ -43,11 +43,11 @@ Simulator builds are locally ad-hoc signed so CI can exercise Keychain. `App/Sim
 
 ```text
 App/                     App entry, navigation shell, privacy manifest
-Core/                    Foundation state, local draft file, sample data
-Providers/Gmail/         Stage 4 boundary
+Core/                    SwiftData, Keychain, local drafts and runtime
+Providers/Gmail/         OAuth, REST, incremental sync and MIME
 Providers/Zoho/          Stage 5 boundary
 Features/Inbox/           Inbox and message rows
-Features/Message/         Plain-text sample reader
+Features/Message/         Cached threads and safe native text reader
 Features/Compose/         Composer and on-device drafts
 Features/Search/          Stage 8 boundary
 Features/Accounts/        Account screen
@@ -67,7 +67,7 @@ Shared storage includes accounts, messages, threads, Codable mail addresses, fol
 bash scripts/prepare-macos.sh
 bash scripts/build-ios.sh
 bash scripts/test-ios.sh
-bash scripts/package-ipa.sh v0.1.1
+bash scripts/package-ipa.sh v0.2.0
 ```
 
 ## Reference documentation

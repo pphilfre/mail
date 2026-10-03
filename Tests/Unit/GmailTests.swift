@@ -57,15 +57,17 @@ final class GmailTests: XCTestCase {
         try await vault.remove(for: id)
     }
     func test401RetriesOnceAndTrashNeverPermanentlyDeletes() async throws {
-        let transport = FixtureTransport([reply("{}", status: 401), reply("{}"), reply("{}")])
+        let transport = FixtureTransport([reply("{}", status: 401), reply("{}"), reply("{}"), reply("{}")])
         let api = GmailAPI(transport: transport) { force in force ? "new" : "old" }
         try await api.modify("abc", remove: ["UNREAD"])
         try await api.trash("abc")
+        _ = try await api.messages(label: "TRASH")
         let requests = await transport.captured()
-        XCTAssertEqual(requests.count, 3)
+        XCTAssertEqual(requests.count, 4)
         XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer new")
         XCTAssertEqual(requests[2].httpMethod, "POST")
         XCTAssertEqual(requests[2].url?.path, "/gmail/v1/users/me/messages/abc/trash")
+        XCTAssertTrue(requests[3].url!.absoluteString.contains("includeSpamTrash=true"))
     }
     func testHistoryUsesSpecificChangesAndOpaqueCursor() async throws {
         let transport = FixtureTransport([reply(#"{"history":[{"messagesAdded":[{"message":{"id":"one","threadId":"t"}}],"messagesDeleted":[{"message":{"id":"two"}}],"labelsRemoved":[{"message":{"id":"three"},"labelIds":["INBOX"]}]}],"nextPageToken":"next","historyId":"184467440737095516160"}"#)])
@@ -93,8 +95,12 @@ final class GmailTests: XCTestCase {
         XCTAssertThrowsError(try MailMIME.raw(invalid, from: "me@example.com"))
         invalid = draft; invalid.to = "not-an-address"
         XCTAssertThrowsError(try MailMIME.raw(invalid, from: "me@example.com"))
+        invalid = draft; invalid.subject = "Header\u{0000}value"
+        XCTAssertThrowsError(try MailMIME.raw(invalid, from: "me@example.com"))
         XCTAssertEqual(MailMIME.addresses(draft.to).first?.name, "Last, First")
         XCTAssertEqual(MailMIME.decodedHeader("=?UTF-8?B?SGVsbG8g8J+MjQ==?="), "Hello 🌍")
+        XCTAssertEqual(MailMIME.decodedHeader(MailMIME.encodedWord(draft.subject)), draft.subject)
+        XCTAssertNoThrow(try MailMIME.raw(LocalDraft(subject: "Unaddressed draft"), from: "me@example.com", requireRecipient: false))
     }
     func testHTMLIsTextAndDoesNotKeepScriptsOrTrackingTags() {
         let html = "<html><head><style>hidden</style></head><body><p>Hello &amp; &#x1F30D;</p><script>alert('x')</script><img src='https://tracker.example/image'></body></html>"
@@ -115,8 +121,10 @@ final class GmailTests: XCTestCase {
         let row = try XCTUnwrap(repository.message(accountID: account.id, remoteID: "a"))
         try repository.enqueue("archive", message: row)
         try repository.enqueue("read", message: row)
+        try repository.enqueue("labelAdd:Label_123", message: row)
         try repository.apply([dto], accountID: account.id)
         XCTAssertTrue(row.isRead); XCTAssertFalse(row.isInbox); XCTAssertEqual(row.plainTextBody?.trimmingCharacters(in: .whitespacesAndNewlines), "Body")
+        XCTAssertTrue(row.folderIDs.contains("Label_123"))
         XCTAssertEqual(account.historyID, "old")
         try repository.apply([dto], accountID: account.id, historyID: "new")
         XCTAssertEqual(account.historyID, "new")

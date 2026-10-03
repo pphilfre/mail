@@ -14,6 +14,20 @@ You can do the console steps in a browser on Windows. The app's current bundle i
 
 Keep this app in Testing while developing. Testing-mode refresh-token expiry can require reconnecting; see [Google's token-expiration guidance](https://developers.google.com/identity/protocols/oauth2#expiration). A Workspace administrator may also need to allow the app.
 
+### Verify Gmail on your iPhone
+
+The public client already configured in Dispatch is `350736449780-jdq6jll8nm6kpiq267saoa0qt9dmnli1.apps.googleusercontent.com`. Its callback is `com.googleusercontent.apps.350736449780-jdq6jll8nm6kpiq267saoa0qt9dmnli1:/oauth2redirect`.
+
+1. Sign/install the IPA with your sideloading tool. Keep the registered bundle ID `dev.freddiephilpot.dispatch` where the tool permits it, retain the Google URL scheme, and ensure the installed app has its own valid Keychain access group. Simulator test entitlements must not be used on the phone.
+2. Open **Accounts → Connect Gmail**, sign in as your listed test user and grant Gmail access. If Google reports a configuration error, check the client type (iOS), bundle ID, Gmail API enablement, test-user list and `gmail.modify` scope in the console. A Google error page occurs before Dispatch can receive the callback.
+3. Check that Inbox, Sent and Drafts load. Pull to refresh, open a conversation and compare its content with Gmail. HTML is currently converted to text and remote images stay blocked.
+4. Mark a test message read/unread, star it, add an existing custom label, archive it, move it to Trash and restore it. Compare those changes in Gmail. In airplane mode, perform an action, relaunch Dispatch and confirm the cached change remains; reconnect and pull to refresh to flush the queue.
+5. Create a draft addressed to yourself. **Save draft** saves locally; **Save to Gmail** uploads it. Reopen it from Drafts, edit and upload again. These uploads change your Gmail drafts.
+6. Use **Send** for a deliberate test message to yourself. This sends real email. Test reply, reply-all and a text-only forward on that message. Attachments are not transferred yet. If Dispatch reports an uncertain send, inspect Gmail Sent or use **Check Sent** before creating another copy.
+7. Force-close/reopen Dispatch and check that cached mail loads before refreshing. Remove an account only after keeping any needed local drafts; removal clears this device's credentials and account cache, but does not delete server mail or revoke Google consent. Manage consent separately in your Google Account when desired.
+
+CI verifies the app with fixture HTTP responses and simulator Keychain tests. It cannot validate your Google console settings or sideloading provisioning. Record any Google error text and the action that triggered it when reporting a device failure; never share access/refresh tokens.
+
 ## Zoho — find your data centre first
 
 Log into Zoho Mail and copy the hostname in the address bar. Your country alone does not determine the account's data centre. Common examples:

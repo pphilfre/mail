@@ -69,7 +69,9 @@ extension MailRepository {
         case "archive": labels.remove("INBOX")
         case "trash": labels.insert("TRASH"); labels.remove("INBOX")
         case "restore": labels.remove("TRASH")
-        default: break
+        default:
+            if kind.hasPrefix("labelAdd:") { labels.insert(String(kind.dropFirst(9))) }
+            if kind.hasPrefix("labelRemove:") { labels.remove(String(kind.dropFirst(12))) }
         }
         row.folderIDs = labels.sorted(); flags(row)
     }
