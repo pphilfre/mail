@@ -137,5 +137,78 @@ final class GmailTests: XCTestCase {
         XCTAssertTrue(try repository.load().isEmpty)
         try repository.save([])
         XCTAssertNotNil(try repository.outgoing(draft.id))
+        XCTAssertThrowsError(try repository.save([draft]))
+    }
+
+    func testHistoryPaginationFailureKeepsOriginalCursorAndReplaysSafely() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        account.historyID = "100"; repository.context.insert(account); try repository.context.save()
+        let vault = CredentialVault(service: "dispatch.test.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([
+            reply(#"{"labels":[]}"#),
+            reply(#"{"history":[{"messagesAdded":[{"message":{"id":"a"}}]}],"nextPageToken":"second","historyId":"200"}"#),
+            reply(#"{"id":"a","threadId":"t","labelIds":["INBOX"],"payload":{"headers":[{"name":"Subject","value":"cached"}]}}"#),
+            reply("{}", status: 503),
+            reply(#"{"labels":[]}"#),
+            reply(#"{"history":[{"messagesAdded":[{"message":{"id":"a"}}]}],"historyId":"300"}"#),
+            reply(#"{"id":"a","threadId":"t","labelIds":["INBOX"]}"#)
+        ])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        await coordinator.sync(account.id)
+        XCTAssertEqual(account.historyID, "100")
+        XCTAssertNotNil(try repository.message(accountID: account.id, remoteID: "a"))
+        XCTAssertNotNil(account.lastSyncError)
+        await coordinator.sync(account.id)
+        XCTAssertEqual(account.historyID, "300")
+        XCTAssertNil(account.lastSyncError)
+        XCTAssertEqual(try repository.recentMessages(accountID: account.id).count, 1)
+        try await vault.remove(for: account.id)
+    }
+    func testExpiredHistoryReconcilesDeletedCacheAndDrainsFreshHistory() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        account.historyID = "expired"; repository.context.insert(account)
+        let old = MailMessage(accountID: account.id, remoteID: "old", remoteThreadID: "oldthread", sender: MailAddress(email: "other@example.com"), subject: "Old", snippet: "", receivedAt: .distantPast)
+        repository.context.insert(old); try repository.context.save()
+        let vault = CredentialVault(service: "dispatch.test.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([
+            reply(#"{"labels":[]}"#), reply("{}", status: 404),
+            reply(#"{"emailAddress":"me@example.com","historyId":"baseline"}"#),
+            reply(#"{"messages":[{"id":"new"}],"nextPageToken":"older"}"#), reply(#"{"messages":[]}"#),
+            reply(#"{"id":"new","threadId":"thread","labelIds":["INBOX"]}"#), reply("{}", status: 404),
+            reply(#"{"historyId":"latest"}"#)
+        ])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        await coordinator.sync(account.id)
+        XCTAssertEqual(account.historyID, "latest"); XCTAssertEqual(account.syncCursor, "older")
+        XCTAssertNil(try repository.message(accountID: account.id, remoteID: "old"))
+        XCTAssertNotNil(try repository.message(accountID: account.id, remoteID: "new"))
+        try await vault.remove(for: account.id)
+    }
+    func testNetworkFailureDuringSendRetainsCopyAndNeverResends() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        repository.context.insert(account); try repository.context.save()
+        let draft = LocalDraft(to: "other@example.com", subject: "Send", body: "Body", accountID: account.id)
+        try repository.save([draft])
+        let vault = CredentialVault(service: "dispatch.test.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([reply(#"{"emailAddress":"me@example.com","historyId":"1"}"#)])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        do { try await coordinator.send(draft); XCTFail("Expected uncertain send") }
+        catch { XCTAssertEqual(error as? GmailError, .uncertainSend) }
+        XCTAssertEqual(try repository.outgoing(draft.id)?.stateRaw, "sendUnconfirmed")
+        let before = await transport.captured().count
+        do { try await coordinator.send(draft); XCTFail("Must not resend") }
+        catch { XCTAssertEqual(error as? GmailError, .uncertainSend) }
+        let after = await transport.captured().count
+        XCTAssertEqual(before, after)
+        try await vault.remove(for: account.id)
     }
 }

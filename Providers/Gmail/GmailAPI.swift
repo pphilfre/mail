@@ -8,7 +8,10 @@ struct GmailBody: Codable, Sendable { var attachmentId: String?; var size: Int?;
 struct GmailPart: Codable, Sendable {
     var partId: String?; var mimeType: String?; var filename: String?
     var headers: [GmailHeader]?; var body: GmailBody?; var parts: [GmailPart]?
-    func header(_ name: String) -> String? { headers?.first { $0.name.lowercased() == name.lowercased() }?.value }
+    func header(_ name: String) -> String? {
+        headers?.first { $0.name.lowercased() == name.lowercased() }?.value
+            .replacingOccurrences(of: "\r\n", with: " ").replacingOccurrences(of: "\n", with: " ")
+    }
 }
 struct GmailMessageDTO: Codable, Sendable {
     let id: String
@@ -35,7 +38,13 @@ struct GmailHistoryPage: Decodable, Sendable {
     var nextPageToken: String?
     let historyId: String
     var changedIDs: Set<String> {
-        Set((history ?? []).flatMap { ($0.messagesAdded ?? []) + ($0.labelsAdded ?? []) + ($0.labelsRemoved ?? []) }.map(\.message.id))
+        var result: Set<String> = []
+        for record in history ?? [] {
+            for change in record.messagesAdded ?? [] { result.insert(change.message.id) }
+            for change in record.labelsAdded ?? [] { result.insert(change.message.id) }
+            for change in record.labelsRemoved ?? [] { result.insert(change.message.id) }
+        }
+        return result
     }
     var deletedIDs: Set<String> { Set((history ?? []).flatMap { $0.messagesDeleted ?? [] }.map(\.message.id)) }
 }

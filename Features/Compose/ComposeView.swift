@@ -42,7 +42,7 @@ struct ComposeView: View {
                     .accessibilityIdentifier("composeSubject")
                     .onChange(of: draft.subject) { _, _ in draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil }
             } footer: {
-                Text("Save draft keeps a copy on this device. Save to Gmail uploads it to Gmail. Sending requires a connected account.")
+                Text("Save draft keeps a copy on this device. Save to Gmail uploads it to Gmail. Sending requires a connected account. Messages and forwards currently contain text only; attachments are not included.")
             }
             Section {
                 TextEditor(text: $draft.body)

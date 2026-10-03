@@ -7,6 +7,7 @@ import SwiftData
 final class GmailCoordinator {
     var connecting = false
     var syncing: Set<UUID> = []
+    var writing: Set<UUID> = []
     var error: String?
     @ObservationIgnored let repository: MailRepository
     @ObservationIgnored let vault: CredentialVault
@@ -155,7 +156,9 @@ final class GmailCoordinator {
     func saveRemoteDraft(_ draft: LocalDraft) async throws {
         guard let id = draft.accountID, let account = try repository.account(id: id), let row = try repository.outgoing(draft.id) else { throw GmailError.reconnect }
         guard row.stateRaw == "draft" else { throw GmailError.uncertainSend }
-        let raw = try MailMIME.raw(draft, from: account.email)
+        guard !writing.contains(id) else { throw GmailError.busy }
+        writing.insert(id); defer { writing.remove(id) }
+        let raw = try MailMIME.raw(draft, from: account.email, requireRecipient: false)
         let api = try client(id)
         // Recover a previous ambiguous create by stable Message-ID before creating a new remote draft.
         var remoteID = row.remoteDraftID
@@ -167,12 +170,18 @@ final class GmailCoordinator {
         row.remoteDraftID = remote.id; try repository.context.save()
     }
     func importDraft(_ message: MailMessage) async throws -> LocalDraft {
+        let accountID = message.accountID
+        guard !writing.contains(accountID) else { throw GmailError.busy }
+        writing.insert(accountID); defer { writing.remove(accountID) }
         let api = try client(message.accountID)
         var page: String?
         repeat {
             let drafts = try await api.drafts(page: page)
             if let reference = drafts.drafts?.first(where: { $0.message?.id == message.remoteID }) {
+                if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID && $0.stateRaw == "draft" }))
+                    .first(where: { $0.remoteDraftID == reference.id }) { return existing.localDraft }
                 let remote = try await api.draft(reference.id)
+                guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 guard let dto = remote.message else { throw GmailError.invalidResponse }
                 let header = dto.payload; let content = MailMIME.content(header)
                 let draft = LocalDraft(to: header?.header("To") ?? "", cc: header?.header("Cc") ?? "", bcc: header?.header("Bcc") ?? "",
@@ -189,6 +198,8 @@ final class GmailCoordinator {
     func send(_ draft: LocalDraft) async throws {
         guard let id = draft.accountID, let account = try repository.account(id: id), let row = try repository.outgoing(draft.id) else { throw GmailError.reconnect }
         guard row.stateRaw == "draft" else { throw GmailError.uncertainSend }
+        guard !writing.contains(id) else { throw GmailError.busy }
+        writing.insert(id); defer { writing.remove(id) }
         let raw = try MailMIME.raw(draft, from: account.email)
         let api = try client(id)
         // Refresh before committing sending state so an expired credential cannot create an uncertain send.
@@ -210,11 +221,26 @@ final class GmailCoordinator {
         await sync(id)
     }
     func removeAccount(_ id: UUID) async {
-        guard !syncing.contains(id), !connecting else { return }
+        guard !syncing.contains(id), !writing.contains(id), !connecting else { throwRemovalBusy(); return }
         do {
             try await vault.remove(for: id)
             try repository.removeAccountData(id: id)
             managers[id] = nil
+        } catch { self.error = error.localizedDescription }
+    }
+    private func throwRemovalBusy() { error = "Wait for this account’s current operation to finish before removing it." }
+
+    func confirmSent(_ row: OutgoingMessage) async {
+        guard let id = row.accountID else { return }
+        do {
+            let api = try client(id)
+            let page = try await api.messages(query: "in:sent rfc822msgid:\(row.internetMessageID)")
+            guard !(page.messages ?? []).isEmpty else {
+                error = "No sent copy was found yet. Gmail search can take time to update; check Gmail before sending another copy."
+                return
+            }
+            row.stateRaw = "sent"; row.lastError = nil; try repository.context.save()
+            await sync(id)
         } catch { self.error = error.localizedDescription }
     }
 }

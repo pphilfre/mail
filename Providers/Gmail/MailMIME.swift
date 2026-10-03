@@ -111,10 +111,10 @@ enum MailMIME {
         if !chunk.isEmpty { chunks.append(chunk) }
         return chunks.map { "=?UTF-8?B?\($0.base64EncodedString())?=" }.joined(separator: "\r\n ")
     }
-    static func raw(_ draft: LocalDraft, from: String) throws -> String {
+    static func raw(_ draft: LocalDraft, from: String, requireRecipient: Bool = true) throws -> String {
         let values = [draft.to, draft.cc, draft.bcc, draft.subject, from, draft.inReplyTo ?? "", draft.referencesHeader ?? ""]
         guard !values.contains(where: { $0.contains("\r") || $0.contains("\n") }), valid(from),
-              !addresses(draft.to).isEmpty else { throw GmailError.invalidRecipients }
+              (!requireRecipient || !addresses(draft.to).isEmpty) else { throw GmailError.invalidRecipients }
         let recipientLists = [addresses(draft.to), addresses(draft.cc), addresses(draft.bcc)]
         guard recipientLists.flatMap({ $0 }).allSatisfy({ valid($0.email) }) else { throw GmailError.invalidRecipients }
         func header(_ list: [MailAddress]) -> String {

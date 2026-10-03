@@ -58,10 +58,12 @@ struct InboxView: View {
                             Text("Sending was interrupted or could not be confirmed. This copy is kept and will not be resent.").font(.caption).foregroundStyle(.secondary)
                             Text(row.toRaw).font(.caption)
                             Text(row.body).lineLimit(3).textSelection(.enabled)
+                            Button("Check Sent") { Task { await runtime.gmail?.confirmSent(row) } }
                         }
                     }
                 }
             }
+            if let error = runtime.gmail?.error { Text(error).font(.caption).foregroundStyle(.red) }
             if !accounts.isEmpty {
                 Section {
                     Picker("Account", selection: $accountFilter) {

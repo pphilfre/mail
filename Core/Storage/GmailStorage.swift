@@ -4,6 +4,7 @@ import SwiftData
 @MainActor
 extension MailRepository {
     func apply(_ dtos: [GmailMessageDTO], deleted: Set<String> = [], accountID: UUID, historyID: String? = nil) throws {
+        guard try account(id: accountID) != nil else { throw GmailError.reconnect }
         try context.transaction {
             let pending = try context.fetch(FetchDescriptor<PendingMailOperation>(predicate: #Predicate { $0.accountID == accountID },
                 sortBy: [SortDescriptor(\.createdAt)]))

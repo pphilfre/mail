@@ -24,6 +24,10 @@ final class MailRepository: DraftPersistence {
 
     func save(_ drafts: [LocalDraft]) throws {
         try context.transaction {
+            // A stale composer/session must never resurrect a sent or uncertain message by UUID.
+            for draft in drafts {
+                if let row = try outgoing(draft.id), row.stateRaw != "draft" { throw GmailError.uncertainSend }
+            }
             let existing = try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.stateRaw == "draft" }))
             let incomingIDs = Set(drafts.map(\.id))
             let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })

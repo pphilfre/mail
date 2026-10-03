@@ -174,6 +174,7 @@ final class OutgoingMessage {
     }
 
     func update(from draft: LocalDraft) {
+        if accountID != draft.accountID { remoteDraftID = nil }
         toRaw = draft.to; ccRaw = draft.cc; bccRaw = draft.bcc
         subject = draft.subject; body = draft.body; updatedAt = draft.updatedAt
         accountID = draft.accountID; remoteThreadID = draft.remoteThreadID

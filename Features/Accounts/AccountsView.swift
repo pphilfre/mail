@@ -23,7 +23,7 @@ struct AccountsView: View {
                     Button("Reconnect Gmail") { Task { await runtime.gmail?.connect() } }
                         .disabled(runtime.gmail?.connecting == true)
                     Button("Remove account", role: .destructive) { removing = account }
-                        .disabled(runtime.gmail?.syncing.contains(account.id) == true)
+                        .disabled(runtime.gmail?.syncing.contains(account.id) == true || runtime.gmail?.writing.contains(account.id) == true)
                 }
             }
             Section {
