@@ -4,7 +4,7 @@ The brief requires implementation, build/test, fixes and documentation at each s
 
 | Stage | Status | Evidence / next gate |
 | --- | --- | --- |
-| 1 — Foundation | Implemented, macOS validation pending | Native shell, opt-in sample inbox/reader, protected persistent draft file, tests. Must pass iOS CI. |
+| 1 — Foundation | Complete | [macOS CI passed](https://github.com/pphilfre/mail/actions/runs/37123967712): simulator build, 4 unit tests and 3 UI tests. |
 | 2 — Windows / Actions | Workflows implemented, validation pending | Simulator CI plus tag-driven unsigned IPA packaging. Must verify CI and device packaging. |
 | 3 — SwiftData | Not started | Migrate foundation drafts; add shared mail models and Keychain. |
 | 4 — Gmail | Not started | OAuth app client ID/redirect configuration and verified provider implementation. |
@@ -26,3 +26,5 @@ System SF typography, semantic system backgrounds/text colours, iOS accent blue,
 Windows can inspect source and validate workflow/manifest syntax. It cannot compile SwiftUI or run an iOS simulator. Neither static checking nor a submitted workflow counts as a successful build. Record the actual CI URL and conclusion here after the first macOS run.
 
 - [Initial run](https://github.com/pphilfre/mail/actions/runs/37123680169): project generation passed; build could not start because Xcode 26.0.1's iOS platform is absent from the current runner. Pin updated to Xcode 26.6 and stderr included in build logs.
+- [Foundation verification](https://github.com/pphilfre/mail/actions/runs/37123967712): Xcode 26.6, XcodeGen 2.46.0, simulator build and all seven tests passed. Tag `v0.1.0` points to verified commit `4052df2`.
+- App renamed to **Dispatch**, with bundle identifier **`dev.freddiephilpot.dispatch`**, after the original foundation tag. Project, target, scheme, test module and IPA names updated together; rename requires a new CI run. The original tag remains historical.

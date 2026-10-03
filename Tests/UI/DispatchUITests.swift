@@ -1,7 +1,7 @@
 import XCTest
 
 @MainActor
-final class MailAppUITests: XCTestCase {
+final class DispatchUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
     func testEmptyInboxAndAccountsAreHonest() {

@@ -1,5 +1,5 @@
 import XCTest
-@testable import MailApp
+@testable import Dispatch
 
 @MainActor
 final class DraftStoreTests: XCTestCase {

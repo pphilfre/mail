@@ -1,10 +1,12 @@
-# Mail
+# Dispatch
 
 A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGen and macOS GitHub Actions.
 
 ## Current status
 
-Stage 1 foundation is implemented; an actual macOS build/test result is required before progressing to the storage stage. Stage 2 workflows are included to provide that build gate on Windows. See [stage status](docs/stages.md).
+Stage 1 is verified: [macOS CI](https://github.com/pphilfre/mail/actions/runs/37123967712) built the app and passed four unit tests and three UI tests. Stage 2's tag-driven IPA release is being validated before starting the storage stage. See [stage status](docs/stages.md).
+
+Before the provider stages, follow the [OAuth setup guide](docs/oauth-setup.md) to register Gmail and prepare the Zoho configuration from Windows.
 
 The foundation includes Inbox, Accounts, Settings, a sample message reader, and a compose sheet that saves real on-device drafts. Sample messages are opt-in under Settings and clearly labelled. Account connections and sending are not yet available; no provider functionality is simulated.
 
@@ -29,7 +31,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow reruns build/tests, builds for a physical iOS device, packages `Payload/MailApp.app` into `MailApp-v0.1.0.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`.
+The release workflow reruns build/tests, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.1.0.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 

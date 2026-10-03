@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct MailApp: App {
+struct Dispatch: App {
     @State private var session = AppSession()
 
     var body: some Scene {

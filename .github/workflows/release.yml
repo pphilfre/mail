@@ -34,10 +34,10 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "build/MailApp-${RELEASE_TAG}.ipa" "build/MailApp-${RELEASE_TAG}.ipa.sha256" --clobber
+            gh release upload "$RELEASE_TAG" "build/Dispatch-${RELEASE_TAG}.ipa" "build/Dispatch-${RELEASE_TAG}.ipa.sha256" --clobber
           else
-            gh release create "$RELEASE_TAG" "build/MailApp-${RELEASE_TAG}.ipa" "build/MailApp-${RELEASE_TAG}.ipa.sha256" \
-              --verify-tag --title "Mail ${RELEASE_TAG}" --notes-file docs/release-notes.md
+            gh release create "$RELEASE_TAG" "build/Dispatch-${RELEASE_TAG}.ipa" "build/Dispatch-${RELEASE_TAG}.ipa.sha256" \
+              --verify-tag --title "Dispatch ${RELEASE_TAG}" --notes-file docs/release-notes.md
           fi
       - name: Preserve release build logs
         if: always()

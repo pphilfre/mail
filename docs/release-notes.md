@@ -1,4 +1,4 @@
-Native SwiftUI mail app for iOS 26 or later.
+Dispatch is a native SwiftUI mail app for iOS 26 or later, with bundle identifier `dev.freddiephilpot.dispatch`.
 
 This release is a project foundation: a native inbox shell, an optional sample inbox, a plain-text sample reader, accounts/settings screens and persistent on-device drafts. Gmail/Zoho connections and sending are not implemented yet.
 
