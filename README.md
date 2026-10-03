@@ -37,6 +37,8 @@ The default IPA is **unsigned** and needs a compatible sideloading tool to re-si
 
 The app's display name, target and scheme are Dispatch; its internal Swift module is `DispatchMail` to avoid colliding with Apple's `Dispatch` module.
 
+Simulator builds are locally ad-hoc signed so CI can exercise Keychain. `App/Simulator.entitlements` uses the test-only `DISPATCHCI` namespace and applies only to the simulator SDK; it is excluded from app resources. No Apple certificate is needed for this test signing. Device IPA builds remain unsigned and do not use these simulator entitlements. The sideloading tool must give the installed app its valid signing identity and default Keychain access group.
+
 ## Structure
 
 ```text

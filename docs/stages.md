@@ -38,3 +38,4 @@ Windows can inspect source and validate workflow/manifest syntax. It cannot comp
 - Draft writes and account-data deletion are transactional. A persistent import marker prevents deleted legacy drafts from reappearing.
 - Keychain items use `AfterFirstUnlockThisDeviceOnly`, with no synchronisation or shared access group. Actual vault round-trip/rotation/isolation tests run on the simulator.
 - Tests cover database reopening, bodies/recipients/attachment metadata, account isolation and cleanup, successful and corrupt draft migration, and persisted composer edits.
+- [First Stage 3 run](https://github.com/pphilfre/mail/actions/runs/37126136774): compiler, SwiftData tests and UI tests passed; live Keychain tests exposed `errSecMissingEntitlement` in the unsigned simulator app. Simulator-only ad-hoc signing and explicit test entitlements added, with built signing metadata captured in CI logs. Device signing is unaffected.

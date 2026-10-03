@@ -17,7 +17,8 @@ targets:
     type: application
     platform: iOS
     sources:
-      - App
+      - path: App
+        excludes: [Simulator.entitlements]
       - Core
       - Features
       - DesignSystem
@@ -25,6 +26,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.freddiephilpot.dispatch
         PRODUCT_MODULE_NAME: DispatchMail
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": App/Simulator.entitlements
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
