@@ -11,7 +11,15 @@ final class AppRuntime {
     var gmail: GmailCoordinator?
     @ObservationIgnored var repository: MailRepository?
 
-    init() { openStorage() }
+    init() {
+        #if DEBUG
+        // Seed the normal preferences domain so UI tests can change it after launch.
+        if let sampleInbox = ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_SAMPLE_INBOX"] {
+            UserDefaults.standard.set(sampleInbox == "YES", forKey: "showSampleInbox")
+        }
+        #endif
+        openStorage()
+    }
 
     func openStorage() {
         do {

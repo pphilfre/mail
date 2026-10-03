@@ -71,6 +71,7 @@ schemes:
       targets:
         Dispatch: all
     test:
+      debugEnabled: false
       targets:
         - DispatchTests
         - DispatchUITests

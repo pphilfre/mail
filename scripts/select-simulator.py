@@ -13,7 +13,10 @@ for runtime, entries in devices["devices"].items():
         continue
     for device in entries:
         if device.get("isAvailable") and device["name"].startswith("iPhone"):
-            candidates.append((version, device["name"], device["udid"]))
+            # Reuse an already booted phone, otherwise prefer a standard-size device.
+            candidates.append((device.get("state") == "Booted", version,
+                               "Pro" not in device["name"] and "Air" not in device["name"] and "Plus" not in device["name"],
+                               device["name"], device["udid"]))
 if not candidates:
     raise SystemExit("No available iOS 26+ iPhone simulator. Check the runner image and selected Xcode.")
-print(sorted(candidates)[-1][2])
+print(sorted(candidates)[-1][-1])

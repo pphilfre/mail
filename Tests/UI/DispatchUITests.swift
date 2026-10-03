@@ -6,12 +6,13 @@ final class DispatchUITests: XCTestCase {
 
     func testWelcomeAndDrawerNavigation() {
         let app = XCUIApplication()
-        app.launchArguments = ["-showSampleInbox", "NO"]
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "NO"
         app.launch()
         XCTAssertTrue(app.staticTexts["Welcome to Dispatch"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Sign in with Google"].exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Sign in with Zoho")).firstMatch.isEnabled)
         app.buttons["Explore sample mail"].tap()
+        XCTAssertTrue(app.buttons["mailboxDrawerButton"].waitForExistence(timeout: 5))
         app.buttons["mailboxDrawerButton"].tap()
         app.buttons["Accounts"].tap()
         XCTAssertTrue(app.staticTexts["No accounts connected"].waitForExistence(timeout: 5))
@@ -24,7 +25,7 @@ final class DispatchUITests: XCTestCase {
 
     func testSampleMessageOpens() {
         let app = XCUIApplication()
-        app.launchArguments = ["-showSampleInbox", "YES"]
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launch()
         let row = app.staticTexts["A quieter inbox"]
         XCTAssertTrue(row.waitForExistence(timeout: 10))
@@ -35,7 +36,7 @@ final class DispatchUITests: XCTestCase {
 
     func testComposeDraftSurvivesRelaunch() {
         let app = XCUIApplication()
-        app.launchArguments = ["-showSampleInbox", "YES"]
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launch()
         app.buttons["composeButton"].tap()
         let subject = app.textFields["composeSubject"]

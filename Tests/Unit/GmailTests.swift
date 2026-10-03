@@ -203,11 +203,15 @@ final class GmailTests: XCTestCase {
             reply(#"{"history":[{"messagesAdded":[{"message":{"id":"a"}}]}],"nextPageToken":"second","historyId":"200"}"#),
             reply(#"{"id":"a","threadId":"t","labelIds":["INBOX"],"payload":{"headers":[{"name":"Subject","value":"cached"}]}}"#),
             reply("{}", status: 503),
+            reply("{}", status: 503),
+            reply("{}", status: 503),
+            reply("{}", status: 503),
+            reply("{}", status: 503),
             reply(#"{"labels":[]}"#),
             reply(#"{"history":[{"messagesAdded":[{"message":{"id":"a"}}]}],"historyId":"300"}"#),
             reply(#"{"id":"a","threadId":"t","labelIds":["INBOX"]}"#)
         ])
-        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport, requestPause: { _ in })
         await coordinator.sync(account.id)
         XCTAssertEqual(account.historyID, "100")
         XCTAssertNotNil(try repository.message(accountID: account.id, remoteID: "a"))

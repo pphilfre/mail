@@ -12,19 +12,22 @@ final class GmailCoordinator {
     @ObservationIgnored let repository: MailRepository
     @ObservationIgnored let vault: CredentialVault
     @ObservationIgnored let transport: any MailHTTPTransport
+    @ObservationIgnored let requestPause: @Sendable (TimeInterval) async throws -> Void
     @ObservationIgnored private let signIn = GoogleSignIn()
     @ObservationIgnored private var managers: [UUID: GmailAPI] = [:]
     @ObservationIgnored private var refreshAgain: Set<UUID> = []
     @ObservationIgnored private var mailboxRequests: [UUID: MailboxRequest] = [:]
     private struct MailboxRequest { let name: String; let label: String? }
     private static let uncertainDraftMarker = "remote-draft-create-unconfirmed"
-    init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport()) {
+    init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport(),
+         requestPause: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.repository = repository; self.vault = vault; self.transport = transport
+        self.requestPause = requestPause
     }
     func client(_ id: UUID) throws -> GmailAPI {
         if let api = managers[id] { return api }
         let tokens = GoogleTokenManager(configuration: try GoogleConfiguration.load(), vault: vault, transport: transport)
-        let api = GmailAPI(transport: transport) { force in try await tokens.token(for: id, force: force) }
+        let api = GmailAPI(transport: transport, pause: requestPause) { force in try await tokens.token(for: id, force: force) }
         managers[id] = api
         return api
     }
