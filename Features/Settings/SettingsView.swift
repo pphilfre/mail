@@ -14,7 +14,7 @@ struct SettingsView: View {
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
                 LabeledContent("Requires", value: "iOS 26 or later")
-                Text("Project foundation. Account connections, mail sync and sending are not yet available.")
+                Text("Gmail mail is cached on this device. Remote images are blocked. Zoho, rich HTML and attachment transfer are later stages.")
                     .foregroundStyle(.secondary)
             }
         }

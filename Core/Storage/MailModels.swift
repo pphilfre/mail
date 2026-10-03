@@ -163,16 +163,21 @@ final class OutgoingMessage {
         self.id = draft.id; self.toRaw = draft.to; self.ccRaw = draft.cc; self.bccRaw = draft.bcc
         self.subject = draft.subject; self.body = draft.body; self.updatedAt = draft.updatedAt
         self.stateRaw = "draft"
+        self.accountID = draft.accountID; self.remoteThreadID = draft.remoteThreadID
+        self.inReplyTo = draft.inReplyTo; self.referencesHeader = draft.referencesHeader
         self.internetMessageID = "<\(draft.id.uuidString.lowercased())@dev.freddiephilpot.dispatch>"
     }
 
     var localDraft: LocalDraft {
-        LocalDraft(id: id, to: toRaw, cc: ccRaw, bcc: bccRaw, subject: subject, body: body, updatedAt: updatedAt)
+        LocalDraft(id: id, to: toRaw, cc: ccRaw, bcc: bccRaw, subject: subject, body: body, updatedAt: updatedAt,
+                   accountID: accountID, remoteThreadID: remoteThreadID, inReplyTo: inReplyTo, referencesHeader: referencesHeader)
     }
 
     func update(from draft: LocalDraft) {
         toRaw = draft.to; ccRaw = draft.cc; bccRaw = draft.bcc
         subject = draft.subject; body = draft.body; updatedAt = draft.updatedAt
+        accountID = draft.accountID; remoteThreadID = draft.remoteThreadID
+        inReplyTo = draft.inReplyTo; referencesHeader = draft.referencesHeader
     }
 }
 

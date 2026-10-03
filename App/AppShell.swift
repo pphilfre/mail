@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct AppShell: View {
+    @Environment(AppRuntime.self) private var runtime
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingCompose = false
 
     var body: some View {
@@ -26,6 +28,10 @@ struct AppShell: View {
             }
         }
         .tint(MailStyle.accent)
+        .task { await runtime.gmail?.syncAll() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await runtime.gmail?.syncAll() } }
+        }
         .sheet(isPresented: $showingCompose) {
             NavigationStack { ComposeView() }
         }

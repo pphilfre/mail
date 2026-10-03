@@ -5,9 +5,9 @@ The brief requires implementation, build/test, fixes and documentation at each s
 | Stage | Status | Evidence / next gate |
 | --- | --- | --- |
 | 1 — Foundation | Complete | [macOS CI passed](https://github.com/pphilfre/mail/actions/runs/37123967712): simulator build, 4 unit tests and 3 UI tests. |
-| 2 — Windows / Actions | Complete; Dispatch rename being revalidated | [Release workflow passed](https://github.com/pphilfre/mail/actions/runs/37124654886): tests, physical-device build, IPA packaging and GitHub Release upload. |
-| 3 — SwiftData | Implemented, validation pending | Versioned local schema, one-time draft migration, repository transactions, device-only Keychain vault and tests. |
-| 4 — Gmail | Next | Public OAuth configuration supplied and stored; native OAuth and Gmail sync follow the storage gate. |
+| 2 — Windows / Actions | Complete | [Dispatch release passed](https://github.com/pphilfre/mail/actions/runs/37125945882), including device build, IPA packaging and upload. |
+| 3 — SwiftData | Complete | [Storage CI passed](https://github.com/pphilfre/mail/actions/runs/37127210621), including actual simulator Keychain access. |
+| 4 — Gmail | In progress | Public OAuth configuration supplied. Native OAuth, Gmail REST and incremental sync are the current focus. |
 | 5 — Zoho | Not started | OAuth client and data centre; verify official provider capabilities. |
 | 6 — Unified inbox | Not started | Real cached account data and queued actions. |
 | 7 — Reader / compose | Not started | Untrusted HTML, attachments, provider send/reply and drafts. |

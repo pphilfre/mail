@@ -44,4 +44,6 @@ final class AppSession {
         guard let index = sampleMessages.firstIndex(where: { $0.id == id }) else { return }
         sampleMessages[index].isRead = true
     }
+
+    func reloadDrafts() throws { drafts = try draftStore.load() }
 }

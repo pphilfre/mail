@@ -9,6 +9,10 @@ struct LocalDraft: Identifiable, Codable, Equatable, Sendable {
     var subject = ""
     var body = ""
     var updatedAt = Date()
+    var accountID: UUID?
+    var remoteThreadID: String?
+    var inReplyTo: String?
+    var referencesHeader: String?
 
     var isEmpty: Bool {
         [to, cc, bcc, subject, body].allSatisfy {

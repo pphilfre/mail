@@ -13,3 +13,4 @@ build/
 !.env.example
 *.log
 __pycache__/
+App/GeneratedInfo.plist

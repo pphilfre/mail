@@ -1,0 +1,98 @@
+import Foundation
+import SwiftData
+
+@MainActor
+extension MailRepository {
+    func apply(_ dtos: [GmailMessageDTO], deleted: Set<String> = [], accountID: UUID, historyID: String? = nil) throws {
+        try context.transaction {
+            let pending = try context.fetch(FetchDescriptor<PendingMailOperation>(predicate: #Predicate { $0.accountID == accountID },
+                sortBy: [SortDescriptor(\.createdAt)]))
+            for remoteID in deleted {
+                if let row = try message(accountID: accountID, remoteID: remoteID) {
+                    let id = row.id
+                    try context.delete(model: MailAttachment.self, where: #Predicate { $0.messageID == id })
+                    context.delete(row)
+                }
+            }
+            for dto in dtos {
+                let payload = dto.payload
+                let from = MailMIME.addresses(payload?.header("From") ?? "").first ?? MailAddress(name: nil, email: "Unknown sender")
+                let date = Date(timeIntervalSince1970: (Double(dto.internalDate ?? "") ?? 0) / 1000)
+                let row = try message(accountID: accountID, remoteID: dto.id) ?? MailMessage(accountID: accountID,
+                    remoteID: dto.id, remoteThreadID: dto.threadId, sender: from, subject: "", snippet: "", receivedAt: date)
+                if row.modelContext == nil { context.insert(row) }
+                row.senderName = from.name; row.senderEmail = from.email; row.remoteThreadID = dto.threadId
+                row.receivedAt = date; row.subject = MailMIME.decodedHeader(payload?.header("Subject") ?? "")
+                row.snippet = MailMIME.readableHTML(dto.snippet ?? "")
+                row.to = MailMIME.addresses(payload?.header("To") ?? ""); row.cc = MailMIME.addresses(payload?.header("Cc") ?? "")
+                row.bcc = MailMIME.addresses(payload?.header("Bcc") ?? ""); row.replyTo = MailMIME.addresses(payload?.header("Reply-To") ?? "")
+                row.internetMessageID = payload?.header("Message-ID"); row.referencesHeader = payload?.header("References")
+                row.folderIDs = dto.labelIds ?? []
+                for operation in pending where operation.targetRemoteID == dto.id { Self.overlay(operation.kindRaw, on: row) }
+                Self.flags(row)
+                let content = MailMIME.content(payload)
+                row.cachedText = content.text.isEmpty ? nil : Data(content.text.utf8)
+                row.cachedHTML = content.html.isEmpty ? nil : Data(content.html.utf8)
+                let messageID = row.id
+                try context.delete(model: MailAttachment.self, where: #Predicate { $0.messageID == messageID })
+                for part in content.attachments {
+                    let attachment = MailAttachment(accountID: accountID, messageID: row.id, partID: part.partId ?? "",
+                        filename: MailMIME.decodedHeader(part.filename ?? "Attachment"), mimeType: part.mimeType ?? "application/octet-stream",
+                        byteCount: part.body?.size ?? 0)
+                    attachment.remoteID = part.body?.attachmentId; attachment.contentID = part.header("Content-ID")
+                    context.insert(attachment)
+                }
+                let identity = "\(accountID.uuidString):\(dto.threadId)"
+                let thread = try context.fetch(FetchDescriptor<MailThread>(predicate: #Predicate { $0.identity == identity })).first
+                if let thread {
+                    if date >= thread.latestMessageAt { thread.subject = row.subject; thread.latestMessageAt = date }
+                } else { context.insert(MailThread(accountID: accountID, remoteID: dto.threadId, subject: row.subject, latestMessageAt: date)) }
+            }
+            if let historyID, let account = try account(id: accountID) { account.historyID = historyID }
+            try context.save()
+        }
+    }
+    static func flags(_ row: MailMessage) {
+        let labels = Set(row.folderIDs)
+        row.isRead = !labels.contains("UNREAD"); row.isStarred = labels.contains("STARRED")
+        row.isInbox = labels.contains("INBOX"); row.isSent = labels.contains("SENT")
+        row.isDraft = labels.contains("DRAFT"); row.isTrash = labels.contains("TRASH"); row.isSpam = labels.contains("SPAM")
+    }
+    static func overlay(_ kind: String, on row: MailMessage) {
+        var labels = Set(row.folderIDs)
+        switch kind {
+        case "read": labels.remove("UNREAD")
+        case "unread": labels.insert("UNREAD")
+        case "star": labels.insert("STARRED")
+        case "unstar": labels.remove("STARRED")
+        case "archive": labels.remove("INBOX")
+        case "trash": labels.insert("TRASH"); labels.remove("INBOX")
+        case "restore": labels.remove("TRASH")
+        default: break
+        }
+        row.folderIDs = labels.sorted(); flags(row)
+    }
+    func enqueue(_ kind: String, message: MailMessage) throws {
+        try context.transaction {
+            Self.overlay(kind, on: message)
+            context.insert(PendingMailOperation(accountID: message.accountID, targetRemoteID: message.remoteID, kind: kind))
+            try context.save()
+        }
+    }
+    func saveLabels(_ labels: [GmailLabel], accountID: UUID) throws {
+        try context.transaction {
+            try context.delete(model: MailFolder.self, where: #Predicate { $0.accountID == accountID })
+            for label in labels { context.insert(MailFolder(accountID: accountID, remoteID: label.id, name: label.name, kind: label.type ?? "user")) }
+            try context.save()
+        }
+    }
+    func outgoing(_ id: UUID) throws -> OutgoingMessage? {
+        try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.id == id })).first
+    }
+    func recoverInterruptedSends() throws {
+        for row in try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.stateRaw == "sending" })) {
+            row.stateRaw = "sendUnconfirmed"; row.lastError = GmailError.uncertainSend.localizedDescription
+        }
+        try context.save()
+    }
+}

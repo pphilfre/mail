@@ -10,6 +10,7 @@ struct DispatchApp: App {
             if let container = runtime.container, let session = runtime.session {
                 AppShell()
                     .environment(session)
+                    .environment(runtime)
                     .modelContainer(container)
             } else {
                 ContentUnavailableView {

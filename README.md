@@ -4,11 +4,11 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-Stages 1 and 2 are verified: [Dispatch CI](https://github.com/pphilfre/mail/actions/runs/37124979822) built the renamed app and passed four unit tests and three UI tests; the IPA release pipeline is verified. Stage 3's SwiftData and Keychain implementation is undergoing validation. Gmail is the current provider priority. See [stage status](docs/stages.md).
+Stages 1 and 2 are verified: [Dispatch CI](https://github.com/pphilfre/mail/actions/runs/37124979822) built the renamed app and passed four unit tests and three UI tests; the IPA release pipeline is verified. Stage 3 passed SwiftData and actual simulator Keychain tests in https://github.com/pphilfre/mail/actions/runs/37127210621. Gmail integration is implemented and undergoing macOS validation. Gmail is the current provider priority. See [stage status](docs/stages.md).
 
 Before the provider stages, follow the [OAuth setup guide](docs/oauth-setup.md) to register Gmail and prepare the Zoho configuration from Windows.
 
-The foundation includes Inbox, Accounts, Settings, a sample message reader, and a compose sheet that saves real on-device drafts. Sample messages are opt-in under Settings and clearly labelled. Account connections and sending are not yet available; no provider functionality is simulated.
+The foundation includes Inbox, Accounts, Settings, a sample message reader, and a compose sheet that saves real on-device drafts. Sample messages are opt-in under Settings and clearly labelled. Connect Gmail in Accounts. Cached messages, threads, labels, incremental sync, read/star/archive/trash, sending, drafts, reply/reply-all and text forwarding are implemented. See [Gmail details and limitations](Providers/Gmail/README.md). Live login and mail delivery require an installed, signed device build and your configured Google test user.
 
 ## Windows workflow
 
@@ -59,7 +59,7 @@ scripts/                  macOS build, simulator selection, IPA packaging
 
 The app opens its versioned SwiftData database in Application Support and loads cached drafts before any network work. Existing foundation JSON drafts are imported once with a durable marker; the protected original file is kept for recovery. Import failure preserves the original and surfaces a retry screen. Store failures never silently replace the database with an empty in-memory store.
 
-Shared storage includes accounts, messages, threads, Codable mail addresses, folder/label metadata, attachment metadata, outgoing messages and pending operations. Account-local provider IDs are scoped by the account UUID. Account deletion clears associated rows in one transaction. CredentialVault stores OAuth tokens only in device-local Keychain items accessible after the first unlock; it disables iCloud synchronisation and redacts diagnostic descriptions. No provider is connected yet.
+Shared storage includes accounts, messages, threads, Codable mail addresses, folder/label metadata, attachment metadata, outgoing messages and pending operations. Account-local provider IDs are scoped by the account UUID. Account deletion clears associated rows in one transaction. CredentialVault stores OAuth tokens only in device-local Keychain items accessible after the first unlock; it disables iCloud synchronisation and redacts diagnostic descriptions. Gmail credentials never enter SwiftData.
 
 ## macOS commands used by CI
 

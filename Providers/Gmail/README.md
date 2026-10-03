@@ -1,3 +1,17 @@
-# Gmail
+# Gmail provider
 
-Provider implementation begins in Stage 4. OAuth, incremental history sync and mutations will live here, separate from SwiftUI. No Gmail connection is implemented in the foundation.
+Native Google OAuth uses ASWebAuthenticationSession, a random state, PKCE S256, the registered iOS redirect and no client secret. Access/refresh credentials are stored only in Keychain. Token refresh is coalesced per account, preserves a refresh token omitted by Google, and rejects late refreshes after credential replacement/removal. Gmail requests retry an explicit HTTP 401 once, never a network error or 5xx send.
+
+GmailAPI contains REST transport and Sendable DTOs. GmailCoordinator owns orchestration on the main actor; GmailStorage maps values into SwiftData transactionally. Views read cached SwiftData before any network response.
+
+Initial sync fetches the latest 100 All Mail entries plus 100 Inbox entries and caches full message bodies and attachment metadata. Load older mail continues the All Mail page cursor. Thread opening fetches the full thread. Labels are cached independently. Subsequent sync uses history.list and advances historyId only after all pages commit. A 404 history cursor triggers a new recent sync and reconciles every already-cached message. IDs remain opaque strings. Initial history is captured before fetching mail and drained afterwards.
+
+Read/unread, star/unstar, archive, trash and restore write a durable optimistic operation first. Operations are replayed serially before incremental sync; incoming DTOs retain overlays for operations still pending. Retry runs on launch, foreground and pull-to-refresh. Network-return and background scheduling remain Stage 9.
+
+Save draft is local. Save to Gmail explicitly creates/updates a server draft, recovering a previous uncertain create by stable RFC Message-ID lookup. Existing server drafts can be edited/deleted/sent. Sending commits a durable sending state before the POST. Unknown outcomes become sendUnconfirmed and are displayed separately; they are never automatically resent. Explicit 4xx rejection returns to editable draft. Interrupted sending is recovered on launch. No live email is sent by tests.
+
+Reply/reply-all preserve thread ID, original subject, References and In-Reply-To; recipient lists deduplicate and exclude the primary account address, and never copy Bcc. Changing the subject or account starts a new conversation. Forwarding includes text only. Outbound MIME is UTF-8 with base64 body and folded encoded headers; header injection is rejected.
+
+The reader converts HTML to native selectable text, with no WebKit, scripts or remote-image requests. Rich HTML, inline rendering and attachment upload/download are Stage 7. Text parts supplied only as external attachment bodies are not yet downloaded. Complex address groups, escaped quoted mailbox names and aliases require further parser work; the supported compose format is comma-separated addresses or Name <address>.
+
+Official references: [native OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [sync](https://developers.google.com/workspace/gmail/api/guides/sync), [history](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.history/list), [messages](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages), [drafts](https://developers.google.com/workspace/gmail/api/guides/drafts), [sending](https://developers.google.com/workspace/gmail/api/guides/sending).

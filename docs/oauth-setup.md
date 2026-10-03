@@ -1,16 +1,16 @@
 # Connect Gmail and Zoho: registration guide
 
-Checked against official documentation on 3 October 2026. These registrations prepare the provider stages. The current foundation does not connect accounts yet.
+Checked against official documentation on 3 October 2026. Gmail registration supports the current integration; Zoho is deferred.
 
-You can do the console steps in a browser on Windows. The app's current bundle identifier is **`uk.freddie.mail`**, set in `project.yml`. If you choose a different bundle identifier, update that file and register the same identifier with Google.
+You can do the console steps in a browser on Windows. The app's current bundle identifier is **`dev.freddiephilpot.dispatch`**, set in `project.yml`. If you choose a different bundle identifier, update that file and register the same identifier with Google.
 
 ## Gmail — start here
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/), select or create a project named **Mail**, then enable **Gmail API** in **APIs & Services → Library**. [Google's Gmail quickstart](https://developers.google.com/workspace/gmail/api/quickstart/python) describes the console setup; its Python client instructions are not needed for this Swift app.
+1. Open [Google Cloud Console](https://console.cloud.google.com/), select or create a project named **Dispatch**, then enable **Gmail API** in **APIs & Services → Library**. [Google's Gmail quickstart](https://developers.google.com/workspace/gmail/api/quickstart/python) describes the console setup; its Python client instructions are not needed for this Swift app.
 2. Open **Google Auth Platform**. Under **Branding**, enter the app name, your support email and developer contact email. Under **Audience**, choose **External** for a personal Gmail account, keep it in **Testing**, and add the Gmail address you will use under **Test users**. An organisation-owned internal app is a different option, available within Google Workspace. [Consent setup](https://developers.google.com/workspace/guides/configure-oauth-consent).
 3. Under **Data Access**, add `https://www.googleapis.com/auth/gmail.modify`. It covers reading, changes, drafts and sending, including moving messages to Trash. Do not request `https://mail.google.com/`; we do not need permanent deletion that bypasses Trash. `gmail.modify` is a restricted scope, so wider distribution requires Google's applicable verification process. [Gmail scope reference](https://developers.google.com/workspace/gmail/api/auth/scopes).
-4. Under **Clients**, create an OAuth client with application type **iOS**, name **Mail iOS**, and bundle ID **`uk.freddie.mail`**. Use your actual App Store ID or Apple team information only if applicable; this project is intended to support sideloading. Copy the public client ID ending in `.apps.googleusercontent.com` and the **iOS URL scheme** shown for that client. [Google's iOS setup](https://developers.google.com/identity/sign-in/ios/start-integrating).
-5. Send the public client ID and iOS URL scheme back in this chat. Those will be added to configuration during Stage 4, with the callback registered through XcodeGen. You do not need to install Xcode, edit a generated project, create a Gmail password, or supply a Google client secret for an iOS client. The app will use browser-based consent, state checking and PKCE. [Native OAuth reference](https://developers.google.com/identity/protocols/oauth2/native-app).
+4. Under **Clients**, create an OAuth client with application type **iOS**, name **Dispatch iOS**, and bundle ID **`dev.freddiephilpot.dispatch`**. Use your actual App Store ID or Apple team information only if applicable; this project is intended to support sideloading. Copy the public client ID ending in `.apps.googleusercontent.com` and the **iOS URL scheme** shown for that client. [Google's iOS setup](https://developers.google.com/identity/sign-in/ios/start-integrating).
+5. Your supplied public client ID and URL scheme are already in `Configuration/GoogleOAuth.plist`, and the callback scheme is registered in `project.yml`. Verify that this Google client was registered for `dev.freddiephilpot.dispatch`. If you replace the client, update both files. You do not need to install Xcode, edit a generated project, create a Gmail password, or supply a Google client secret for an iOS client. The app will use browser-based consent, state checking and PKCE. [Native OAuth reference](https://developers.google.com/identity/protocols/oauth2/native-app).
 
 Keep this app in Testing while developing. Testing-mode refresh-token expiry can require reconnecting; see [Google's token-expiration guidance](https://developers.google.com/identity/protocols/oauth2#expiration). A Workspace administrator may also need to allow the app.
 
@@ -46,7 +46,7 @@ Once that callback is chosen:
 4. Stage 5 will request the endpoint-specific mail scopes it actually uses. The expected starting set is `ZohoMail.accounts.READ`, `ZohoMail.messages.ALL`, `ZohoMail.folders.READ`, and `ZohoMail.tags.READ`. Attachment operations are documented under message scopes; do not assume a Gmail-style scope or endpoint. [Zoho Mail API index](https://www.zoho.com/mail/help/api/).
 5. If you need accounts from multiple data centres, enable multi-DC support and honour the authenticated account's location. [Zoho Mail OAuth guide](https://www.zoho.com/mail/help/api/using-oauth-2.html).
 
-For now, send back your **Zoho Mail hostname**. We will settle the broker hosting and callback before creating the Zoho client. If Zoho confirms a supported secret-free native exchange for your registration, the implementation can use that instead.
+When returning to Zoho, record your **Zoho Mail hostname**. We will settle the broker hosting and callback before creating the Zoho client. If Zoho confirms a supported secret-free native exchange for your registration, the implementation can use that instead.
 
 ## What may be shared
 
@@ -58,4 +58,4 @@ For now, send back your **Zoho Mail hostname**. We will settle the broker hostin
 | OAuth access and refresh tokens | Device Keychain; never SwiftData or Git |
 | Apple signing certificate / APNs `.p8` key | Later signing/backend secret configuration; never the app source |
 
-Account login and a real device test are required before provider support can be marked verified. Registrations alone do not enable account connections in the current app.
+Account login and a real device test are required before provider support can be marked verified. After installing the Gmail build, open Accounts → Connect Gmail. Ensure the Gmail API is enabled and your Gmail address is an OAuth test user before signing in.
