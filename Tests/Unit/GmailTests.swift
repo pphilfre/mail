@@ -247,4 +247,17 @@ final class GmailTests: XCTestCase {
         XCTAssertEqual(try repository.load().count, 1)
         try await vault.remove(for: account.id)
     }
+    func testReplyAllHonoursReplyToAndDeduplicatesOwnAddressAndRecipients() {
+        let me = MailAddress(email: "me@example.com")
+        let sender = MailAddress(email: "sender@example.com")
+        let replyTo = MailAddress(email: "reply@example.com")
+        let copy = MailAddress(email: "copy@example.com")
+        let result = MailReplyRecipients.make(sender: sender, replyTo: [replyTo], to: [me, copy],
+            cc: [MailAddress(email: "COPY@example.com"), me, MailAddress(email: "other@example.com")],
+            ownEmail: me.email, replyAll: true)
+        XCTAssertEqual(result.to, [replyTo.email, copy.email])
+        XCTAssertEqual(result.cc, ["other@example.com"])
+        let sent = MailReplyRecipients.make(sender: me, replyTo: [], to: [sender], cc: [copy], ownEmail: me.email, replyAll: false)
+        XCTAssertEqual(sent.to, [sender.email]); XCTAssertTrue(sent.cc.isEmpty)
+    }
 }

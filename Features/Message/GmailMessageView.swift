@@ -105,19 +105,10 @@ struct GmailMessageView: View {
     }
     private func reply(_ row: MailMessage, all: Bool) {
         let own = accounts.first { $0.id == row.accountID }?.email.lowercased() ?? ""
-        let target = row.replyTo.isEmpty ? [row.sender] : row.replyTo
-        var seen: Set<String> = [own]
-        func unique(_ values: [MailAddress]) -> [String] {
-            values.compactMap { address in
-                let email = address.email.lowercased()
-                guard seen.insert(email).inserted else { return nil }
-                return address.email
-            }
-        }
-        let to = unique(target + (all ? row.to : []))
-        let cc = all ? unique(row.cc) : []
+        let recipients = MailReplyRecipients.make(sender: row.sender, replyTo: row.replyTo, to: row.to, cc: row.cc,
+            ownEmail: own, replyAll: all)
         let references = [row.referencesHeader, row.internetMessageID].compactMap { $0 }.joined(separator: " ")
-        composing = LocalDraft(to: to.joined(separator: ", "), cc: cc.joined(separator: ", "), subject: row.subject,
+        composing = LocalDraft(to: recipients.to.joined(separator: ", "), cc: recipients.cc.joined(separator: ", "), subject: row.subject,
             body: "\n\nOn \(row.receivedAt.formatted()), \(row.sender.displayName) wrote:\n" + bodyText(row).split(separator: "\n", omittingEmptySubsequences: false).map { "> " + $0 }.joined(separator: "\n"),
             accountID: row.accountID, remoteThreadID: row.internetMessageID == nil ? nil : row.remoteThreadID,
             inReplyTo: row.internetMessageID, referencesHeader: references.isEmpty ? nil : references)
