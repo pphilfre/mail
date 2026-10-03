@@ -20,9 +20,11 @@ targets:
       - path: App
         excludes: [Simulator.entitlements, GeneratedInfo.plist]
       - Core
-      - Features
+      - path: Features
+        excludes: ["**/*.md"]
       - DesignSystem
-      - Providers
+      - path: Providers
+        excludes: ["**/*.md"]
       - path: Configuration
         buildPhase: resources
     info:
