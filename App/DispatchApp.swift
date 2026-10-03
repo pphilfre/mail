@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct Dispatch: App {
+struct DispatchApp: App {
     @State private var session = AppSession()
 
     var body: some Scene {

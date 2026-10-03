@@ -24,6 +24,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.freddiephilpot.dispatch
+        PRODUCT_MODULE_NAME: DispatchMail
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity

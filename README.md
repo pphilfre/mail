@@ -27,13 +27,15 @@ The runner uses macOS 26 with Xcode 26.6, generates the project using XcodeGen, 
 After the intended commit passes CI:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 The release workflow requires an already successful iOS CI run for the exact tagged commit, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.1.1.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`. If a tag is pushed before CI finishes, wait for CI and rerun the failed release workflow. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
+
+The app's display name, target and scheme are Dispatch; its internal Swift module is `DispatchMail` to avoid colliding with Apple's `Dispatch` module.
 
 ## Structure
 
