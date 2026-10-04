@@ -15,6 +15,7 @@ struct InboxView: View {
     @State private var showingDrawer = false
     @State private var showingAccounts = false
     @State private var showingSettings = false
+    @State private var showingSearch = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("leadingSwipe") private var leadingSwipe = "read"
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
@@ -124,6 +125,10 @@ struct InboxView: View {
                 Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
                     .accessibilityIdentifier("mailboxDrawerButton")
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Search", systemImage: "magnifyingglass") { showingSearch = true }
+                    .accessibilityIdentifier("searchButton")
+            }
         }
         .overlay(alignment: .leading) {
             if showingDrawer {
@@ -146,6 +151,9 @@ struct InboxView: View {
         }
         .sheet(isPresented: $showingSettings) {
             NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSettings = false } } } }
+        }
+        .sheet(isPresented: $showingSearch) {
+            NavigationStack { LocalSearchView(initialAccountID: accountFilter) }
         }
         .onChange(of: mailbox) { _, _ in loadMailbox() }
         .onChange(of: accounts.map(\.id)) { _, ids in

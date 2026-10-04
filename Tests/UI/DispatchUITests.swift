@@ -34,6 +34,25 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["alex@example.com"].exists)
     }
 
+    func testLocalSearchFindsSampleMailAndShowsNoResults() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("quieter")
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Notes for next week"].exists)
+        app.staticTexts["A quieter inbox"].tap()
+        XCTAssertTrue(app.staticTexts["Sample message"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        search.tap()
+        search.typeText("zzzznomatch")
+        XCTAssertTrue(app.descendants(matching: .any)["searchNoResults"].waitForExistence(timeout: 5))
+    }
+
     func testComposeDraftSurvivesRelaunch() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
