@@ -22,19 +22,26 @@ struct InboxHeader: View {
     @Namespace private var selection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.largeTitle.weight(.bold)).tracking(-0.8)
-                    .foregroundStyle(.primary).accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(scope).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer(minLength: 8)
+                    Text(title).font(.largeTitle.weight(.bold)).tracking(-0.8)
+                        .foregroundStyle(.primary).accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 12)
                     if canSelect {
-                        Button(selecting ? "Done" : "Select", action: select)
-                            .font(.subheadline.weight(.medium)).frame(minHeight: 44)
+                        Button(action: select) {
+                            Text(selecting ? "Done" : "Select").font(.subheadline.weight(.medium))
+                                .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                        }.buttonStyle(.plain).foregroundStyle(MailStyle.accent)
                             .accessibilityIdentifier("selectMailButton")
                     }
                 }
+                HStack {
+                    Text(scope).lineLimit(1)
+                    Spacer(minLength: 12)
+                    Text("\(count) \(grouped ? (count == 1 ? "conversation" : "conversations") : (count == 1 ? "message" : "messages"))")
+                        .accessibilityIdentifier("inboxResultCount")
+                }.font(.caption).foregroundStyle(.secondary)
             }
             Button(action: search) {
                 HStack(spacing: 10) {
@@ -42,7 +49,7 @@ struct InboxHeader: View {
                     Text("Search your mail").font(.body)
                     Spacer()
                 }
-                .foregroundStyle(.secondary).padding(.horizontal, 16).frame(minHeight: 48)
+                .foregroundStyle(.secondary).padding(.horizontal, 16).frame(minHeight: 44)
                 .background(MailStyle.canvas, in: .rect(cornerRadius: 16))
             }.buttonStyle(.plain).accessibilityIdentifier("searchButton")
             if showFilters {
@@ -63,15 +70,13 @@ struct InboxHeader: View {
                                             .matchedGeometryEffect(id: "filter", in: selection)
                                     }
                                 }
+                                .contentShape(.rect)
                         }.buttonStyle(.plain)
                         .accessibilityAddTraits(filter == value ? [.isSelected] : [])
                         .accessibilityIdentifier("inboxFilter-\(value.id)")
                     }
                 }.padding(4).background(MailStyle.canvas, in: .capsule)
             }
-            Text("\(count) \(grouped ? (count == 1 ? "conversation" : "conversations") : (count == 1 ? "message" : "messages"))")
-                .font(.caption).foregroundStyle(.secondary)
-                .accessibilityIdentifier("inboxResultCount")
         }
     }
 }

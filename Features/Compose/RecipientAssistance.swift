@@ -66,18 +66,23 @@ enum MailSignature {
     static func insert(_ signature: String, in body: String) -> String {
         guard !signature.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return body }
         let block = "\n\n-- \n" + signature
-        if body.hasPrefix("\n\nOn ") || body.hasPrefix("\n\nForwarded message") { return block + body }
+        if let quote = quoteBoundary(in: body) { return String(body[..<quote]) + block + String(body[quote...]) }
         return body + block
     }
     static func replace(_ previous: String, with next: String, in body: String) -> String? {
         let block = "\n\n-- \n" + previous
+        if let quote = quoteBoundary(in: body) {
+            let ownText = String(body[..<quote])
+            guard ownText.hasSuffix(block) else { return nil }
+            return insert(next, in: String(ownText.dropLast(block.count))) + String(body[quote...])
+        }
         if body.hasSuffix(block) {
             return insert(next, in: String(body.dropLast(block.count)))
         }
-        if body.hasPrefix(block), body.dropFirst(block.count).hasPrefix("\n\nOn ") || body.dropFirst(block.count).hasPrefix("\n\nForwarded message") {
-            return insert(next, in: String(body.dropFirst(block.count)))
-        }
         return nil // Preserve signatures the user has edited.
+    }
+    private static func quoteBoundary(in body: String) -> String.Index? {
+        ["\n\nOn ", "\n\nForwarded message"].compactMap { body.range(of: $0)?.lowerBound }.min()
     }
     static func mentionsAttachment(_ body: String) -> Bool {
         let ownText = body.components(separatedBy: "\n\nOn ").first?.components(separatedBy: "\n\nForwarded message").first ?? body

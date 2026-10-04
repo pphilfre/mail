@@ -7,6 +7,8 @@ struct MailboxSheet: View {
     let accounts: [MailAccount]
     let folders: [MailFolder]
     let counts: [String: Int]
+    let accountCounts: [UUID: Int]
+    let labelCounts: [String: Int]
     @Binding var account: String
     @Binding var mailbox: String
     @Binding var label: String?
@@ -19,24 +21,17 @@ struct MailboxSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Menu {
-                        Picker("Account", selection: $account) {
-                            Text("All accounts").tag("")
-                            ForEach(accounts) { Text($0.email).tag($0.id.uuidString) }
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            AccountBadge(account: selectedAccount)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(selectedAccount?.displayName ?? (accounts.isEmpty ? "Sample mail" : "All accounts"))
-                                    .font(.headline).foregroundStyle(.primary).lineLimit(1)
-                                Text(selectedAccount?.email ?? "Your mail, together")
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    if accounts.isEmpty { accountSummary }
+                    else {
+                        Menu {
+                            Picker("Account", selection: $account) {
+                                Text("All accounts").tag("")
+                                ForEach(accounts) { row in
+                                    Text(MailStyle.accountTitle(row, unread: accountCounts[row.id] ?? 0)).tag(row.id.uuidString)
+                                }
                             }
-                            Spacer()
-                            Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        }.padding(14).background(MailStyle.paper, in: .rect(cornerRadius: 20))
-                    }.buttonStyle(.plain).disabled(accounts.isEmpty)
+                        } label: { accountSummary }.buttonStyle(.plain)
+                    }
 
                     VStack(spacing: 4) {
                         ForEach(MailboxScope.names, id: \.self) { name in
@@ -46,6 +41,7 @@ struct MailboxSheet: View {
                                 mailboxRow(name, symbol: MailStyle.mailboxSymbol(name), selected: mailbox == name && label == nil,
                                            count: counts[name] ?? 0)
                             }.buttonStyle(.plain)
+                                .accessibilityIdentifier("mailbox-\(name)")
                         }
                     }
                     if let selectedAccount {
@@ -57,8 +53,9 @@ struct MailboxSheet: View {
                                     Button {
                                         feedback.select(); label = folder.remoteID; dismiss()
                                     } label: {
-                                        mailboxRow(folder.name, symbol: "tag", selected: label == folder.remoteID)
+                                        mailboxRow(folder.name, symbol: "tag", selected: label == folder.remoteID, count: labelCounts[folder.remoteID] ?? 0)
                                     }.buttonStyle(.plain)
+                                        .accessibilityIdentifier("mailLabel-\(folder.remoteID)")
                                 }
                             }
                         }
@@ -89,6 +86,22 @@ struct MailboxSheet: View {
         .onChange(of: account) { _, _ in feedback.select(); label = nil }
     }
 
+    private var accountSummary: some View {
+        HStack(spacing: 12) {
+            AccountBadge(account: selectedAccount)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(selectedAccount?.displayName ?? (accounts.isEmpty ? "Sample mail" : "All accounts"))
+                    .font(.headline).foregroundStyle(.primary).lineLimit(1)
+                Text(selectedAccount?.email ?? "Your mail, together")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            if !accounts.isEmpty {
+                Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            }
+        }.padding(14).background(MailStyle.paper, in: .rect(cornerRadius: 20))
+    }
+
     private func mailboxRow(_ name: String, symbol: String, selected: Bool, count: Int = 0) -> some View {
         HStack(spacing: 14) {
             Image(systemName: selected ? symbol + (symbol == "tray" || symbol == "star" || symbol == "archivebox" ? ".fill" : "") : symbol)
@@ -107,6 +120,9 @@ struct MailboxSheet: View {
         .frame(minHeight: 48)
         .background(selected ? MailStyle.accent.opacity(0.09) : .clear, in: .rect(cornerRadius: 14))
         .contentShape(.rect)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name)
+        .accessibilityValue(count > 0 ? "\(count) cached \(name == "Drafts" ? "drafts" : "unread messages")" : "")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
@@ -118,7 +134,7 @@ struct AccountBadge: View {
             if let account {
                 Text(String(account.displayName.prefix(1)).uppercased())
                     .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color(mailHex: account.colourHex))
+                    .foregroundStyle(.primary)
                     .frame(width: 36, height: 36)
                     .background(Color(mailHex: account.colourHex).opacity(0.1), in: .circle)
             } else {

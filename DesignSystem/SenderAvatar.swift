@@ -18,7 +18,7 @@ struct SenderAvatar: View {
         return parts.prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
     }
     private var fallback: some View {
-        Text(initials.isEmpty ? "?" : initials).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(avatarColor)
+        Text(initials.isEmpty ? "?" : initials).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.primary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(avatarColor.opacity(0.08))
     }

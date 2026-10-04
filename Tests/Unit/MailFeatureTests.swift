@@ -153,6 +153,8 @@ final class RecipientAndSignatureTests: XCTestCase {
         let reply = "\n\nOn Monday, Alex wrote:\n> earlier"
         let body = MailSignature.insert("Freddie", in: reply)
         XCTAssertEqual(MailSignature.replace("Freddie", with: "Work", in: body), MailSignature.insert("Work", in: reply))
+        XCTAssertEqual(MailSignature.replace("Freddie", with: "Work", in: "Hello" + body), "Hello" + MailSignature.insert("Work", in: reply))
+        XCTAssertEqual(MailSignature.insert("Work", in: "Hello" + reply), "Hello" + MailSignature.insert("Work", in: reply))
         XCTAssertNil(MailSignature.replace("Freddie", with: "Work", in: body.replacingOccurrences(of: "Freddie", with: "Edited")))
         let plain = MailSignature.insert("Freddie", in: "Hello")
         XCTAssertEqual(MailSignature.replace("Freddie", with: "", in: plain), "Hello")

@@ -16,7 +16,6 @@ Implemented from the feature ideas and UI audit on 4 October 2026. Validation re
 | TR06 | Spam | Dedicated mailbox, inbox context action, reader action, and bulk controls. Not spam moves messages to Inbox. |
 | SE01 | Search filters | Unread, Starred, Attachments and account selection, combinable with text and operators. |
 | SE02 | Search operators | from:, to:, subject:, label:, before:, after:, has:attachment and is:read/unread/starred. Quoted phrases and syntax feedback. Dates are local calendar dates; after is inclusive and before exclusive. |
-| SE05 | Search coverage | Results explicitly cover mail downloaded to this device. |
 | SE06 | Recent searches | Last ten submitted/opened searches, clear history and disable-history controls. No telemetry or network lookup. |
 | OR03 | Saved searches | Up to twenty named query/filter/account combinations, reusable from Search and removable through their contextual menu. Versioned local representation; removed-account searches are hidden. |
 | CO01 | Recipient chips | Unfocused addresses appear as removable chips; tap to edit the raw address field. Invalid input remains visible. |
@@ -43,4 +42,6 @@ New unit coverage checks conversation account isolation, empty thread IDs, batch
 
 New UI coverage uses the existing provider-free reader fixture for grouped bulk archive/Undo, filtered operator search, and invalid-recipient Send gating. Existing draft, reading and sample-mail workflows remain in the suite.
 
-Local verification: diff whitespace checks. Native iOS compilation and XCTest require the macOS CI gate; signed-device Gmail, VoiceOver, large text, iPhone landscape and iPad checks remain required.
+The initial combined macOS CI snapshot compiled successfully and passed all 78 unit tests. Its UI run caught a recipient-editing issue and ambiguous Undo/mailbox accessibility identifiers; those are being corrected before the final gate. Simulator screenshots of inbox, mailbox, reader, draft confirmation and Settings were exported for review. Final results will be recorded here.
+
+Counts and search retain the existing downloaded-mail coverage explanation. Signed-device Gmail, VoiceOver, large text, iPhone landscape and iPad checks remain required.

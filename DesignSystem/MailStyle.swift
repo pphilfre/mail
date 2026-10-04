@@ -25,6 +25,10 @@ enum MailStyle {
         default: "trash"
         }
     }
+
+    static func accountTitle(_ account: MailAccount, unread: Int) -> String {
+        account.displayName + (unread > 0 ? " (\(unread) unread)" : "")
+    }
 }
 
 /// A shared minimum touch target for compact, icon-only navigation controls.
@@ -39,8 +43,7 @@ struct MailCloseButton: View {
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 44, height: 44)
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
+        .labelStyle(.iconOnly)
         .accessibilityLabel(title)
     }
 }

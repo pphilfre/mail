@@ -105,7 +105,8 @@ struct InboxView: View {
             MailboxSheet(accounts: accounts, folders: folders,
                 counts: Dictionary(uniqueKeysWithValues: mailboxes.map { name in
                     (name, name == "Drafts" ? draftCount : accounts.isEmpty && showSamples ? sampleUnread(name) : cachedUnread(accountID: accountFilter, mailbox: name))
-                }), account: $accountFilterRaw, mailbox: $mailbox, label: $labelFilter,
+                }), accountCounts: accountUnreadCounts, labelCounts: labelUnreadCounts,
+                account: $accountFilterRaw, mailbox: $mailbox, label: $labelFilter,
                 openAccounts: { sheetDestination = .accounts; showingDrawer = false },
                 openSettings: { sheetDestination = .settings; showingDrawer = false })
         }
@@ -247,8 +248,6 @@ struct InboxView: View {
                             description: Text("Explore Inbox, All Mail, or Unread to see sample mail."))
                             .listRowBackground(Color.clear)
                     }
-                } header: {
-                    Text("Sample inbox")
                 } footer: {
                     Text("These messages are examples. Turn them off in Settings.")
                 }
@@ -278,18 +277,22 @@ struct InboxView: View {
             })
     }
     private var profileMenu: some View {
-        Menu {
+        let counts = accountUnreadCounts
+        return Menu {
             if !accounts.isEmpty {
                 Picker("Account", selection: $accountFilterRaw) {
                     Text("All accounts").tag("")
-                    ForEach(accounts) { Text($0.email).tag($0.id.uuidString) }
+                    ForEach(accounts) { Text(MailStyle.accountTitle($0, unread: counts[$0.id] ?? 0)).tag($0.id.uuidString) }
                 }
                 Divider()
             }
             Button("Accounts", systemImage: "person.crop.circle") { showingAccounts = true }
             Button("Settings", systemImage: "gearshape") { showingSettings = true }
         } label: {
-            AccountBadge(account: accounts.first { $0.id == accountFilter }).frame(minWidth: 44, minHeight: 44)
+            Group {
+                if let account = accounts.first(where: { $0.id == accountFilter }) { AccountBadge(account: account) }
+                else { Image(systemName: "person.crop.circle").font(.system(size: 21, weight: .regular)) }
+            }.frame(minWidth: 44, minHeight: 44)
         }
         .accessibilityLabel("Accounts and settings")
         .accessibilityIdentifier("profileMenuButton")
@@ -303,8 +306,8 @@ struct InboxView: View {
                     ProgressView().controlSize(.mini)
                     Text("Updating mail…")
                 } else {
-                    Image(systemName: runtime.connectivity.isConnected == false ? "wifi.slash" : "checkmark.circle")
-                    Text(accounts.isEmpty ? "Sample mail" : runtime.connectivity.isConnected == false ? "Reading offline" : "Your mail, together")
+                    Image(systemName: runtime.connectivity.isConnected == false ? "wifi.slash" : inboxError != nil ? "exclamationmark.circle" : "checkmark.circle")
+                    Text(accounts.isEmpty ? "Sample mail" : runtime.connectivity.isConnected == false ? "Reading offline" : inboxError != nil ? "Mail needs attention" : "Your mail, together")
                 }
             }.font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Spacer(minLength: 12)
@@ -312,7 +315,7 @@ struct InboxView: View {
                 feedback.select(); showingCompose = true
             } label: {
                 Image(systemName: "square.and.pencil").font(.system(size: 22, weight: .medium))
-                    .frame(width: 58, height: 58)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.glassProminent).buttonBorderShape(.circle)
             .accessibilityLabel("Compose").accessibilityIdentifier("composeButton")
@@ -347,6 +350,18 @@ struct InboxView: View {
     }
     private func cachedUnread(accountID: UUID?, mailbox: String, labelID: String? = nil) -> Int {
         messages.filter { (accountID == nil || $0.accountID == accountID) && !$0.isRead && MailboxScope.contains($0, mailbox: mailbox, labelID: labelID) }.count
+    }
+    private var accountUnreadCounts: [UUID: Int] {
+        messages.reduce(into: [:]) { counts, row in
+            if !row.isRead && MailboxScope.contains(row, mailbox: "Inbox") { counts[row.accountID, default: 0] += 1 }
+        }
+    }
+    private var labelUnreadCounts: [String: Int] {
+        messages.reduce(into: [:]) { counts, row in
+            if !row.isRead && (accountFilter == nil || row.accountID == accountFilter) {
+                for id in row.folderIDs { counts[id, default: 0] += 1 }
+            }
+        }
     }
     private func conversationRow(_ conversation: MailConversation) -> some View {
         CachedMessageRow(message: conversation.latest, messageCount: conversation.messages.count,

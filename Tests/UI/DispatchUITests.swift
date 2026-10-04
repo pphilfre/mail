@@ -213,7 +213,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launch()
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["Unread"].tap()
+        app.buttons["mailbox-Unread"].tap()
         XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
     }
@@ -229,7 +229,7 @@ final class DispatchUITests: XCTestCase {
         subject.tap(); subject.typeText(title)
         app.buttons["saveDraftButton"].tap()
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["Drafts"].tap()
+        app.buttons["mailbox-Drafts"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
         app.staticTexts[title].tap()
         XCTAssertEqual(app.textFields["composeSubject"].value as? String, title)

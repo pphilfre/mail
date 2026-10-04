@@ -67,8 +67,8 @@ struct MailFeedbackOverlay: ViewModifier {
                     .padding(.bottom, 88)
                     .transition(reduceMotion || !animations ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                     .task(id: confirmation.id) {
-                        let duration = min(confirmation.undo == nil ? 3.0 : 8.0,
-                                           confirmation.expiresAt?.timeIntervalSinceNow ?? 8.0)
+                        let duration = confirmation.undo == nil ? 3.0 :
+                            (confirmation.expiresAt?.timeIntervalSinceNow ?? 10.0)
                         do { try await Task.sleep(for: .seconds(max(0, duration))) }
                         catch { return }
                         guard feedback.confirmation?.id == confirmation.id else { return }
@@ -114,12 +114,15 @@ private struct ConfirmationToast: View {
                 }
             }.accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(confirmation.title).font(.subheadline.weight(.semibold))
+                Text(confirmation.title).font(.subheadline.weight(.semibold)).accessibilityIdentifier("mailConfirmationTitle")
                 if let detail = confirmation.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
             }
             Spacer(minLength: 0)
             if let undo = confirmation.undo {
-                Button("Undo") { close(); undo() }.font(.subheadline.weight(.semibold)).accessibilityIdentifier("triageUndo")
+                Button { close(); undo() } label: {
+                    Text("Undo").font(.subheadline.weight(.semibold))
+                        .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }.buttonStyle(.plain).foregroundStyle(MailStyle.accent).accessibilityIdentifier("triageUndo")
             } else {
                 Button(action: close) {
                     Image(systemName: "xmark").font(.caption.weight(.semibold)).frame(width: 44, height: 44)
@@ -132,6 +135,5 @@ private struct ConfirmationToast: View {
         .task {
             withAnimation(animated ? .spring(duration: 0.42, bounce: 0.32) : nil) { arrived = true }
         }
-        .accessibilityIdentifier("mailConfirmation")
     }
 }

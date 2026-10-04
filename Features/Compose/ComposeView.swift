@@ -167,7 +167,8 @@ struct ComposeView: View {
 
     private func signatureForAccount() -> String {
         guard let id = draft.accountID else { return "" }
-        return UserDefaults.standard.string(forKey: MailSignature.key(id)) ?? ""
+        let value = UserDefaults.standard.string(forKey: MailSignature.key(id)) ?? ""
+        return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : value
     }
     private func updateSignature() {
         guard editor != nil, manageSignature else { return }

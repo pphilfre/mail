@@ -6,6 +6,7 @@ struct RecipientField: View {
     let suggestions: [RecipientSuggestion]
     let excluded: Set<String>
     @FocusState private var focused: Bool
+    @State private var editing = false
     private var matches: [RecipientSuggestion] {
         guard focused else { return [] }
         let last = text.trimmingCharacters(in: .whitespaces)
@@ -19,22 +20,23 @@ struct RecipientField: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title).foregroundStyle(.secondary).frame(width: 36, alignment: .leading)
-                if !focused && !text.isEmpty {
-                    Button("Edit recipients") { focused = true }.font(.subheadline)
+                if !editing && !text.isEmpty {
+                    Button("Edit recipients") { editing = true }.font(.subheadline)
                         .accessibilityLabel("Edit \(title) recipients")
                 } else {
                     TextField("Email addresses", text: $text)
                         .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .accessibilityLabel(title).accessibilityIdentifier("compose\(title)")
                         .focused($focused)
+                        .task { if editing { focused = true } }
                 }
             }
-            if !focused && !text.isEmpty {
+            if !editing && !text.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
                         ForEach(Array(RecipientInput.tokens(text).enumerated()), id: \.offset) { index, token in
                             HStack(spacing: 6) {
-                                Button(RecipientInput.address(token)?.displayName ?? token) { focused = true }
+                                Button(RecipientInput.address(token)?.displayName ?? token) { editing = true }
                                     .foregroundStyle(RecipientInput.address(token) == nil ? Color.red : Color.primary)
                                 Button("Remove \(token)", systemImage: "xmark.circle.fill") {
                                     var pieces = RecipientInput.tokens(text); pieces.remove(at: index); text = pieces.joined(separator: ", ")
@@ -59,5 +61,6 @@ struct RecipientField: View {
                 }.buttonStyle(.plain).accessibilityLabel("Add \(suggestion.address.email) to \(title)")
             }
         }
+        .onChange(of: focused) { _, value in editing = value }
     }
 }
