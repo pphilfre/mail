@@ -26,16 +26,26 @@ final class AppRuntime {
 
     func openStorage() {
         do {
-            let container = try MailStorage.open()
+            #if DEBUG
+            let readerFixture = ReaderUITestFixture.enabled
+            #else
+            let readerFixture = false
+            #endif
+            let container = try MailStorage.open(inMemory: readerFixture)
             let repository = MailRepository(context: container.mainContext)
-            try repository.migrateFoundationDrafts(from: DraftStore())
+            #if DEBUG
+            if readerFixture { try ReaderUITestFixture.seed(container.mainContext) }
+            #endif
+            if !readerFixture { try repository.migrateFoundationDrafts(from: DraftStore()) }
             try repository.recoverInterruptedSends()
             let session = AppSession(draftStore: repository)
             guard session.storageError == nil else { throw DraftStoreError.unreadableStore }
             self.container = container
             self.repository = repository
             self.session = session
-            self.gmail = GmailCoordinator(repository: repository)
+            self.gmail = readerFixture ? nil : GmailCoordinator(repository: repository)
+            let savedPaths = Set(try container.mainContext.fetch(FetchDescriptor<MailAttachment>()).compactMap(\.cachedRelativePath))
+            if let cache = gmail?.attachmentCache { Task { try? await cache.prune(keeping: savedPaths) } }
             storageFailed = false
         } catch {
             // No destructive reset, in-memory replacement or network fetch on storage failure.

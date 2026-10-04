@@ -34,6 +34,23 @@ Search index construction now checks cancellation between documents, and the cac
 
 ## Still to implement
 
-General attachment transfer; unified draft navigation; background sync; permanent queued-operation recovery; conversation rows; counts; bulk actions/Undo; recipient autocomplete and validation; signatures/default-account settings; reader collapsing; adaptive iPad layout; later Zoho and push stages. Device visual/accessibility checks and live signed-device Gmail verification remain outstanding.
+Outgoing attachments; background sync; permanent queued-operation recovery; conversation rows; counts; bulk actions/Undo; recipient autocomplete and validation; signatures/default-account settings; quoted-text collapsing; adaptive iPad layout; later Zoho and push stages. Device visual/accessibility checks and live signed-device Gmail verification remain outstanding.
+
+## Batch 4 — Unified drafts and received attachments
+
+- The Drafts mailbox and inbox shortcut use one account-scoped view of local edits and cached Gmail drafts. Durable provider draft/message links suppress duplicate Gmail rows without matching subjects. Local deletion explicitly preserves any Gmail copy.
+- Received attachments download on demand, open in native Quick Look, and share/save through the system share sheet. Protected files reopen offline. Sync preserves stable attachment identities and cached files; changed attachment parts invalidate their cached references.
+- Downloads are limited to 25 MB per file, with metadata and encoded/decoded size checks. Provider filenames cannot escape the account-specific cache directory. Account removal clears its files; unreferenced older files are pruned on storage open.
+- Existing schema V1 remains unchanged. HTML/file-containing remote drafts remain protected from the text composer. Outgoing attachments and automatic inclusion when forwarding remain deferred.
+
+Validation: [macOS CI for `d0458c7`](https://github.com/pphilfre/mail/actions/runs/37217569038) passed the simulator build, all 56 unit tests, and all seven UI tests, including six new unit tests and the Drafts-mailbox UI test. Signed-device preview/share/offline checks remain necessary. The network transport buffers the JSON response before enforcing attachment payload limits; streaming transport is still future work.
+
+## Batch 5 — Conversation reader cleanup
+
+Older thread messages start collapsed; the opened message starts expanded and receives initial scroll focus. Sender headers toggle each message with explicit expanded/collapsed accessibility state. Full recipient details expand separately. Reply remains the primary action; Reply all and Forward move into a menu. Drafts omit reply controls. Quoted text within an expanded message remains unchanged.
+
+Draft rows also show their account, edit date, and local/Gmail-copy status. The inbox shortcut now uses the same Drafts name as the drawer. Pending/unconfirmed sends cannot be re-imported through cached Gmail drafts. A DEBUG-only in-memory, provider-free fixture supports a UI test for opening, expanding, and collapsing a cached conversation without live mail or modifying the normal database. Additional unit tests cover protected draft import, symlink escape, and orphan-file cleanup.
+
+The first reader build caught a file-private date helper; it is now a shared design component. The next test run compiled and found a missing-leaf symlink path check and an ambiguous UI-test row query. Cache paths now resolve each parent independently, and the UI identifier is attached to the navigation link with a single-match query. The final gate is tracked in [PR #2](https://github.com/pphilfre/mail/pull/2) and the [branch CI history](https://github.com/pphilfre/mail/actions?query=branch%3Acodex%2Fdrafts-attachments), which record results after this entry was written.
 
 The [audit](ui-feature-audit.md) records the original findings. This page tracks implementation and verification separately.

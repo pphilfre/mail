@@ -124,7 +124,10 @@ actor GmailAPI {
     }
     func attachment(messageID: String, attachmentID: String) async throws -> Data {
         let body = try await get(GmailBody.self, "messages/" + component(messageID) + "/attachments/" + component(attachmentID))
+        guard (body.size ?? 0) <= AttachmentCache.maximumBytes,
+              (body.data?.utf8.count ?? 0) <= ((AttachmentCache.maximumBytes + 2) / 3) * 4 else { throw AttachmentError.tooLarge }
         guard let data = body.data.flatMap(Base64URL.decode) else { throw GmailError.invalidResponse }
+        guard data.count <= AttachmentCache.maximumBytes else { throw AttachmentError.tooLarge }
         return data
     }
     func history(since: String, page: String? = nil) async throws -> GmailHistoryPage {

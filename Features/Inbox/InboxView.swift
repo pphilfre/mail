@@ -71,19 +71,20 @@ struct InboxView: View {
                     }
                 }
             }
-            if !session.drafts.isEmpty {
+            if mailbox != "Drafts" && session.drafts.contains(where: { accountFilter == nil || $0.accountID == accountFilter }) {
                 Section {
                     NavigationLink {
-                        DraftsView()
+                        DraftsView(accountID: accountFilter)
                     } label: {
                         Label {
                             HStack {
-                                Text("On-device drafts")
+                                Text("Drafts")
                                 Spacer()
-                                Text(session.drafts.count, format: .number).foregroundStyle(.secondary)
+                                Text("\(session.drafts.filter { accountFilter == nil || $0.accountID == accountFilter }.count) local").foregroundStyle(.secondary)
                             }
                         } icon: { Image(systemName: "doc") }
                     }
+                    .accessibilityIdentifier("draftsShortcut")
                 }
             }
             if uncertainCount > 0 {
@@ -97,10 +98,13 @@ struct InboxView: View {
                     }
                 }
             }
-            if !accounts.isEmpty {
+            if mailbox == "Drafts" && labelFilter == nil {
+                DraftSections(accountID: accountFilter)
+            } else if !accounts.isEmpty {
                 Section {
                     ForEach(filtered) { message in
                         NavigationLink { GmailMessageView(message: message) } label: { CachedMessageRow(message: message) }
+                            .accessibilityIdentifier("cachedMessage-\(message.remoteID)")
                             .swipeActions(edge: .leading, allowsFullSwipe: fullSwipe) {
                                 swipeButton(leadingSwipe, message: message)
                             }
@@ -290,6 +294,8 @@ struct InboxView: View {
         }
     }
     private func loadMailbox() {
+        // The unified drafts section owns its initial load and provider-link refresh.
+        guard mailbox != "Drafts" || labelFilter != nil else { return }
         Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 }
@@ -341,15 +347,5 @@ struct MessageRow: View {
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
         .accessibilityValue(message.isRead ? "Read" : "Unread")
-    }
-}
-
-private struct MailRowDate: View {
-    let date: Date
-    var body: some View {
-        Group {
-            if Calendar.current.isDateInToday(date) { Text(date, format: .dateTime.hour().minute()) }
-            else { Text(date, format: .dateTime.day().month(.abbreviated)) }
-        }.font(.caption).foregroundStyle(.secondary)
     }
 }

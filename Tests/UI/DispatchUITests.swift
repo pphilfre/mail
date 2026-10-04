@@ -68,7 +68,7 @@ final class DispatchUITests: XCTestCase {
         app.buttons["saveDraftButton"].tap()
         app.terminate()
         app.launch()
-        app.staticTexts["On-device drafts"].tap()
+        app.descendants(matching: .any)["draftsShortcut"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
         app.staticTexts[title].tap()
         XCTAssertEqual(app.textFields["composeSubject"].value as? String, title)
@@ -85,7 +85,7 @@ final class DispatchUITests: XCTestCase {
         subject.tap(); subject.typeText(title)
         XCTAssertTrue(app.staticTexts["draftAutosaveStatus"].waitForExistence(timeout: 5))
         app.terminate(); app.launch()
-        app.staticTexts["On-device drafts"].tap()
+        app.descendants(matching: .any)["draftsShortcut"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
     }
 
@@ -97,5 +97,39 @@ final class DispatchUITests: XCTestCase {
         app.buttons["Unread"].tap()
         XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
+    }
+
+    func testDraftsMailboxShowsLocalDraftAndOpensComposer() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        app.buttons["composeButton"].tap()
+        let subject = app.textFields["composeSubject"]
+        XCTAssertTrue(subject.waitForExistence(timeout: 5))
+        let title = "Unified draft \(UUID().uuidString.prefix(8))"
+        subject.tap(); subject.typeText(title)
+        app.buttons["saveDraftButton"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
+        app.buttons["Drafts"].tap()
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
+        app.staticTexts[title].tap()
+        XCTAssertEqual(app.textFields["composeSubject"].value as? String, title)
+    }
+
+    func testConversationStartsWithOpenedMessageExpandedAndCanRevealEarlierMail() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launch()
+        let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-latest"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["conversationBody-earlier"].firstMatch.exists)
+        let earlier = app.buttons["conversationHeader-earlier"]
+        app.swipeDown()
+        XCTAssertTrue(earlier.waitForExistence(timeout: 5)); earlier.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-earlier"].firstMatch.waitForExistence(timeout: 5))
+        earlier.tap()
+        XCTAssertFalse(app.descendants(matching: .any)["conversationBody-earlier"].firstMatch.exists)
     }
 }

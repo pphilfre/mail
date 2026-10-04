@@ -8,6 +8,8 @@ final class GmailCoordinator {
     var connecting = false
     var syncing: Set<UUID> = []
     var writing: Set<UUID> = []
+    var downloading: Set<UUID> = []
+    @ObservationIgnored let attachmentCache: AttachmentCache
     var error: String?
     var mailboxPageTokens: [String: String] = [:]
     @ObservationIgnored let repository: MailRepository
@@ -20,9 +22,10 @@ final class GmailCoordinator {
     @ObservationIgnored private var mailboxRequests: [UUID: MailboxRequest] = [:]
     private struct MailboxRequest { let name: String; let label: String? }
     private static let uncertainDraftMarker = "remote-draft-create-unconfirmed"
-    init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport(),
+    init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport(), attachmentCache: AttachmentCache = AttachmentCache(),
          requestPause: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.repository = repository; self.vault = vault; self.transport = transport
+        self.attachmentCache = attachmentCache
         self.requestPause = requestPause
         do { mailboxPageTokens = try repository.gmailPageTokens() }
         catch { self.error = error.localizedDescription }
@@ -261,6 +264,7 @@ final class GmailCoordinator {
         do {
             let remote = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
             row.remoteDraftID = remote.id; row.lastError = nil; try repository.context.save()
+            if let messageID = remote.message?.id { try repository.saveDraftLink(accountID: id, draftID: remote.id, messageID: messageID) }
         } catch {
             if remoteID == nil {
                 if let failure = error as? GmailError, case .http(let code) = failure, (400..<500).contains(code) {
@@ -282,8 +286,13 @@ final class GmailCoordinator {
             if let reference = drafts.drafts?.first(where: { $0.message?.id == message.remoteID }) {
                 let remote = try await api.draft(reference.id)
                 guard MailMIME.canEditDraft(remote.message?.payload) else { throw GmailError.unsupportedDraft }
-                if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID && $0.stateRaw == "draft" }))
-                    .first(where: { $0.remoteDraftID == reference.id }) { return existing.localDraft }
+                guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
+                if let messageID = remote.message?.id { try repository.saveDraftLink(accountID: accountID, draftID: reference.id, messageID: messageID) }
+                if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID }))
+                    .first(where: { $0.remoteDraftID == reference.id }) {
+                    guard existing.stateRaw == "draft" else { throw GmailError.uncertainSend }
+                    return existing.localDraft
+                }
                 guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 guard let dto = remote.message else { throw GmailError.invalidResponse }
                 let header = dto.payload; let content = MailMIME.content(header)
@@ -347,15 +356,63 @@ final class GmailCoordinator {
         await sync(id)
     }
     func removeAccount(_ id: UUID) async {
-        guard !syncing.contains(id), !writing.contains(id), !connecting else { throwRemovalBusy(); return }
+        guard !syncing.contains(id), !writing.contains(id), !downloading.contains(id), !connecting else { throwRemovalBusy(); return }
         do {
             try await vault.remove(for: id)
             try repository.removeAccountData(id: id)
+            try await attachmentCache.removeAccount(id)
             mailboxPageTokens = mailboxPageTokens.filter { !$0.key.hasPrefix(GmailMailbox.pagePrefix(id)) }
             managers[id] = nil
         } catch { self.error = error.localizedDescription }
     }
     private func throwRemovalBusy() { error = "Wait for this account’s current operation to finish before removing it." }
+
+    func refreshDraftLinks(accountID: UUID?) async throws {
+        for account in try repository.accounts() where account.providerRaw == "gmail" && (accountID == nil || account.id == accountID) {
+            let api = try client(account.id)
+            var references: [GmailDraftDTO] = []; var page: String?
+            repeat {
+                let result = try await api.drafts(page: page)
+                references += result.drafts ?? []; page = result.nextPageToken
+                try Task.checkCancellation()
+            } while page != nil
+            try repository.replaceDraftLinks(references, accountID: account.id)
+        }
+    }
+
+    func download(_ attachment: MailAttachment) async throws -> URL {
+        let accountID = attachment.accountID; let attachmentID = attachment.id
+        guard try repository.account(id: accountID) != nil,
+              try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first != nil else { throw AttachmentError.unavailable }
+        guard !downloading.contains(accountID) else { throw GmailError.busy }
+        downloading.insert(accountID); defer { downloading.remove(accountID) }
+        if let cached = try? await attachmentCache.existing(attachment.cachedRelativePath) { return cached }
+        guard attachment.byteCount <= AttachmentCache.maximumBytes else { throw AttachmentError.tooLarge }
+        guard let message = try repository.context.fetch(FetchDescriptor<MailMessage>()).first(where: { $0.id == attachment.messageID }) else { throw AttachmentError.unavailable }
+        let remoteMessageID = message.remoteID; let remoteAttachmentID = attachment.remoteID
+        let partID = attachment.partID; let filename = attachment.filename
+        let api = try client(accountID)
+        let data: Data
+        if let remoteAttachmentID {
+            data = try await api.attachment(messageID: remoteMessageID, attachmentID: remoteAttachmentID)
+        } else {
+            let dto = try await api.message(remoteMessageID)
+            guard let part = MailMIME.content(dto.payload).attachments.first(where: { ($0.partId ?? "") == partID }),
+                  let encoded = part.body?.data else { throw AttachmentError.unavailable }
+            guard encoded.utf8.count <= ((AttachmentCache.maximumBytes + 2) / 3) * 4 else { throw AttachmentError.tooLarge }
+            guard let decoded = Base64URL.decode(encoded) else { throw GmailError.invalidResponse }
+            data = decoded
+        }
+        try Task.checkCancellation()
+        guard try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first != nil else { throw AttachmentError.unavailable }
+        let path = try await attachmentCache.store(data, accountID: accountID, attachmentID: attachmentID, filename: filename)
+        // Sync can replace a part during file IO; refetch after the actor suspension.
+        guard let current = try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first else { throw AttachmentError.unavailable }
+        current.cachedRelativePath = path
+        try repository.context.save()
+        guard let url = try await attachmentCache.existing(path) else { throw AttachmentError.unavailable }
+        return url
+    }
 
     func confirmSent(_ row: OutgoingMessage) async throws -> Bool {
         guard let id = row.accountID else { throw GmailError.reconnect }
