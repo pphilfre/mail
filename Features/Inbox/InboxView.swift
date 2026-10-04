@@ -104,6 +104,7 @@ struct InboxView: View {
                 Section {
                     ForEach(filtered) { message in
                         NavigationLink { GmailMessageView(message: message) } label: { CachedMessageRow(message: message) }
+                            .accessibilityIdentifier("cachedMessage-\(message.remoteID)")
                             .swipeActions(edge: .leading, allowsFullSwipe: fullSwipe) {
                                 swipeButton(leadingSwipe, message: message)
                             }
@@ -319,7 +320,6 @@ struct CachedMessageRow: View {
                 if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
             }
         }.padding(.vertical, 5).accessibilityElement(children: .combine).accessibilityValue(message.isRead ? "Read" : "Unread")
-            .accessibilityIdentifier("cachedMessage-\(message.remoteID)")
     }
 }
 

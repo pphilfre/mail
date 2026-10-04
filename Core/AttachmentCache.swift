@@ -24,10 +24,17 @@ actor AttachmentCache {
         return cleaned.isEmpty || cleaned == "." || cleaned == ".." ? "Attachment" : String(cleaned.suffix(180))
     }
     private func url(_ relativePath: String) throws -> URL {
-        guard !relativePath.hasPrefix("/"), !relativePath.split(separator: "/").contains("..") else { throw AttachmentError.invalidPath }
-        let candidate = root.appending(path: relativePath).standardizedFileURL.resolvingSymlinksInPath()
-        let prefix = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-        guard candidate.path.hasPrefix(prefix) else { throw AttachmentError.invalidPath }
+        let components = relativePath.split(separator: "/")
+        guard !relativePath.hasPrefix("/"), !components.isEmpty,
+              components.allSatisfy({ $0 != "." && $0 != ".." }) else { throw AttachmentError.invalidPath }
+        let canonicalRoot = root.standardizedFileURL.resolvingSymlinksInPath()
+        let prefix = canonicalRoot.path + "/"
+        var candidate = canonicalRoot
+        // Resolve existing parents individually, even when the final file does not exist yet.
+        for component in components {
+            candidate = candidate.appending(path: String(component)).standardizedFileURL.resolvingSymlinksInPath()
+            guard candidate.path.hasPrefix(prefix) else { throw AttachmentError.invalidPath }
+        }
         return candidate
     }
     func existing(_ relativePath: String?) throws -> URL? {

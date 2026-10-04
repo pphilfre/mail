@@ -121,15 +121,15 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
         app.launch()
-        let latest = app.descendants(matching: .any)["cachedMessage-latest"]
+        let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
         XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-latest"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.descendants(matching: .any)["conversationBody-earlier"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-latest"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["conversationBody-earlier"].firstMatch.exists)
         let earlier = app.buttons["conversationHeader-earlier"]
         app.swipeDown()
         XCTAssertTrue(earlier.waitForExistence(timeout: 5)); earlier.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-earlier"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-earlier"].firstMatch.waitForExistence(timeout: 5))
         earlier.tap()
-        XCTAssertFalse(app.descendants(matching: .any)["conversationBody-earlier"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["conversationBody-earlier"].firstMatch.exists)
     }
 }
