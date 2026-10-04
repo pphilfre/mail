@@ -28,6 +28,10 @@ struct DraftSections: View {
         return messages.filter { $0.isDraft && !$0.isTrash && (accountID == nil || $0.accountID == accountID) && !hidden.contains($0.identity) }
     }
     private func accountName(_ id: UUID?) -> String { accounts.first(where: { $0.id == id })?.email ?? "No account selected" }
+    private func hasGmailCopy(_ draft: LocalDraft) -> Bool {
+        guard let row = outgoing.first(where: { $0.id == draft.id }), let accountID = row.accountID, let remoteID = row.remoteDraftID else { return false }
+        return links.contains { $0.key == DraftLinks.key(accountID, remoteID) }
+    }
 
     var body: some View {
         Group {
@@ -43,6 +47,11 @@ struct DraftSections: View {
                             .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                         Text(draft.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                         Text(accountName(draft.accountID)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        HStack {
+                            Text(hasGmailCopy(draft) ? "Local edits · Gmail copy" : "On this device")
+                            Spacer()
+                            Text(draft.updatedAt, format: .dateTime.month().day().hour().minute())
+                        }.font(.caption2).foregroundStyle(.secondary)
                     }
                 }
                 .accessibilityIdentifier("localDraft-\(draft.id.uuidString)")

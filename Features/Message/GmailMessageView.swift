@@ -16,12 +16,14 @@ struct GmailMessageView: View {
     @State private var localError: String?
     @State private var confirmingDraftDeletion = false
     @State private var loadingThread = false
+    @State private var focusedMessage = false
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
     private func bodyText(_ row: MailMessage) -> String {
         row.plainTextBody ?? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? row.snippet
     }
     var body: some View {
+      ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject).font(.title2.bold())
@@ -42,30 +44,10 @@ struct GmailMessageView: View {
                     }
                 }
                 ForEach(thread) { row in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            SenderAvatar(email: row.senderEmail, name: row.sender.displayName)
-                            VStack(alignment: .leading) {
-                                Text(row.sender.displayName).font(.headline)
-                                Text(row.senderEmail).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(row.receivedAt, format: .dateTime.day().month().hour().minute()).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Text("To: " + row.to.map(\.email).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
-                        if !row.cc.isEmpty { Text("Cc: " + row.cc.map(\.email).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary) }
-                        MailBodyView(html: row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText(row), remoteImages: remoteImages || loadImagesOnce)
-                            .padding(.horizontal, -16)
-                        ForEach(attachments.filter { $0.messageID == row.id }) { attachment in
-                            AttachmentRow(attachment: attachment)
-                        }
-                        HStack {
-                            Button("Reply") { reply(row, all: false) }
-                            Button("Reply all") { reply(row, all: true) }
-                            Button("Forward") { forward(row) }
-                        }.buttonStyle(.bordered)
-                        Divider()
-                    }
+                    ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
+                        attachments: attachments.filter { $0.messageID == row.id }, remoteImages: remoteImages || loadImagesOnce,
+                        onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) })
+                        .id(row.id)
                 }
                 if message.isDraft {
                     Button("Edit Gmail draft") {
@@ -83,6 +65,13 @@ struct GmailMessageView: View {
                 }
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
+        .task(id: thread.map(\.id)) {
+            guard !focusedMessage, thread.contains(where: { $0.id == message.id }) else { return }
+            await Task.yield()
+            proxy.scrollTo(message.id, anchor: .top)
+            focusedMessage = true
+        }
+      }
         .navigationTitle("Message").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {

@@ -288,8 +288,11 @@ final class GmailCoordinator {
                 guard MailMIME.canEditDraft(remote.message?.payload) else { throw GmailError.unsupportedDraft }
                 guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 if let messageID = remote.message?.id { try repository.saveDraftLink(accountID: accountID, draftID: reference.id, messageID: messageID) }
-                if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID && $0.stateRaw == "draft" }))
-                    .first(where: { $0.remoteDraftID == reference.id }) { return existing.localDraft }
+                if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID }))
+                    .first(where: { $0.remoteDraftID == reference.id }) {
+                    guard existing.stateRaw == "draft" else { throw GmailError.uncertainSend }
+                    return existing.localDraft
+                }
                 guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 guard let dto = remote.message else { throw GmailError.invalidResponse }
                 let header = dto.payload; let content = MailMIME.content(header)
@@ -381,11 +384,11 @@ final class GmailCoordinator {
         let accountID = attachment.accountID; let attachmentID = attachment.id
         guard try repository.account(id: accountID) != nil,
               try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first != nil else { throw AttachmentError.unavailable }
+        guard !downloading.contains(accountID) else { throw GmailError.busy }
+        downloading.insert(accountID); defer { downloading.remove(accountID) }
         if let cached = try? await attachmentCache.existing(attachment.cachedRelativePath) { return cached }
         guard attachment.byteCount <= AttachmentCache.maximumBytes else { throw AttachmentError.tooLarge }
-        guard !downloading.contains(accountID) else { throw GmailError.busy }
         guard let message = try repository.context.fetch(FetchDescriptor<MailMessage>()).first(where: { $0.id == attachment.messageID }) else { throw AttachmentError.unavailable }
-        downloading.insert(accountID); defer { downloading.remove(accountID) }
         let remoteMessageID = message.remoteID; let remoteAttachmentID = attachment.remoteID
         let partID = attachment.partID; let filename = attachment.filename
         let api = try client(accountID)

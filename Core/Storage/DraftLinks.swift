@@ -6,7 +6,9 @@ enum DraftLinks {
     static func key(_ accountID: UUID, _ draftID: String) -> String { prefix(accountID) + draftID }
     @MainActor static func hiddenMessageIDs(outgoing: [OutgoingMessage], links: [StoreMetadata], accountID: UUID?) -> Set<String> {
         let byKey = Dictionary(uniqueKeysWithValues: links.map { ($0.key, $0.value) })
-        return Set(outgoing.filter { $0.stateRaw == "draft" && (accountID == nil || $0.accountID == accountID) }.compactMap { row in
+        // A pending/unconfirmed send must not reappear as an editable Gmail copy.
+        return Set(outgoing.filter { ["draft", "sending", "sendUnconfirmed", "sent"].contains($0.stateRaw) &&
+            (accountID == nil || $0.accountID == accountID) }.compactMap { row in
             guard let id = row.accountID, let remote = row.remoteDraftID, let messageID = byKey[key(id, remote)] else { return nil }
             return "\(id.uuidString):\(messageID)"
         })
@@ -23,10 +25,18 @@ enum DraftLinks {
     func replaceDraftLinks(_ references: [GmailDraftDTO], accountID: UUID) throws {
         guard try account(id: accountID) != nil else { throw GmailError.reconnect }
         try context.transaction {
-            for row in try context.fetch(FetchDescriptor<StoreMetadata>()) where row.key.hasPrefix(DraftLinks.prefix(accountID)) { context.delete(row) }
+            let existing = try context.fetch(FetchDescriptor<StoreMetadata>()).filter { $0.key.hasPrefix(DraftLinks.prefix(accountID)) }
+            let byKey = Dictionary(uniqueKeysWithValues: existing.map { ($0.key, $0) })
+            var retained = Set<String>()
             for reference in references {
-                if let id = reference.message?.id { context.insert(StoreMetadata(key: DraftLinks.key(accountID, reference.id), value: id)) }
+                if let id = reference.message?.id {
+                    let key = DraftLinks.key(accountID, reference.id)
+                    if let row = byKey[key] { row.value = id }
+                    else if !retained.contains(key) { context.insert(StoreMetadata(key: key, value: id)) }
+                    retained.insert(key)
+                }
             }
+            for row in existing where !retained.contains(row.key) { context.delete(row) }
             try context.save()
         }
     }

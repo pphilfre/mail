@@ -78,12 +78,13 @@ struct InboxView: View {
                     } label: {
                         Label {
                             HStack {
-                                Text("On-device drafts")
+                                Text("Drafts")
                                 Spacer()
-                                Text(session.drafts.filter { accountFilter == nil || $0.accountID == accountFilter }.count, format: .number).foregroundStyle(.secondary)
+                                Text("\(session.drafts.filter { accountFilter == nil || $0.accountID == accountFilter }.count) local").foregroundStyle(.secondary)
                             }
                         } icon: { Image(systemName: "doc") }
                     }
+                    .accessibilityIdentifier("draftsShortcut")
                 }
             }
             if uncertainCount > 0 {
@@ -292,6 +293,8 @@ struct InboxView: View {
         }
     }
     private func loadMailbox() {
+        // The unified drafts section owns its initial load and provider-link refresh.
+        guard mailbox != "Drafts" || labelFilter != nil else { return }
         Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 }
@@ -316,6 +319,7 @@ struct CachedMessageRow: View {
                 if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
             }
         }.padding(.vertical, 5).accessibilityElement(children: .combine).accessibilityValue(message.isRead ? "Read" : "Unread")
+            .accessibilityIdentifier("cachedMessage-\(message.remoteID)")
     }
 }
 

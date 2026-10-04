@@ -34,7 +34,7 @@ Search index construction now checks cancellation between documents, and the cac
 
 ## Still to implement
 
-Outgoing attachments; background sync; permanent queued-operation recovery; conversation rows; counts; bulk actions/Undo; recipient autocomplete and validation; signatures/default-account settings; reader collapsing; adaptive iPad layout; later Zoho and push stages. Device visual/accessibility checks and live signed-device Gmail verification remain outstanding.
+Outgoing attachments; background sync; permanent queued-operation recovery; conversation rows; counts; bulk actions/Undo; recipient autocomplete and validation; signatures/default-account settings; quoted-text collapsing; adaptive iPad layout; later Zoho and push stages. Device visual/accessibility checks and live signed-device Gmail verification remain outstanding.
 
 ## Batch 4 — Unified drafts and received attachments
 
@@ -44,5 +44,11 @@ Outgoing attachments; background sync; permanent queued-operation recovery; conv
 - Existing schema V1 remains unchanged. HTML/file-containing remote drafts remain protected from the text composer. Outgoing attachments and automatic inclusion when forwarding remain deferred.
 
 Validation: six new unit tests and a Drafts-mailbox UI test added; macOS CI pending. Signed-device preview/share/offline checks remain necessary. The network transport buffers the JSON response before enforcing attachment payload limits; streaming transport is still future work.
+
+## Batch 5 — Conversation reader cleanup
+
+Older thread messages start collapsed; the opened message starts expanded and receives initial scroll focus. Sender headers toggle each message with explicit expanded/collapsed accessibility state. Full recipient details expand separately. Reply remains the primary action; Reply all and Forward move into a menu. Drafts omit reply controls. Quoted text within an expanded message remains unchanged.
+
+Draft rows also show their account, edit date, and local/Gmail-copy status. The inbox shortcut now uses the same Drafts name as the drawer. A DEBUG-only in-memory, provider-free fixture supports a UI test for opening, expanding, and collapsing a cached conversation without live mail or modifying the normal database. Final macOS CI pending.
 
 The [audit](ui-feature-audit.md) records the original findings. This page tracks implementation and verification separately.

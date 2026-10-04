@@ -20,11 +20,14 @@ struct AttachmentRow: View {
                 Spacer()
                 if loading { ProgressView().accessibilityLabel("Downloading attachment") }
                 else if let fileURL {
-                    Button("Preview") { previewURL = fileURL }
+                    Button("Preview") { previewURL = fileURL }.frame(minHeight: 44)
                     ShareLink(item: fileURL) { Image(systemName: "square.and.arrow.up") }
+                        .frame(minWidth: 44, minHeight: 44)
                         .accessibilityLabel("Share or save \(attachment.filename)")
                 } else {
                     Button("Download", systemImage: "arrow.down.circle") { Task { await download() } }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(runtime.gmail?.downloading.contains(attachment.accountID) == true)
                         .labelStyle(.iconOnly).accessibilityLabel("Download \(attachment.filename)")
                 }
             }

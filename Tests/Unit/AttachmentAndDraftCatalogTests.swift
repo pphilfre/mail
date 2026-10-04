@@ -38,6 +38,27 @@ final class AttachmentAndDraftCatalogTests: XCTestCase {
         XCTAssertNil(missing); XCTAssertNotNil(retained)
     }
 
+    func testCacheRejectsSymlinkEscapeAndPrunesOnlyOldUnreferencedFiles() async throws {
+        let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let root = base.appending(path: "cache"), outside = base.appending(path: "private")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let cache = AttachmentCache(root: root), account = UUID()
+        let retainedPath = try await cache.store(Data([1]), accountID: account, attachmentID: UUID(), filename: "keep.txt")
+        let stalePath = try await cache.store(Data([2]), accountID: account, attachmentID: UUID(), filename: "stale.txt")
+        let recentPath = try await cache.store(Data([3]), accountID: account, attachmentID: UUID(), filename: "recent.txt")
+        let staleFile = try await cache.existing(stalePath)
+        let stale = try XCTUnwrap(staleFile)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-172800)], ofItemAtPath: stale.path)
+        try FileManager.default.createSymbolicLink(at: root.appending(path: "escape"), withDestinationURL: outside)
+        do { _ = try await cache.existing("escape/file.txt"); XCTFail("Symlink escape") }
+        catch { XCTAssertEqual(error as? AttachmentError, .invalidPath) }
+        try await cache.prune(keeping: [retainedPath])
+        let missing = try await cache.existing(stalePath)
+        let retained = try await cache.existing(retainedPath), recent = try await cache.existing(recentPath)
+        XCTAssertNil(missing); XCTAssertNotNil(retained); XCTAssertNotNil(recent)
+    }
+
     func testSyncPreservesDownloadedAttachmentButInvalidatesChangedPart() throws {
         let container = try MailStorage.open(inMemory: true)
         let repository = MailRepository(context: container.mainContext)
@@ -56,6 +77,15 @@ final class AttachmentAndDraftCatalogTests: XCTestCase {
         try repository.apply([dto], accountID: account.id)
         let changed = try XCTUnwrap(repository.context.fetch(FetchDescriptor<MailAttachment>()).first)
         XCTAssertNotEqual(changed.id, firstID); XCTAssertNil(changed.cachedRelativePath)
+        dto.payload?.body = GmailBody(size: 5, data: "aGVsbG8")
+        try repository.apply([dto], accountID: account.id)
+        let inline = try XCTUnwrap(repository.context.fetch(FetchDescriptor<MailAttachment>()).first)
+        let inlineID = inline.id
+        inline.cachedRelativePath = "saved/inline.pdf"; try repository.context.save()
+        // Inline body data has no provider attachment identity to prove it is unchanged.
+        try repository.apply([dto], accountID: account.id)
+        let refreshed = try XCTUnwrap(repository.context.fetch(FetchDescriptor<MailAttachment>()).first)
+        XCTAssertNotEqual(refreshed.id, inlineID); XCTAssertNil(refreshed.cachedRelativePath)
     }
 
     func testDownloadReusesFileAfterSyncWithoutASecondNetworkRequest() async throws {
@@ -106,11 +136,48 @@ final class AttachmentAndDraftCatalogTests: XCTestCase {
         try repository.saveDraftLink(accountID: second.id, draftID: "draft", messageID: "m")
         var links = try repository.context.fetch(FetchDescriptor<StoreMetadata>())
         XCTAssertEqual(DraftLinks.hiddenMessageIDs(outgoing: [one, two], links: links, accountID: first.id), ["\(first.id.uuidString):m"])
+        one.stateRaw = "sendUnconfirmed"
+        XCTAssertEqual(DraftLinks.hiddenMessageIDs(outgoing: [one, two], links: links, accountID: first.id), ["\(first.id.uuidString):m"])
+        one.stateRaw = "draft"
+        let updated = GmailDraftDTO(id: "draft", message: GmailMessageDTO(id: "new-message", threadId: "thread"))
+        try repository.replaceDraftLinks([updated, updated], accountID: first.id)
+        links = try repository.context.fetch(FetchDescriptor<StoreMetadata>())
+        XCTAssertEqual(DraftLinks.hiddenMessageIDs(outgoing: [one, two], links: links, accountID: first.id), ["\(first.id.uuidString):new-message"])
         try repository.replaceDraftLinks([], accountID: first.id)
         links = try repository.context.fetch(FetchDescriptor<StoreMetadata>())
         XCTAssertEqual(DraftLinks.hiddenMessageIDs(outgoing: [one, two], links: links, accountID: nil), ["\(second.id.uuidString):m"])
         try repository.removeAccountData(id: second.id)
         XCTAssertTrue(try repository.context.fetch(FetchDescriptor<StoreMetadata>()).isEmpty)
         XCTAssertNotNil(try repository.outgoing(one.id))
+    }
+
+    func testImportCannotCreateAnEditableCopyOfAnUnconfirmedRemoteDraft() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        repository.context.insert(account); try repository.context.save()
+        let draft = LocalDraft(to: "other@example.com", subject: "Unconfirmed", accountID: account.id)
+        try repository.save([draft])
+        let outgoing = try XCTUnwrap(repository.outgoing(draft.id))
+        outgoing.remoteDraftID = "protected"; outgoing.stateRaw = "sendUnconfirmed"
+        let message = MailMessage(accountID: account.id, remoteID: "m", remoteThreadID: "t", sender: MailAddress(email: account.email),
+            subject: draft.subject, snippet: "", receivedAt: Date())
+        message.isDraft = true; repository.context.insert(message); try repository.context.save()
+        let vault = CredentialVault(service: "dispatch.protected-import.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3600),
+            grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([
+            HTTPReply(data: Data(#"{"drafts":[{"id":"protected","message":{"id":"m","threadId":"t"}}]}"#.utf8), status: 200),
+            HTTPReply(data: Data(#"{"id":"protected","message":{"id":"m","threadId":"t","payload":{"mimeType":"text/plain","body":{"data":"aGVsbG8"}}}}"#.utf8), status: 200)
+        ])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        do { _ = try await coordinator.importDraft(message); XCTFail("Would reopen a protected send") }
+        catch { XCTAssertEqual(error as? GmailError, .uncertainSend) }
+        XCTAssertTrue(try repository.load().isEmpty)
+        XCTAssertEqual(try repository.context.fetch(FetchDescriptor<OutgoingMessage>()).count, 1)
+        XCTAssertEqual(outgoing.stateRaw, "sendUnconfirmed")
+        let requests = await transport.captured()
+        XCTAssertTrue(requests.allSatisfy { $0.httpMethod == "GET" })
+        try await vault.remove(for: account.id)
     }
 }
