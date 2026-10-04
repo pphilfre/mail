@@ -24,6 +24,13 @@ jobs:
         run: bash scripts/prepare-macos.sh
       - name: Build once and run unit and UI tests
         run: bash scripts/test-ios.sh
+      - name: Export simulator screenshots
+        if: always()
+        continue-on-error: true
+        run: |
+          if [[ -d build/Tests.xcresult ]]; then
+            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/screenshots
+          fi
       - name: Upload build logs and test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -32,5 +39,6 @@ jobs:
           path: |
             build/*.log
             build/Tests.xcresult
+            build/screenshots/
           retention-days: 14
           if-no-files-found: warn

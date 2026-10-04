@@ -80,4 +80,68 @@ final class GmailPaginationTests: XCTestCase {
         XCTAssertNil(tokens[mailbox.pageKey(firstID)])
         XCTAssertEqual(tokens[mailbox.pageKey(second.id)], "two")
     }
+
+    func testOlderPageResumesPartialDownloadAndReleasesBusyState() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        repository.context.insert(account); try repository.context.save()
+        let mailbox = GmailMailbox(name: "All Mail")
+        try repository.saveGmailPageToken("original", mailbox: mailbox, accountID: account.id)
+        let vault = CredentialVault(service: "dispatch.resume.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let denied = reply(#"{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}"#, status: 403)
+        let page = reply(#"{"messages":[{"id":"a"},{"id":"b"}],"nextPageToken":"next"}"#)
+        let transport = FixtureTransport([
+            page, reply(#"{"id":"a","threadId":"t","labelIds":["INBOX"]}"#),
+            denied, denied, denied, denied, denied,
+            page, reply(#"{"id":"b","threadId":"t","labelIds":["INBOX"]}"#)
+        ])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport, requestPause: { _ in })
+        // Queue a refresh through the real coalescing path, as happens when the
+        // app returns to the foreground during an older-page download.
+        coordinator.syncing.insert(account.id)
+        await coordinator.sync(account.id)
+        coordinator.syncing.remove(account.id)
+        await coordinator.loadOlder(account.id)
+        XCTAssertFalse(coordinator.syncing.contains(account.id))
+        XCTAssertNotNil(account.lastSyncError)
+        XCTAssertNotNil(try repository.message(accountID: account.id, remoteID: "a"))
+        XCTAssertEqual(try repository.gmailPageTokens()[mailbox.pageKey(account.id)], "original")
+        await coordinator.loadOlder(account.id)
+        XCTAssertFalse(coordinator.syncing.contains(account.id))
+        XCTAssertNil(account.lastSyncError)
+        XCTAssertNil(coordinator.error)
+        XCTAssertEqual(try repository.gmailPageTokens()[mailbox.pageKey(account.id)], "next")
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.filter { $0.url?.path.hasSuffix("/messages/a") == true }.count, 1)
+        XCTAssertEqual(requests.filter { $0.url?.path.hasSuffix("/history") == true || $0.url?.path.hasSuffix("/labels") == true }.count, 0)
+        try await vault.remove(for: account.id)
+    }
+
+    func testMailboxRefreshUsesHistoryAndReusesCachedBodies() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        account.historyID = "1"
+        repository.context.insert(account); try repository.context.save()
+        try repository.apply([GmailMessageDTO(id: "a", threadId: "t", labelIds: ["INBOX"])], accountID: account.id)
+        let vault = CredentialVault(service: "dispatch.reuse.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([
+            reply(#"{"history":[],"historyId":"2"}"#),
+            reply(#"{"messages":[{"id":"a"}],"nextPageToken":"next"}"#)
+        ])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport, requestPause: { _ in })
+        await coordinator.loadMailbox("Inbox", accountID: account.id)
+        XCTAssertNil(coordinator.error)
+        XCTAssertEqual(account.historyID, "2")
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(requests.first?.url?.path.hasSuffix("/history") == true)
+        XCTAssertFalse(requests.contains { $0.url?.path.hasSuffix("/messages/a") == true })
+        try await vault.remove(for: account.id)
+    }
 }

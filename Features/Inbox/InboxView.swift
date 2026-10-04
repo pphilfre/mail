@@ -5,9 +5,14 @@ struct InboxView: View {
     @Environment(AppSession.self) private var session
     @AppStorage("showSampleInbox") private var showSamples = false
     @Environment(AppRuntime.self) private var runtime
+    @Environment(MailFeedback.self) private var feedback
     @Query(sort: \MailAccount.email) private var accounts: [MailAccount]
     @Query(sort: \MailMessage.receivedAt, order: .reverse) private var messages: [MailMessage]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
+    @Query private var attachments: [MailAttachment]
+    @Query private var metadata: [StoreMetadata]
+    @Query private var outgoing: [OutgoingMessage]
+    @Query private var operations: [PendingMailOperation]
     @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" }) private var uncertain: [OutgoingMessage]
     @AppStorage("selectedMailAccount") private var accountFilterRaw = ""
     @AppStorage("selectedMailbox") private var mailbox = "Inbox"
@@ -17,12 +22,21 @@ struct InboxView: View {
     @State private var showingAccounts = false
     @State private var showingSettings = false
     @State private var showingSearch = false
+    @State private var showingCompose = false
+    @State private var quickFilter = InboxQuickFilter.all
+    @State private var sheetDestination: SheetDestination?
+    private enum SheetDestination { case accounts, settings }
+    @State private var selecting = false
+    @State private var selectedIDs = Set<String>()
+    @State private var confirmingTrash = false
+    @AppStorage("conversationRows") private var conversationRows = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("leadingSwipe") private var leadingSwipe = "read"
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
     @AppStorage("fullSwipe") private var fullSwipe = false
-    private let mailboxes = ["Inbox", "All Mail", "Unread", "Starred", "Sent", "Drafts", "Archive", "Trash"]
+    private let mailboxes = MailboxScope.names
     private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
+    private var waitingUntil: Date? { selectedAccounts.compactMap { runtime.gmail?.waitingUntil[$0.id] }.filter { $0 > Date() }.max() }
     private var uncertainCount: Int { uncertain.filter { accountFilter == nil || $0.accountID == accountFilter }.count }
     private var inboxError: String? {
         if let error = session.storageError { return error }
@@ -34,29 +48,105 @@ struct InboxView: View {
     private var filtered: [MailMessage] {
         messages.filter { row in
             guard accountFilter == nil || row.accountID == accountFilter else { return false }
-            if let labelFilter { return row.folderIDs.contains(labelFilter) }
-            switch mailbox {
-            case "Trash": return row.isTrash
-            case "All Mail": return !row.isTrash && !row.isSpam
-            case "Unread": return !row.isRead && !row.isTrash && !row.isSpam
-            case "Starred": return row.isStarred && !row.isTrash && !row.isSpam
-            case "Sent": return row.isSent && !row.isTrash
-            case "Drafts": return row.isDraft && !row.isTrash
-            case "Archive": return !row.isInbox && !row.isSent && !row.isDraft && !row.isTrash && !row.isSpam
-            default: return row.isInbox && !row.isTrash && !row.isSpam
-            }
+            return MailboxScope.contains(row, mailbox: mailbox, labelID: labelFilter)
         }
     }
-    private var filteredSamples: [SampleMessage] {
-        switch mailbox {
-        case "Inbox", "All Mail": session.sampleMessages
-        case "Unread": session.sampleMessages.filter { !$0.isRead }
-        default: []
+    private var conversations: [MailConversation] {
+        MailConversation.rows(filtered, grouped: conversationRows).filter {
+            quickFilter == .all || (quickFilter == .unread ? !$0.isRead : $0.isStarred)
         }
+    }
+    private var selectedMessages: [MailMessage] { conversations.filter { selectedIDs.contains($0.id) }.flatMap(\.messages) }
+    private var attachmentMessageIDs: Set<UUID> { Set(attachments.map(\.messageID)) }
+    private var failedCount: Int { operations.filter { $0.lastError != nil && (accountFilter == nil || $0.accountID == accountFilter) }.count }
+    private var filteredSamples: [SampleMessage] {
+        session.sampleMessages.filter {
+            (mailbox == "Inbox" || mailbox == "All Mail" || (mailbox == "Unread" && !$0.isRead)) &&
+            (quickFilter == .all || (quickFilter == .unread && !$0.isRead))
+        }
+    }
+    private var mailboxTitle: String {
+        labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox
+    }
+    private var scopeTitle: String {
+        accounts.first { $0.id == accountFilter }?.email ?? (accounts.isEmpty ? "Sample inbox" : "All accounts")
     }
 
     var body: some View {
-        List {
+        mailList
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(MailStyle.paper)
+        .listRowSpacing(0)
+        .environment(\.defaultMinListRowHeight, 64)
+        .environment(\.editMode, .constant(selecting ? .active : .inactive))
+        .safeAreaInset(edge: .bottom) {
+            if selecting { bulkToolbar }
+            else { composeDock }
+        }
+        .confirmationDialog("Move \(selectedMessages.count) loaded messages to Trash?", isPresented: $confirmingTrash, titleVisibility: .visible) {
+            Button("Move to Trash", role: .destructive) { bulkAction("trash") }
+        }
+        .navigationTitle("Dispatch")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Dispatch").font(.system(.subheadline, weight: .semibold)).foregroundStyle(.secondary)
+            }
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
+                    .accessibilityIdentifier("mailboxDrawerButton")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                profileMenu
+            }
+        }
+        .sheet(isPresented: $showingDrawer, onDismiss: presentDestination) {
+            MailboxSheet(accounts: accounts, folders: folders,
+                counts: Dictionary(uniqueKeysWithValues: mailboxes.map { name in
+                    (name, name == "Drafts" ? draftCount : accounts.isEmpty && showSamples ? sampleUnread(name) : cachedUnread(accountID: accountFilter, mailbox: name))
+                }), account: $accountFilterRaw, mailbox: $mailbox, label: $labelFilter,
+                openAccounts: { sheetDestination = .accounts; showingDrawer = false },
+                openSettings: { sheetDestination = .settings; showingDrawer = false })
+        }
+        .sheet(isPresented: $showingAccounts) {
+            NavigationStack { AccountsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAccounts = false } } } }
+                .modifier(MailFeedbackOverlay(playsHaptics: false))
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSettings = false } } } }
+                .modifier(MailFeedbackOverlay(playsHaptics: false))
+        }
+        .sheet(isPresented: $showingSearch) {
+            NavigationStack { LocalSearchView(initialAccountID: accountFilter) }
+        }
+        .sheet(isPresented: $showingCompose) {
+            NavigationStack { ComposeView(draft: LocalDraft(accountID: accountFilter)) }
+        }
+        .onChange(of: mailbox) { _, _ in quickFilter = .all; loadMailbox() }
+        .task {
+            if !mailboxes.contains(mailbox) { mailbox = "Inbox" }
+            if let selected = accountFilter, !accounts.contains(where: { $0.id == selected }) { accountFilterRaw = "" }
+            loadMailbox()
+        }
+        .onChange(of: accounts.map(\.id)) { _, ids in
+            if let selected = accountFilter, !ids.contains(selected) { accountFilterRaw = "" }
+        }
+        .onChange(of: accountFilter) { _, _ in labelFilter = nil; quickFilter = .all; loadMailbox() }
+        .onChange(of: labelFilter) { _, _ in quickFilter = .all; loadMailbox() }
+        .onChange(of: quickFilter) { _, _ in selectedIDs.removeAll() }
+        .onChange(of: conversationRows) { _, _ in selectedIDs.removeAll() }
+        .refreshable {
+            await runtime.gmail?.syncAll()
+            if !accounts.isEmpty { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+        }
+    }
+    private var mailList: some View {
+        List(selection: $selectedIDs) {
+            inboxHeader
+                .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 18, trailing: 20))
+                .listRowSeparator(.hidden)
+                .listRowBackground(MailStyle.paper)
             if let error = inboxError {
                 Section {
                     DisclosureGroup {
@@ -98,26 +188,41 @@ struct InboxView: View {
                     }
                 }
             }
+            if failedCount > 0 {
+                NavigationLink { PendingActionsView(accountID: accountFilter) } label: {
+                    Label("\(failedCount) mailbox changes need attention", systemImage: "arrow.triangle.2.circlepath").font(.subheadline)
+                }
+            }
             if mailbox == "Drafts" && labelFilter == nil {
                 DraftSections(accountID: accountFilter)
             } else if !accounts.isEmpty {
                 Section {
-                    ForEach(filtered) { message in
-                        NavigationLink { GmailMessageView(message: message) } label: { CachedMessageRow(message: message) }
-                            .accessibilityIdentifier("cachedMessage-\(message.remoteID)")
-                            .swipeActions(edge: .leading, allowsFullSwipe: fullSwipe) {
-                                swipeButton(leadingSwipe, message: message)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: fullSwipe) {
-                                swipeButton(trailingSwipe, message: message)
-                            }
+                    ForEach(conversations) { conversation in
+                        if selecting {
+                            conversationRow(conversation).tag(conversation.id)
+                        } else {
+                            NavigationLink { GmailMessageView(message: conversation.latest) } label: { conversationRow(conversation) }
+                                .accessibilityIdentifier("cachedMessage-\(conversation.latest.remoteID)")
+                                .swipeActions(edge: .leading, allowsFullSwipe: fullSwipe) {
+                                    conversationSwipe(leadingSwipe, conversation: conversation)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: fullSwipe) {
+                                    conversationSwipe(trailingSwipe, conversation: conversation)
+                                }
+                                .contextMenu {
+                                    Button(conversation.isRead ? "Mark unread" : "Mark read") { triage(conversation.isRead ? "unread" : "read", conversation.messages) }
+                                    Button(conversation.latest.isSpam ? "Not spam" : "Move to Spam") { triage(conversation.latest.isSpam ? "notSpam" : "spam", conversation.messages) }
+                                }
+                        }
                     }
-                    if filtered.isEmpty {
+                    if conversations.isEmpty {
                         if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
                             HStack { ProgressView(); Text("Loading \(mailbox.lowercased())…").foregroundStyle(.secondary) }
                         } else {
-                            ContentUnavailableView(inboxError == nil ? "No messages here" : "Mail couldn’t refresh", systemImage: "tray",
-                                description: Text(inboxError == nil ? "Pull to refresh or load older messages." : "Your downloaded mail is kept. Open the status above to retry."))
+                            ContentUnavailableView(inboxError == nil ? (quickFilter == .unread ? "All caught up" : "No messages here") : "Mail couldn’t refresh",
+                                systemImage: quickFilter == .unread && inboxError == nil ? "checkmark.circle" : "tray",
+                                description: Text(inboxError == nil ? "Try another filter, pull to refresh, or load older mail." : "Your downloaded mail is kept. Open the status above to retry."))
+                                .listRowBackground(Color.clear)
                         }
                     }
                 }
@@ -159,167 +264,186 @@ struct InboxView: View {
                 }
             }
         }
-        .listStyle(.plain)
-        .navigationTitle(labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    Text(labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox).font(.headline)
-                    if let selected = accounts.first(where: { $0.id == accountFilter }) {
-                        Text(selected.email).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                    } else if accounts.count > 1 {
-                        Text("All accounts").font(.caption2).foregroundStyle(.secondary)
-                    }
+    }
+    private var inboxHeader: some View {
+        InboxHeader(title: mailboxTitle, scope: scopeTitle,
+            count: mailbox == "Drafts" ? draftCount : accounts.isEmpty ? filteredSamples.count : conversations.count,
+            grouped: !accounts.isEmpty && conversationRows && mailbox != "Drafts",
+            filter: $quickFilter, showFilters: mailbox != "Drafts", allowStarred: !accounts.isEmpty,
+            canSelect: !accounts.isEmpty && mailbox != "Drafts", selecting: selecting,
+            search: { feedback.select(); showingSearch = true },
+            select: {
+                feedback.select()
+                withAnimation(MailStyle.motion(reduced: reduceMotion)) { selecting.toggle(); selectedIDs.removeAll() }
+            })
+    }
+    private var profileMenu: some View {
+        Menu {
+            if !accounts.isEmpty {
+                Picker("Account", selection: $accountFilterRaw) {
+                    Text("All accounts").tag("")
+                    ForEach(accounts) { Text($0.email).tag($0.id.uuidString) }
                 }
+                Divider()
             }
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
-                    .accessibilityIdentifier("mailboxDrawerButton")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Search", systemImage: "magnifyingglass") { showingSearch = true }
-                    .accessibilityIdentifier("searchButton")
-            }
+            Button("Accounts", systemImage: "person.crop.circle") { showingAccounts = true }
+            Button("Settings", systemImage: "gearshape") { showingSettings = true }
+        } label: {
+            AccountBadge(account: accounts.first { $0.id == accountFilter }).frame(minWidth: 44, minHeight: 44)
         }
-        .overlay(alignment: .leading) {
-            if showingDrawer {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Color.black.opacity(0.22).ignoresSafeArea()
-                            .onTapGesture { toggleDrawer() }
-                            .accessibilityLabel("Close mailboxes")
-                            .accessibilityAddTraits(.isButton)
-                        drawer.frame(width: min(340, geometry.size.width * 0.88))
-                            .frame(maxHeight: .infinity)
-                            .background(.regularMaterial)
-                            .transition(.move(edge: .leading))
-                    }
+        .accessibilityLabel("Accounts and settings")
+        .accessibilityIdentifier("profileMenuButton")
+    }
+    private var composeDock: some View {
+        HStack(alignment: .center) {
+            HStack(spacing: 6) {
+                if let deadline = waitingUntil {
+                    GmailWaitStatus(deadline: deadline)
+                } else if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
+                    ProgressView().controlSize(.mini)
+                    Text("Updating mail…")
+                } else {
+                    Image(systemName: runtime.connectivity.isConnected == false ? "wifi.slash" : "checkmark.circle")
+                    Text(accounts.isEmpty ? "Sample mail" : runtime.connectivity.isConnected == false ? "Reading offline" : "Your mail, together")
                 }
+            }.font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Spacer(minLength: 12)
+            Button {
+                feedback.select(); showingCompose = true
+            } label: {
+                Image(systemName: "square.and.pencil").font(.system(size: 22, weight: .medium))
+                    .frame(width: 58, height: 58)
             }
+            .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+            .accessibilityLabel("Compose").accessibilityIdentifier("composeButton")
         }
-        .sheet(isPresented: $showingAccounts) {
-            NavigationStack { AccountsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAccounts = false } } } }
+        .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 8)
+    }
+    private func presentDestination() {
+        switch sheetDestination {
+        case .accounts: showingAccounts = true
+        case .settings: showingSettings = true
+        case nil: break
         }
-        .sheet(isPresented: $showingSettings) {
-            NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSettings = false } } } }
-        }
-        .sheet(isPresented: $showingSearch) {
-            NavigationStack { LocalSearchView(initialAccountID: accountFilter) }
-        }
-        .onChange(of: mailbox) { _, _ in loadMailbox() }
-        .task {
-            if !mailboxes.contains(mailbox) { mailbox = "Inbox" }
-            if let selected = accountFilter, !accounts.contains(where: { $0.id == selected }) { accountFilterRaw = "" }
-            loadMailbox()
-        }
-        .onChange(of: accounts.map(\.id)) { _, ids in
-            if let selected = accountFilter, !ids.contains(selected) { accountFilterRaw = "" }
-        }
-        .onChange(of: accountFilter) { _, _ in labelFilter = nil; loadMailbox() }
-        .onChange(of: labelFilter) { _, _ in loadMailbox() }
-        .refreshable {
-            await runtime.gmail?.syncAll()
-            if !accounts.isEmpty { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
-        }
+        sheetDestination = nil
+    }
+    private func sampleUnread(_ name: String) -> Int {
+        ["Inbox", "All Mail", "Unread"].contains(name) ? session.sampleMessages.filter { !$0.isRead }.count : 0
     }
     private func toggleDrawer() {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { showingDrawer.toggle() }
+        feedback.select(); showingDrawer.toggle()
     }
-    @ViewBuilder private func swipeButton(_ value: String, message: MailMessage) -> some View {
-        if let action = MailSwipeAction(rawValue: value), action != .none {
-            Button(action.label(for: message), systemImage: action.symbol) {
-                runtime.gmail?.action(action.operation(for: message), message: message)
-            }.tint(action.tint)
+    private func loadMailbox() {
+        selecting = false; selectedIDs.removeAll()
+        // The unified drafts section owns its initial load and provider-link refresh.
+        guard mailbox != "Drafts" || labelFilter != nil else { return }
+        Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+    }
+
+    private var draftCount: Int {
+        let local = session.drafts.filter { accountFilter == nil || $0.accountID == accountFilter }.count
+        let hidden = DraftLinks.hiddenMessageIDs(outgoing: outgoing, links: metadata, accountID: accountFilter)
+        return local + messages.filter { $0.isDraft && !$0.isTrash && (accountFilter == nil || $0.accountID == accountFilter) && !hidden.contains($0.identity) }.count
+    }
+    private func cachedUnread(accountID: UUID?, mailbox: String, labelID: String? = nil) -> Int {
+        messages.filter { (accountID == nil || $0.accountID == accountID) && !$0.isRead && MailboxScope.contains($0, mailbox: mailbox, labelID: labelID) }.count
+    }
+    private func conversationRow(_ conversation: MailConversation) -> some View {
+        CachedMessageRow(message: conversation.latest, messageCount: conversation.messages.count,
+            unread: !conversation.isRead, starred: conversation.isStarred,
+            hasAttachments: conversation.messages.contains { attachmentMessageIDs.contains($0.id) },
+            account: accountFilter == nil && accounts.count > 1 ? accounts.first { $0.id == conversation.latest.accountID } : nil)
+    }
+    @ViewBuilder private func conversationSwipe(_ raw: String, conversation: MailConversation) -> some View {
+        if let action = MailSwipeAction(rawValue: raw), action != .none {
+            let kind = action == .read ? (conversation.isRead ? "unread" : "read") : action == .star ? (conversation.isStarred ? "unstar" : "star") : action.operation(for: conversation.latest)
+            Button { triage(kind, conversation.messages) } label: { Label(action.title, systemImage: action.symbol) }.tint(action.tint)
         }
     }
-    private var drawer: some View {
-        VStack(alignment: .leading, spacing: 0) {
+    private var bulkToolbar: some View {
+        VStack(spacing: 10) {
             HStack {
-                Text("Dispatch").font(.title2.bold())
+                Text("\(selectedMessages.count) loaded messages selected").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Close", systemImage: "xmark") { toggleDrawer() }.labelStyle(.iconOnly).buttonStyle(.glass)
-            }.padding(20)
-            List {
-                Section("Accounts") {
-                    Button { accountFilterRaw = "" } label: { drawerLabel("All accounts", symbol: "tray.2", selected: accountFilter == nil) }
-                    ForEach(accounts) { account in
-                        Button { accountFilterRaw = account.id.uuidString } label: {
-                            drawerLabel(account.email, symbol: "person.crop.circle", selected: accountFilter == account.id)
-                        }
-                    }
-                }
-                Section("Mailboxes") {
-                    ForEach(mailboxes, id: \.self) { name in
-                        Button { labelFilter = nil; mailbox = name; toggleDrawer() } label: {
-                            drawerLabel(name, symbol: mailboxSymbol(name), selected: mailbox == name && labelFilter == nil)
-                        }
-                    }
-                }
-                if let id = accountFilter {
-                    Section("Labels") {
-                        ForEach(folders.filter { $0.accountID == id && $0.kindRaw == "user" }) { folder in
-                            Button { labelFilter = folder.remoteID; toggleDrawer() } label: {
-                                drawerLabel(folder.name, symbol: "tag", selected: labelFilter == folder.remoteID)
+                Button(selectedIDs.count == conversations.count ? "Clear" : "Select all") {
+                    selectedIDs = selectedIDs.count == conversations.count ? [] : Set(conversations.map(\.id))
+                }.font(.caption)
+            }
+            HStack {
+                Button("Archive", systemImage: "archivebox") { bulkAction("archive") }
+                Spacer()
+                Menu("More", systemImage: "ellipsis.circle") {
+                    Button("Mark read") { bulkAction("read") }
+                    Button("Mark unread") { bulkAction("unread") }
+                    Button("Star") { bulkAction("star") }
+                    Button("Unstar") { bulkAction("unstar") }
+                    Button(mailbox == "Spam" ? "Not spam" : "Move to Spam") { bulkAction(mailbox == "Spam" ? "notSpam" : "spam") }
+                    if mailbox == "Trash" { Button("Restore") { bulkAction("restore") } }
+                    if let id = Set(selectedMessages.map(\.accountID)).first, Set(selectedMessages.map(\.accountID)).count == 1 {
+                        Menu("Add label") {
+                            ForEach(folders.filter { $0.accountID == id && $0.kindRaw == "user" }) { folder in
+                                Button(folder.name) { bulkAction("labelAdd:" + folder.remoteID) }
                             }
                         }
                     }
                 }
-            }.listStyle(.plain).scrollContentBackground(.hidden)
-            Divider()
-            HStack {
-                Button("Accounts", systemImage: "person.crop.circle") { toggleDrawer(); showingAccounts = true }
                 Spacer()
-                Button("Settings", systemImage: "gearshape") { toggleDrawer(); showingSettings = true }
-            }.font(.subheadline).padding(20)
+                Button("Trash", systemImage: "trash") { confirmingTrash = true }.tint(.red)
+            }.disabled(selectedMessages.isEmpty)
+        }.padding().background(.regularMaterial)
+    }
+    private func bulkAction(_ kind: String) {
+        let snapshot = selectedMessages
+        triage(kind, snapshot); selectedIDs.removeAll(); selecting = false
+    }
+    private func triage(_ kind: String, _ snapshot: [MailMessage]) {
+        feedback.triageKind = kind
+        if let gmail = runtime.gmail { gmail.action(kind, messages: snapshot) }
+        else {
+            do { try runtime.repository?.enqueueBatch(kind, messages: snapshot) }
+            catch { session.storageError = error.localizedDescription }
         }
-    }
-    private func drawerLabel(_ title: String, symbol: String, selected: Bool) -> some View {
-        HStack {
-            Label(title, systemImage: symbol).lineLimit(1)
-            Spacer()
-            if selected { Image(systemName: "checkmark").font(.caption.bold()) }
-        }.foregroundStyle(selected ? MailStyle.accent : Color.primary)
-    }
-    private func mailboxSymbol(_ name: String) -> String {
-        switch name {
-        case "Inbox": "tray"
-        case "All Mail": "tray.2"
-        case "Unread": "envelope.badge"
-        case "Starred": "star"
-        case "Sent": "paperplane"
-        case "Drafts": "doc"
-        case "Archive": "archivebox"
-        default: "trash"
-        }
-    }
-    private func loadMailbox() {
-        // The unified drafts section owns its initial load and provider-link refresh.
-        guard mailbox != "Drafts" || labelFilter != nil else { return }
-        Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 }
 
 struct CachedMessageRow: View {
     let message: MailMessage
+    var messageCount = 1
+    var unread: Bool? = nil
+    var starred: Bool? = nil
+    var hasAttachments = false
+    var account: MailAccount? = nil
+    private var isRead: Bool { !(unread ?? !message.isRead) }
     @AppStorage("previewLines") private var previewLines = 2
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             SenderAvatar(email: message.senderEmail, name: message.sender.displayName)
                 .overlay(alignment: .bottomTrailing) {
-                    if !message.isRead { Circle().fill(MailStyle.accent).frame(width: 9, height: 9).overlay(Circle().stroke(.background, lineWidth: 2)) }
+                    if !isRead { Circle().fill(MailStyle.accent).frame(width: 9, height: 9).overlay(Circle().stroke(.background, lineWidth: 2)) }
                 }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: MailStyle.rowSpacing) {
                 HStack {
-                    Text(message.sender.displayName).font(.system(.headline, weight: message.isRead ? .medium : .bold)).lineLimit(1)
+                    Text(message.sender.displayName).font(.system(.subheadline, weight: isRead ? .medium : .semibold)).lineLimit(1)
+                    if messageCount > 1 {
+                        Text(messageCount, format: .number).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                            .padding(.horizontal, 5).padding(.vertical, 2).background(MailStyle.canvas, in: .capsule)
+                            .accessibilityLabel("\(messageCount) messages")
+                    }
                     Spacer()
-                    if message.isStarred { Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption) }
+                    if starred ?? message.isStarred { Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption) }
+                    if hasAttachments { Image(systemName: "paperclip").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Has attachments") }
                     MailRowDate(date: message.receivedAt)
                 }
-                Text(message.subject.isEmpty ? "No subject" : message.subject).font(.subheadline).lineLimit(1)
+                Text(message.subject.isEmpty ? "No subject" : message.subject).font(.subheadline.weight(isRead ? .regular : .medium)).lineLimit(1)
                 if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
+                if let account {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color(mailHex: account.colourHex)).frame(width: 6, height: 6).accessibilityHidden(true)
+                        Text(account.displayName).lineLimit(1)
+                    }.font(.caption2).foregroundStyle(.secondary)
+                }
             }
-        }.padding(.vertical, 5).accessibilityElement(children: .combine).accessibilityValue(message.isRead ? "Read" : "Unread")
+        }.padding(.vertical, 10).accessibilityElement(children: .combine).accessibilityValue(isRead ? "Read" : "Unread")
     }
 }
 
@@ -328,23 +452,25 @@ struct MessageRow: View {
     @AppStorage("previewLines") private var previewLines = 2
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Circle()
-                .fill(message.isRead ? Color.clear : MailStyle.accent)
-                .frame(width: 8, height: 8)
-                .padding(.top, 7)
-                .accessibilityHidden(true)
+        HStack(alignment: .top, spacing: 12) {
+            SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false)
+                .overlay(alignment: .bottomTrailing) {
+                    if !message.isRead {
+                        Circle().fill(MailStyle.accent).frame(width: 9, height: 9)
+                            .overlay(Circle().stroke(MailStyle.paper, lineWidth: 2))
+                    }
+                }
             VStack(alignment: .leading, spacing: MailStyle.rowSpacing) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(message.sender).font(.headline).lineLimit(1)
+                    Text(message.sender).font(.system(.subheadline, weight: message.isRead ? .medium : .semibold)).lineLimit(1)
                     Spacer(minLength: 8)
                     MailRowDate(date: message.date)
                 }
-                Text(message.subject).font(.subheadline).lineLimit(1)
+                Text(message.subject).font(.subheadline.weight(message.isRead ? .regular : .medium)).lineLimit(1)
                 if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
         .accessibilityValue(message.isRead ? "Read" : "Unread")
     }

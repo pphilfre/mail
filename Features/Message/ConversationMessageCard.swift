@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ConversationMessageCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(MailFeedback.self) private var feedback
     let message: MailMessage
     let attachments: [MailAttachment]
     let remoteImages: Bool
@@ -19,8 +21,11 @@ struct ConversationMessageCard: View {
         message.plainTextBody ?? message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? message.snippet
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button { expanded.toggle() } label: {
+        VStack(alignment: .leading, spacing: 16) {
+            Button {
+                feedback.select()
+                withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }
+            } label: {
                 HStack(alignment: .top, spacing: 10) {
                     SenderAvatar(email: message.senderEmail, name: message.sender.displayName)
                     VStack(alignment: .leading, spacing: 4) {
@@ -41,21 +46,35 @@ struct ConversationMessageCard: View {
             .accessibilityHint(expanded ? "Collapse message" : "Expand message")
             if expanded {
                 MessageRecipientDetails(message: message)
+                Divider().padding(.vertical, 2)
                 MailBodyView(html: message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText, remoteImages: remoteImages)
                     .accessibilityIdentifier("conversationBody-\(message.remoteID)")
                 ForEach(attachments) { AttachmentRow(attachment: $0) }
                 if !message.isDraft {
-                    HStack {
-                        Button("Reply", systemImage: "arrowshape.turn.up.left", action: onReply).buttonStyle(.bordered)
-                        Menu("More reply options", systemImage: "ellipsis") {
-                            Button("Reply all", systemImage: "arrowshape.turn.up.left.2", action: onReplyAll)
-                            Button("Forward", systemImage: "arrowshape.turn.up.right", action: onForward)
-                        }.accessibilityLabel("More reply options")
-                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { replyButton; forwardButton; Spacer(minLength: 0); replyMenu }
+                        VStack(alignment: .leading, spacing: 10) { replyButton; forwardButton; replyMenu }
+                    }.padding(.top, 12)
                 }
             }
-            Divider()
         }
+        .padding(18)
+        .background(MailStyle.paper, in: .rect(cornerRadius: 22))
+        .overlay { RoundedRectangle(cornerRadius: 22).stroke(.primary.opacity(0.04), lineWidth: 1) }
+    }
+    private var replyButton: some View {
+        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); onReply() }
+            .buttonStyle(.glassProminent).controlSize(.large)
+    }
+    private var forwardButton: some View {
+        Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
+            .buttonStyle(.glass).controlSize(.large)
+    }
+    private var replyMenu: some View {
+        Menu("More reply options", systemImage: "ellipsis") {
+            Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); onReplyAll() }
+            Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
+        }.accessibilityLabel("More reply options").frame(minWidth: 44, minHeight: 44)
     }
 }
 

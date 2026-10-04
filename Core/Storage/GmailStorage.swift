@@ -76,6 +76,8 @@ extension MailRepository {
         case "archive": labels.remove("INBOX")
         case "trash": labels.insert("TRASH"); labels.remove("INBOX")
         case "restore": labels.remove("TRASH")
+        case "spam": labels.insert("SPAM"); labels.remove("INBOX")
+        case "notSpam": labels.remove("SPAM"); labels.insert("INBOX")
         default:
             if kind.hasPrefix("labelAdd:") { labels.insert(String(kind.dropFirst(9))) }
             if kind.hasPrefix("labelRemove:") { labels.remove(String(kind.dropFirst(12))) }
@@ -83,11 +85,7 @@ extension MailRepository {
         row.folderIDs = labels.sorted(); flags(row)
     }
     func enqueue(_ kind: String, message: MailMessage) throws {
-        try context.transaction {
-            Self.overlay(kind, on: message)
-            context.insert(PendingMailOperation(accountID: message.accountID, targetRemoteID: message.remoteID, kind: kind))
-            try context.save()
-        }
+        _ = try enqueueBatch(kind, messages: [message])
     }
     func saveLabels(_ labels: [GmailLabel], accountID: UUID) throws {
         try context.transaction {

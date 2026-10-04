@@ -5,6 +5,7 @@ struct GmailMessageView: View {
     let message: MailMessage
     @Environment(AppRuntime.self) private var runtime
     @Environment(AppSession.self) private var session
+    @Environment(MailFeedback.self) private var feedback
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \MailMessage.receivedAt) private var allMessages: [MailMessage]
     @Query private var attachments: [MailAttachment]
@@ -25,8 +26,10 @@ struct GmailMessageView: View {
     var body: some View {
       ScrollViewReader { proxy in
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text(message.subject.isEmpty ? "No subject" : message.subject).font(.title2.bold())
+            VStack(alignment: .leading, spacing: 16) {
+                Text(message.subject.isEmpty ? "No subject" : message.subject)
+                    .font(.largeTitle.weight(.bold)).tracking(-0.8).textSelection(.enabled)
+                    .padding(.horizontal, 4).padding(.vertical, 8)
                 if loadingThread { ProgressView("Updating conversation…").font(.caption) }
                 if let error = readerError {
                     VStack(alignment: .leading, spacing: 8) {
@@ -40,8 +43,8 @@ struct GmailMessageView: View {
                     HStack {
                         Label("Remote images are off", systemImage: "photo").font(.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Load images in thread") { loadImagesOnce = true }.font(.caption.bold())
-                    }
+                        Button("Load images") { feedback.select(); loadImagesOnce = true }.font(.caption.bold())
+                    }.padding(14).background(MailStyle.paper, in: .rect(cornerRadius: 16))
                 }
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
@@ -63,7 +66,7 @@ struct GmailMessageView: View {
                         confirmingDraftDeletion = true
                     }
                 }
-            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            }.padding(20).frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
         }
         .task(id: thread.map(\.id)) {
             guard !focusedMessage, thread.contains(where: { $0.id == message.id }) else { return }
@@ -72,22 +75,26 @@ struct GmailMessageView: View {
             focusedMessage = true
         }
       }
-        .navigationTitle("Message").navigationBarTitleDisplayMode(.inline)
+        .background(MailStyle.canvas)
+        .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(message.isStarred ? "Unstar" : "Star", systemImage: message.isStarred ? "star.fill" : "star") {
-                    runtime.gmail?.action(message.isStarred ? "unstar" : "star", message: message)
+                    triage(message.isStarred ? "unstar" : "star")
                 }
                 Menu("More", systemImage: "ellipsis.circle") {
-                    Button(message.isRead ? "Mark unread" : "Mark read") { runtime.gmail?.action(message.isRead ? "unread" : "read", message: message) }
-                    Button("Archive", systemImage: "archivebox") { runtime.gmail?.action("archive", message: message); dismiss() }
+                    Button(message.isRead ? "Mark unread" : "Mark read") { triage(message.isRead ? "unread" : "read") }
+                    Button("Archive", systemImage: "archivebox") { triage("archive"); dismiss() }
+                    Button(message.isSpam ? "Not spam" : "Move to Spam", systemImage: "exclamationmark.shield") {
+                        triage(message.isSpam ? "notSpam" : "spam"); dismiss()
+                    }
                     Button(message.isTrash ? "Restore" : "Move to Trash", systemImage: "trash") {
-                        runtime.gmail?.action(message.isTrash ? "restore" : "trash", message: message); dismiss()
+                        triage(message.isTrash ? "restore" : "trash"); dismiss()
                     }
                     Menu("Labels") {
                         ForEach(folders.filter { $0.accountID == message.accountID && $0.kindRaw == "user" }) { folder in
                             Button {
-                                runtime.gmail?.action((message.folderIDs.contains(folder.remoteID) ? "labelRemove:" : "labelAdd:") + folder.remoteID, message: message)
+                                triage((message.folderIDs.contains(folder.remoteID) ? "labelRemove:" : "labelAdd:") + folder.remoteID)
                             } label: {
                                 Label(folder.name, systemImage: message.folderIDs.contains(folder.remoteID) ? "checkmark" : "tag")
                             }
@@ -112,6 +119,10 @@ struct GmailMessageView: View {
                 }
             }
         }
+    }
+    private func triage(_ kind: String) {
+        feedback.triageKind = kind
+        runtime.gmail?.action(kind, message: message)
     }
     private func refreshThread(syncFirst: Bool = false) async {
         guard !loadingThread, let gmail = runtime.gmail else { return }

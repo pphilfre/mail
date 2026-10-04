@@ -5,6 +5,7 @@ struct DraftsView: View {
     var accountID: UUID? = nil
     var body: some View {
         List { DraftSections(accountID: accountID) }
+            .listStyle(.plain).scrollContentBackground(.hidden).background(MailStyle.paper)
             .navigationTitle("Drafts")
     }
 }

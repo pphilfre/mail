@@ -22,7 +22,17 @@ struct URLSessionMailTransport: MailHTTPTransport {
     func execute(_ request: URLRequest) async throws -> HTTPReply {
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw GmailError.invalidResponse }
-        return HTTPReply(data: data, status: response.statusCode, retryAfter: response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init))
+        return HTTPReply(data: data, status: response.statusCode,
+            retryAfter: Self.retryDelay(response.value(forHTTPHeaderField: "Retry-After")))
+    }
+    static func retryDelay(_ value: String?, now: Date = Date()) -> TimeInterval? {
+        guard let value else { return nil }
+        if let seconds = Double(value), seconds.isFinite { return max(0, seconds) }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss 'GMT'"
+        return formatter.date(from: value).map { max(0, $0.timeIntervalSince(now)) }
     }
 }
 
@@ -32,7 +42,14 @@ enum GmailError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .throttled: "Gmail temporarily limited syncing. Your downloaded mail is safe. Wait a moment, then pull to refresh."
-        case .accessDenied(let reason): "Gmail denied access (\(reason)). Reconnect Gmail in Accounts. If this continues, check the Google project's Gmail API and your Workspace administrator's restrictions."
+        case .accessDenied(let reason):
+            switch reason {
+            case "dailyLimitExceeded": "Gmail's project quota was exceeded (dailyLimitExceeded). Check the project's quota settings before retrying."
+            case "domainPolicy": "Your Workspace administrator has blocked Gmail access (domainPolicy). Ask them to allow Dispatch."
+            case "accessNotConfigured", "SERVICE_DISABLED": "Gmail API is disabled for the Google project. Enable it in Google Cloud, then retry."
+            case "insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT": "Gmail permission is missing (\(reason)). Reconnect Gmail in Accounts and grant mail access."
+            default: "Gmail denied access (\(reason)). Check Gmail permissions in Accounts."
+            }
         case .configuration: "Google configuration is missing or does not match the registered callback."
         case .cancelled: "Sign-in was cancelled."
         case .invalidCallback: "Google sign-in could not be verified. Try again."
