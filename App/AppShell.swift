@@ -7,6 +7,7 @@ struct AppShell: View {
     @Query private var accounts: [MailAccount]
     @AppStorage("showSampleInbox") private var showSamples = false
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("selectedMailAccount") private var selectedMailAccount = ""
     @State private var showingCompose = false
 
     var body: some View {
@@ -31,7 +32,14 @@ struct AppShell: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && runtime.gmail?.connecting != true { Task { await runtime.gmail?.syncAll() } }
         }
-        .sheet(isPresented: $showingCompose) { NavigationStack { ComposeView() } }
+        .onChange(of: runtime.connectivity.reconnectionCount) { _, _ in
+            if scenePhase == .active && runtime.gmail?.connecting != true {
+                Task { await runtime.gmail?.syncAll() }
+            }
+        }
+        .sheet(isPresented: $showingCompose) {
+            NavigationStack { ComposeView(draft: LocalDraft(accountID: UUID(uuidString: selectedMailAccount))) }
+        }
     }
 }
 

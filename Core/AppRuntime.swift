@@ -5,6 +5,7 @@ import SwiftData
 @MainActor
 @Observable
 final class AppRuntime {
+    let connectivity = NetworkConnectivity()
     var container: ModelContainer?
     var session: AppSession?
     var storageFailed = false
@@ -16,6 +17,8 @@ final class AppRuntime {
         // Seed the normal preferences domain so UI tests can change it after launch.
         if let sampleInbox = ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_SAMPLE_INBOX"] {
             UserDefaults.standard.set(sampleInbox == "YES", forKey: "showSampleInbox")
+            UserDefaults.standard.set("Inbox", forKey: "selectedMailbox")
+            UserDefaults.standard.set("", forKey: "selectedMailAccount")
         }
         #endif
         openStorage()

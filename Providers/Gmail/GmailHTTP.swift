@@ -28,7 +28,7 @@ struct URLSessionMailTransport: MailHTTPTransport {
 
 enum GmailError: LocalizedError, Equatable {
     case throttled, accessDenied(String)
-    case configuration, cancelled, invalidCallback, reconnect, invalidResponse, http(Int), invalidRecipients, uncertainSend, uncertainDraft, busy
+    case configuration, cancelled, invalidCallback, reconnect, invalidResponse, http(Int), invalidRecipients, uncertainSend, uncertainDraft, unsupportedDraft, busy
     var errorDescription: String? {
         switch self {
         case .throttled: "Gmail temporarily limited syncing. Your downloaded mail is safe. Wait a moment, then pull to refresh."
@@ -42,6 +42,7 @@ enum GmailError: LocalizedError, Equatable {
         case .invalidRecipients: "Enter valid email addresses. Recipient and subject headers must not contain line breaks."
         case .uncertainSend: "Sending could not be confirmed. Check Sent in Gmail before creating another copy. Dispatch will not resend this message automatically."
         case .uncertainDraft: "The Gmail draft upload could not be confirmed. Your local draft is safe. Check Gmail Drafts, then try Save to Gmail again; Dispatch will look for the existing copy before creating another."
+        case .unsupportedDraft: "This Gmail draft contains formatting or attachments that Dispatch cannot preserve yet. Edit or send it in Gmail to keep the original content."
         case .busy: "This account is already connecting."
         }
     }

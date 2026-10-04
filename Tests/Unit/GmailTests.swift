@@ -278,7 +278,9 @@ final class GmailTests: XCTestCase {
         let transport = FixtureTransport([
             reply(#"{"drafts":[]}"#), reply("{}", status: 503),
             reply(#"{"drafts":[]}"#),
-            reply(#"{"drafts":[{"id":"rDraft"}]}"#), reply(#"{"id":"rDraft"}"#)
+            reply(#"{"drafts":[{"id":"rDraft"}]}"#),
+            reply(#"{"id":"rDraft","message":{"id":"a","threadId":"t","payload":{"mimeType":"text/plain","body":{"data":""}}}}"#),
+            reply(#"{"id":"rDraft"}"#)
         ])
         let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
         for _ in 0..<2 {
@@ -306,5 +308,53 @@ final class GmailTests: XCTestCase {
         XCTAssertEqual(result.cc, ["other@example.com"])
         let sent = MailReplyRecipients.make(sender: me, replyTo: [], to: [sender], cc: [copy], ownEmail: me.email, replyAll: false)
         XCTAssertEqual(sent.to, [sender.email]); XCTAssertTrue(sent.cc.isEmpty)
+    }
+
+    func testExistingRichDraftIsNeverUploadedOrSentAsPlainText() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        repository.context.insert(account); try repository.context.save()
+        let draft = LocalDraft(to: "other@example.com", subject: "Rich draft", accountID: account.id)
+        try repository.save([draft])
+        let row = try XCTUnwrap(repository.outgoing(draft.id))
+        row.remoteDraftID = "rich"; try repository.context.save()
+        let vault = CredentialVault(service: "dispatch.rich-draft.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let rich = #"{"id":"rich","message":{"id":"a","threadId":"t","payload":{"mimeType":"text/html","body":{"data":"PGI+SGVsbG88L2I+"}}}}"#
+        let transport = FixtureTransport([reply(rich), reply(#"{"emailAddress":"me@example.com","historyId":"1"}"#), reply(rich)])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        do { try await coordinator.saveRemoteDraft(draft); XCTFail("Must preserve rich draft") }
+        catch { XCTAssertEqual(error as? GmailError, .unsupportedDraft) }
+        do { try await coordinator.send(draft); XCTFail("Must preserve rich draft") }
+        catch { XCTAssertEqual(error as? GmailError, .unsupportedDraft) }
+        let requests = await transport.captured()
+        XCTAssertTrue(requests.allSatisfy { $0.httpMethod == "GET" })
+        XCTAssertEqual(row.stateRaw, "draft")
+        try await vault.remove(for: account.id)
+    }
+
+    func testMissingSentConfirmationDoesNotReplaySend() async throws {
+        let container = try MailStorage.open(inMemory: true)
+        let repository = MailRepository(context: container.mainContext)
+        let account = MailAccount(provider: .gmail, email: "me@example.com")
+        repository.context.insert(account); try repository.context.save()
+        let draft = LocalDraft(to: "other@example.com", subject: "Unconfirmed", accountID: account.id)
+        try repository.save([draft])
+        let row = try XCTUnwrap(repository.outgoing(draft.id))
+        row.stateRaw = "sendUnconfirmed"; try repository.context.save()
+        let vault = CredentialVault(service: "dispatch.confirmation.\(UUID())")
+        try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh",
+            expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
+        let transport = FixtureTransport([reply(#"{"messages":[]}"#)])
+        let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport)
+        let found = try await coordinator.confirmSent(row)
+        XCTAssertFalse(found)
+        XCTAssertEqual(row.stateRaw, "sendUnconfirmed")
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.httpMethod, "GET")
+        try await vault.remove(for: account.id)
     }
 }

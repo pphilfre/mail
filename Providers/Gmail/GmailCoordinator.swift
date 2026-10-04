@@ -9,6 +9,7 @@ final class GmailCoordinator {
     var syncing: Set<UUID> = []
     var writing: Set<UUID> = []
     var error: String?
+    var mailboxPageTokens: [String: String] = [:]
     @ObservationIgnored let repository: MailRepository
     @ObservationIgnored let vault: CredentialVault
     @ObservationIgnored let transport: any MailHTTPTransport
@@ -23,6 +24,8 @@ final class GmailCoordinator {
          requestPause: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.repository = repository; self.vault = vault; self.transport = transport
         self.requestPause = requestPause
+        do { mailboxPageTokens = try repository.gmailPageTokens() }
+        catch { self.error = error.localizedDescription }
     }
     func client(_ id: UUID) throws -> GmailAPI {
         if let api = managers[id] { return api }
@@ -108,7 +111,8 @@ final class GmailCoordinator {
         try repository.apply(result.messages, deleted: result.deleted, accountID: id)
         // Capture the baseline before fetching. Drain changes that arrived during initial sync.
         try await incremental(id, since: baseline, api: api)
-        if let account = try repository.account(id: id) { account.syncCursor = page.nextPageToken; try repository.context.save() }
+        try savePageToken(page.nextPageToken, mailbox: GmailMailbox(name: "All Mail"), accountID: id)
+        try savePageToken(inbox.nextPageToken, mailbox: GmailMailbox(name: "Inbox"), accountID: id)
     }
     private func incremental(_ id: UUID, since: String, api: GmailAPI) async throws {
         var pageToken: String?
@@ -121,21 +125,31 @@ final class GmailCoordinator {
             pageToken = page.nextPageToken
         } while pageToken != nil
     }
-    func loadOlder(_ id: UUID) async {
+    func hasOlder(_ id: UUID, mailbox: String, labelID: String? = nil) -> Bool {
+        mailboxPageTokens[GmailMailbox(name: mailbox, labelID: labelID).pageKey(id)] != nil
+    }
+    private func savePageToken(_ token: String?, mailbox: GmailMailbox, accountID: UUID) throws {
+        try repository.saveGmailPageToken(token, mailbox: mailbox, accountID: accountID)
+        mailboxPageTokens[mailbox.pageKey(accountID)] = token
+    }
+    func loadOlder(_ id: UUID, mailbox: String = "All Mail", labelID: String? = nil) async {
         guard !syncing.contains(id) else { return }
         syncing.insert(id)
         defer {
             finishWork(id)
         }
         do {
-            guard let account = try repository.account(id: id), let cursor = account.syncCursor else { return }
-            let api = try client(id); let page = try await api.messages(page: cursor)
+            let selection = GmailMailbox(name: mailbox, labelID: labelID)
+            guard let cursor = mailboxPageTokens[selection.pageKey(id)] else { return }
+            let parameters = selection.parameters
+            let api = try client(id)
+            let page = try await api.messages(page: cursor, label: parameters.label, query: parameters.query)
             let result = try await fetch(Set((page.messages ?? []).map(\.id)), accountID: id, api: api)
             try repository.apply(result.messages, deleted: result.deleted, accountID: id)
-            account.syncCursor = page.nextPageToken; try repository.context.save()
+            try savePageToken(page.nextPageToken, mailbox: selection, accountID: id)
         } catch { self.error = error.localizedDescription }
     }
-    func loadThread(_ message: MailMessage) async {
+    func loadThread(_ message: MailMessage) async throws {
         do {
             let api = try client(message.accountID)
             let thread = try await api.thread(message.remoteThreadID)
@@ -162,7 +176,7 @@ final class GmailCoordinator {
                     try repository.context.save()
                 }
             }
-        } catch { self.error = error.localizedDescription }
+        } catch { throw error }
     }
     func action(_ kind: String, message: MailMessage) {
         do { try repository.enqueue(kind, message: message); Task { await sync(message.accountID) } }
@@ -179,24 +193,12 @@ final class GmailCoordinator {
                 syncing.insert(account.id)
                 do {
                     let api = try client(account.id)
-                    let label: String?
-                    let query: String?
-                    if let labelID { label = labelID; query = nil }
-                    else {
-                        switch name {
-                        case "Inbox": label = "INBOX"; query = nil
-                        case "Unread": label = "UNREAD"; query = nil
-                        case "Starred": label = "STARRED"; query = nil
-                        case "Sent": label = "SENT"; query = nil
-                        case "Drafts": label = "DRAFT"; query = nil
-                        case "Trash": label = "TRASH"; query = nil
-                        case "Archive": label = nil; query = "-in:inbox -in:sent -in:drafts -in:trash -in:spam"
-                        default: label = nil; query = nil
-                        }
-                    }
-                    let page = try await api.messages(label: label, query: query)
+                    let selection = GmailMailbox(name: name, labelID: labelID)
+                    let parameters = selection.parameters
+                    let page = try await api.messages(label: parameters.label, query: parameters.query)
                     let result = try await fetch(Set((page.messages ?? []).map(\.id)), accountID: account.id, api: api)
                     try repository.apply(result.messages, deleted: result.deleted, accountID: account.id)
+                    try savePageToken(page.nextPageToken, mailbox: selection, accountID: account.id)
                     finishWork(account.id)
                 } catch { finishWork(account.id); throw error }
             }
@@ -253,6 +255,9 @@ final class GmailCoordinator {
             if remoteID == nil && row.lastError == Self.uncertainDraftMarker { throw GmailError.uncertainDraft }
         }
         if remoteID == nil { row.lastError = Self.uncertainDraftMarker; try repository.context.save() }
+        if let remoteID {
+            guard MailMIME.canEditDraft(try await api.draft(remoteID).message?.payload) else { throw GmailError.unsupportedDraft }
+        }
         do {
             let remote = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
             row.remoteDraftID = remote.id; row.lastError = nil; try repository.context.save()
@@ -275,9 +280,10 @@ final class GmailCoordinator {
         repeat {
             let drafts = try await api.drafts(page: page)
             if let reference = drafts.drafts?.first(where: { $0.message?.id == message.remoteID }) {
+                let remote = try await api.draft(reference.id)
+                guard MailMIME.canEditDraft(remote.message?.payload) else { throw GmailError.unsupportedDraft }
                 if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID && $0.stateRaw == "draft" }))
                     .first(where: { $0.remoteDraftID == reference.id }) { return existing.localDraft }
-                let remote = try await api.draft(reference.id)
                 guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 guard let dto = remote.message else { throw GmailError.invalidResponse }
                 let header = dto.payload; let content = MailMIME.content(header)
@@ -287,6 +293,25 @@ final class GmailCoordinator {
                 let row = OutgoingMessage(draft: draft); row.remoteDraftID = reference.id
                 repository.context.insert(row); try repository.context.save()
                 return draft
+            }
+            page = drafts.nextPageToken
+        } while page != nil
+        throw GmailError.invalidResponse
+    }
+    func deleteRemoteDraft(_ message: MailMessage) async throws {
+        let accountID = message.accountID
+        guard !writing.contains(accountID) else { throw GmailError.busy }
+        writing.insert(accountID); defer { writing.remove(accountID) }
+        let api = try client(accountID)
+        var page: String?
+        repeat {
+            let drafts = try await api.drafts(page: page)
+            if let reference = drafts.drafts?.first(where: { $0.message?.id == message.remoteID }) {
+                try await api.deleteDraft(reference.id)
+                for row in try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID && $0.stateRaw == "draft" }))
+                    where row.remoteDraftID == reference.id { repository.context.delete(row) }
+                try repository.apply([], deleted: [message.remoteID], accountID: accountID)
+                return
             }
             page = drafts.nextPageToken
         } while page != nil
@@ -302,7 +327,10 @@ final class GmailCoordinator {
         let api = try client(id)
         // Refresh before committing sending state so an expired credential cannot create an uncertain send.
         _ = try await api.profile()
-        if let remoteID = row.remoteDraftID { _ = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID) }
+        if let remoteID = row.remoteDraftID {
+            guard MailMIME.canEditDraft(try await api.draft(remoteID).message?.payload) else { throw GmailError.unsupportedDraft }
+            _ = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
+        }
         row.stateRaw = "sending"; try repository.context.save()
         do {
             if let remoteID = row.remoteDraftID { _ = try await api.sendDraft(remoteID) }
@@ -323,22 +351,22 @@ final class GmailCoordinator {
         do {
             try await vault.remove(for: id)
             try repository.removeAccountData(id: id)
+            mailboxPageTokens = mailboxPageTokens.filter { !$0.key.hasPrefix(GmailMailbox.pagePrefix(id)) }
             managers[id] = nil
         } catch { self.error = error.localizedDescription }
     }
     private func throwRemovalBusy() { error = "Wait for this account’s current operation to finish before removing it." }
 
-    func confirmSent(_ row: OutgoingMessage) async {
-        guard let id = row.accountID else { return }
-        do {
-            let api = try client(id)
-            let page = try await api.messages(query: "in:sent rfc822msgid:\(row.internetMessageID)")
-            guard !(page.messages ?? []).isEmpty else {
-                error = "No sent copy was found yet. Gmail search can take time to update; check Gmail before sending another copy."
-                return
-            }
-            row.stateRaw = "sent"; row.lastError = nil; try repository.context.save()
-            await sync(id)
-        } catch { self.error = error.localizedDescription }
+    func confirmSent(_ row: OutgoingMessage) async throws -> Bool {
+        guard let id = row.accountID else { throw GmailError.reconnect }
+        guard row.stateRaw == "sendUnconfirmed" else { return row.stateRaw == "sent" }
+        guard !writing.contains(id) else { throw GmailError.busy }
+        writing.insert(id); defer { writing.remove(id) }
+        let api = try client(id)
+        let page = try await api.messages(query: "in:sent rfc822msgid:\(row.internetMessageID)")
+        guard !(page.messages ?? []).isEmpty else { return false }
+        row.stateRaw = "sent"; row.lastError = nil; try repository.context.save()
+        await sync(id)
+        return true
     }
 }

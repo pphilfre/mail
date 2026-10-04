@@ -9,17 +9,28 @@ struct InboxView: View {
     @Query(sort: \MailMessage.receivedAt, order: .reverse) private var messages: [MailMessage]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
     @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" }) private var uncertain: [OutgoingMessage]
-    @State private var accountFilter: UUID?
-    @State private var mailbox = "Inbox"
+    @AppStorage("selectedMailAccount") private var accountFilterRaw = ""
+    @AppStorage("selectedMailbox") private var mailbox = "Inbox"
+    private var accountFilter: UUID? { UUID(uuidString: accountFilterRaw) }
     @State private var labelFilter: String?
     @State private var showingDrawer = false
     @State private var showingAccounts = false
     @State private var showingSettings = false
+    @State private var showingSearch = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("leadingSwipe") private var leadingSwipe = "read"
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
     @AppStorage("fullSwipe") private var fullSwipe = false
     private let mailboxes = ["Inbox", "All Mail", "Unread", "Starred", "Sent", "Drafts", "Archive", "Trash"]
+    private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
+    private var uncertainCount: Int { uncertain.filter { accountFilter == nil || $0.accountID == accountFilter }.count }
+    private var inboxError: String? {
+        if let error = session.storageError { return error }
+        if !accounts.isEmpty && runtime.connectivity.isConnected == false {
+            return "Saved mail is available offline. Mailbox changes will retry when your connection returns."
+        }
+        return selectedAccounts.first(where: { $0.lastSyncError != nil }).map { "\($0.email): \($0.lastSyncError ?? "")" } ?? runtime.gmail?.error
+    }
     private var filtered: [MailMessage] {
         messages.filter { row in
             guard accountFilter == nil || row.accountID == accountFilter else { return false }
@@ -36,11 +47,29 @@ struct InboxView: View {
             }
         }
     }
+    private var filteredSamples: [SampleMessage] {
+        switch mailbox {
+        case "Inbox", "All Mail": session.sampleMessages
+        case "Unread": session.sampleMessages.filter { !$0.isRead }
+        default: []
+        }
+    }
 
     var body: some View {
         List {
-            if let error = session.storageError {
-                Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
+            if let error = inboxError {
+                Section {
+                    DisclosureGroup {
+                        Text(error).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        HStack {
+                            Button("Retry") { Task { await runtime.gmail?.syncAll() } }
+                            Button("Accounts") { showingAccounts = true }
+                        }.buttonStyle(.bordered)
+                    } label: {
+                        Label(runtime.connectivity.isConnected == false ? "Offline · Saved mail is available" : "Mail needs attention",
+                              systemImage: runtime.connectivity.isConnected == false ? "wifi.slash" : "exclamationmark.triangle").font(.subheadline)
+                    }
+                }
             }
             if !session.drafts.isEmpty {
                 Section {
@@ -57,24 +86,18 @@ struct InboxView: View {
                     }
                 }
             }
-            if !uncertain.isEmpty {
-                Section("Check Sent in Gmail") {
-                    ForEach(uncertain) { row in
-                        VStack(alignment: .leading) {
-                            Text(row.subject.isEmpty ? "No subject" : row.subject).font(.headline)
-                            Text("Sending was interrupted or could not be confirmed. This copy is kept and will not be resent.").font(.caption).foregroundStyle(.secondary)
-                            Text(row.toRaw).font(.caption)
-                            Text(row.body).lineLimit(3).textSelection(.enabled)
-                            Button("Check Sent") { Task { await runtime.gmail?.confirmSent(row) } }
-                        }
+            if uncertainCount > 0 {
+                Section {
+                    NavigationLink { OutboxView(accountID: accountFilter) } label: {
+                        HStack {
+                            Label("Sending needs confirmation", systemImage: "exclamationmark.circle")
+                            Spacer()
+                            Text(uncertainCount, format: .number).foregroundStyle(.secondary)
+                        }.font(.subheadline)
                     }
                 }
             }
-            if let error = runtime.gmail?.error { Text(error).font(.caption).foregroundStyle(.red) }
             if !accounts.isEmpty {
-                ForEach(accounts.filter { accountFilter == nil || $0.id == accountFilter }) { account in
-                    if let error = account.lastSyncError { Text(error).font(.caption).foregroundStyle(.red) }
-                }
                 Section {
                     ForEach(filtered) { message in
                         NavigationLink { GmailMessageView(message: message) } label: { CachedMessageRow(message: message) }
@@ -85,19 +108,35 @@ struct InboxView: View {
                                 swipeButton(trailingSwipe, message: message)
                             }
                     }
-                    if filtered.isEmpty { ContentUnavailableView("No cached messages", systemImage: "tray", description: Text("Pull to refresh, or load older mail below.")) }
+                    if filtered.isEmpty {
+                        if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
+                            HStack { ProgressView(); Text("Loading \(mailbox.lowercased())…").foregroundStyle(.secondary) }
+                        } else {
+                            ContentUnavailableView(inboxError == nil ? "No messages here" : "Mail couldn’t refresh", systemImage: "tray",
+                                description: Text(inboxError == nil ? "Pull to refresh or load older messages." : "Your downloaded mail is kept. Open the status above to retry."))
+                        }
+                    }
                 }
-                ForEach(accounts.filter { (accountFilter == nil || $0.id == accountFilter) && $0.syncCursor != nil }) { account in
-                    Button("Load older mail · \(account.email)") { Task { await runtime.gmail?.loadOlder(account.id) } }
+                ForEach(selectedAccounts.filter { runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
+                    Button(selectedAccounts.count == 1 ? "Load older messages" : "Load older · \(account.email)") {
+                        Task { await runtime.gmail?.loadOlder(account.id, mailbox: mailbox, labelID: labelFilter) }
+                    }
                         .disabled(runtime.gmail?.syncing.contains(account.id) == true)
                 }
-                if runtime.gmail?.syncing.isEmpty == false { HStack { ProgressView(); Text("Syncing Gmail…").foregroundStyle(.secondary) } }
+                if !filtered.isEmpty && selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
+                    HStack { ProgressView(); Text("Updating mail…").foregroundStyle(.secondary) }.font(.caption)
+                }
             } else if showSamples {
                 Section {
-                    ForEach(session.sampleMessages) { message in
+                    ForEach(filteredSamples) { message in
                         NavigationLink {
                             MessageView(message: message)
                         } label: { MessageRow(message: message) }
+                    }
+                    if filteredSamples.isEmpty {
+                        ContentUnavailableView("No sample messages here", systemImage: "tray",
+                            description: Text("Explore Inbox, All Mail, or Unread to see sample mail."))
+                            .listRowBackground(Color.clear)
                     }
                 } header: {
                     Text("Sample inbox")
@@ -120,9 +159,23 @@ struct InboxView: View {
         .navigationTitle(labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 1) {
+                    Text(labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox).font(.headline)
+                    if let selected = accounts.first(where: { $0.id == accountFilter }) {
+                        Text(selected.email).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    } else if accounts.count > 1 {
+                        Text("All accounts").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarLeading) {
                 Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
                     .accessibilityIdentifier("mailboxDrawerButton")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Search", systemImage: "magnifyingglass") { showingSearch = true }
+                    .accessibilityIdentifier("searchButton")
             }
         }
         .overlay(alignment: .leading) {
@@ -147,9 +200,17 @@ struct InboxView: View {
         .sheet(isPresented: $showingSettings) {
             NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSettings = false } } } }
         }
+        .sheet(isPresented: $showingSearch) {
+            NavigationStack { LocalSearchView(initialAccountID: accountFilter) }
+        }
         .onChange(of: mailbox) { _, _ in loadMailbox() }
+        .task {
+            if !mailboxes.contains(mailbox) { mailbox = "Inbox" }
+            if let selected = accountFilter, !accounts.contains(where: { $0.id == selected }) { accountFilterRaw = "" }
+            loadMailbox()
+        }
         .onChange(of: accounts.map(\.id)) { _, ids in
-            if let selected = accountFilter, !ids.contains(selected) { accountFilter = nil }
+            if let selected = accountFilter, !ids.contains(selected) { accountFilterRaw = "" }
         }
         .onChange(of: accountFilter) { _, _ in labelFilter = nil; loadMailbox() }
         .onChange(of: labelFilter) { _, _ in loadMailbox() }
@@ -177,9 +238,9 @@ struct InboxView: View {
             }.padding(20)
             List {
                 Section("Accounts") {
-                    Button { accountFilter = nil } label: { drawerLabel("All accounts", symbol: "tray.2", selected: accountFilter == nil) }
+                    Button { accountFilterRaw = "" } label: { drawerLabel("All accounts", symbol: "tray.2", selected: accountFilter == nil) }
                     ForEach(accounts) { account in
-                        Button { accountFilter = account.id } label: {
+                        Button { accountFilterRaw = account.id.uuidString } label: {
                             drawerLabel(account.email, symbol: "person.crop.circle", selected: accountFilter == account.id)
                         }
                     }
@@ -247,7 +308,7 @@ struct CachedMessageRow: View {
                     Text(message.sender.displayName).font(.system(.headline, weight: message.isRead ? .medium : .bold)).lineLimit(1)
                     Spacer()
                     if message.isStarred { Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption) }
-                    Text(message.receivedAt, style: .date).font(.caption).foregroundStyle(.secondary)
+                    MailRowDate(date: message.receivedAt)
                 }
                 Text(message.subject.isEmpty ? "No subject" : message.subject).font(.subheadline).lineLimit(1)
                 if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
@@ -258,6 +319,7 @@ struct CachedMessageRow: View {
 
 struct MessageRow: View {
     let message: SampleMessage
+    @AppStorage("previewLines") private var previewLines = 2
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -270,15 +332,24 @@ struct MessageRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(message.sender).font(.headline).lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(message.date, format: .dateTime.hour().minute())
-                        .font(.caption).foregroundStyle(.secondary)
+                    MailRowDate(date: message.date)
                 }
                 Text(message.subject).font(.subheadline).lineLimit(1)
-                Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
             }
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
         .accessibilityValue(message.isRead ? "Read" : "Unread")
+    }
+}
+
+private struct MailRowDate: View {
+    let date: Date
+    var body: some View {
+        Group {
+            if Calendar.current.isDateInToday(date) { Text(date, format: .dateTime.hour().minute()) }
+            else { Text(date, format: .dateTime.day().month(.abbreviated)) }
+        }.font(.caption).foregroundStyle(.secondary)
     }
 }

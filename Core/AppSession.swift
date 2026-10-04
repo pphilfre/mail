@@ -23,7 +23,8 @@ final class AppSession {
     func save(_ draft: LocalDraft) throws {
         // Never overwrite an unreadable draft file with an empty replacement.
         guard storageError == nil else { throw DraftStoreError.unreadableStore }
-        var updated = drafts
+        // Provider draft imports and send state changes can occur after this session last loaded.
+        var updated = try draftStore.load()
         if let index = updated.firstIndex(where: { $0.id == draft.id }) {
             updated[index] = draft
         } else {
@@ -35,7 +36,15 @@ final class AppSession {
 
     func deleteDraft(at offsets: IndexSet) throws {
         guard storageError == nil else { throw DraftStoreError.unreadableStore }
-        let updated = drafts.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        let ids = Set(drafts.enumerated().filter { offsets.contains($0.offset) }.map { $0.element.id })
+        let updated = try draftStore.load().filter { !ids.contains($0.id) }
+        try draftStore.save(updated)
+        drafts = updated
+    }
+
+    func deleteDraft(id: UUID) throws {
+        guard storageError == nil else { throw DraftStoreError.unreadableStore }
+        let updated = try draftStore.load().filter { $0.id != id }
         try draftStore.save(updated)
         drafts = updated
     }
