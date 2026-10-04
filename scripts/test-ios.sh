@@ -19,10 +19,8 @@ codesign -d --entitlements - build/DerivedData/Build/Products/Debug-iphonesimula
   2>&1 | tee build/simulator-signing.log
 wait "$boot_pid"
 trap - EXIT
-only_testing=()
 if [[ -n "${DISPATCH_TEST_ONLY:-}" ]]; then
-  only_testing=(-only-testing:"$DISPATCH_TEST_ONLY")
+  common+=(-only-testing:"$DISPATCH_TEST_ONLY")
 fi
 xcodebuild "${common[@]}" test-without-building -parallel-testing-enabled NO \
-  "${only_testing[@]}" \
   -resultBundlePath build/Tests.xcresult 2>&1 | tee build/test.log
