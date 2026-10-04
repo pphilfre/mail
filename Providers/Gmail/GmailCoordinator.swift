@@ -404,9 +404,10 @@ final class GmailCoordinator {
             data = decoded
         }
         try Task.checkCancellation()
-        guard let current = try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first else { throw AttachmentError.unavailable }
+        guard try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first != nil else { throw AttachmentError.unavailable }
         let path = try await attachmentCache.store(data, accountID: accountID, attachmentID: attachmentID, filename: filename)
-        guard current.modelContext != nil else { throw AttachmentError.unavailable }
+        // Sync can replace a part during file IO; refetch after the actor suspension.
+        guard let current = try repository.context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.id == attachmentID })).first else { throw AttachmentError.unavailable }
         current.cachedRelativePath = path
         try repository.context.save()
         guard let url = try await attachmentCache.existing(path) else { throw AttachmentError.unavailable }
