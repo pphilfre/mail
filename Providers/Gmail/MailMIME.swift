@@ -73,6 +73,10 @@ enum MailMIME {
         }
         return mime == "text/plain" && part.body?.attachmentId == nil
     }
+    static func hasRemoteImages(_ html: String) -> Bool {
+        let pattern = #"(?is)<(?:img|image|source)\b[^>]*\s(?:src|href)\s*=\s*["']?\s*(?:https?:)?//|<(?:img|source)\b[^>]*\ssrcset\s*=\s*["'][^"']*https?://|url\s*\(\s*["']?\s*(?:https?:)?//"#
+        return html.range(of: pattern, options: .regularExpression) != nil
+    }
     static func inlineImages(_ root: GmailPart?, depth: Int = 0) -> [GmailPart] {
         guard let root, depth < 40 else { return [] }
         let safeTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"]

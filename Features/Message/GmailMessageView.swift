@@ -15,6 +15,8 @@ struct GmailMessageView: View {
     @State private var composing: LocalDraft?
     @State private var localError: String?
     @State private var confirmingDraftDeletion = false
+    @State private var loadingThread = false
+    private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
     private func bodyText(_ row: MailMessage) -> String {
         row.plainTextBody ?? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? row.snippet
@@ -23,11 +25,20 @@ struct GmailMessageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject).font(.title2.bold())
-                if !remoteImages && !loadImagesOnce && thread.contains(where: { $0.cachedHTML != nil }) {
+                if loadingThread { ProgressView("Updating conversation…").font(.caption) }
+                if let error = readerError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(error).font(.callout).foregroundStyle(.secondary)
+                        Button("Retry") { Task { await refreshThread(syncFirst: true) } }.disabled(loadingThread)
+                    }
+                }
+                if !remoteImages && !loadImagesOnce && thread.contains(where: { row in
+                    row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.hasRemoteImages) == true
+                }) {
                     HStack {
                         Label("Remote images are off", systemImage: "photo").font(.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Load images") { loadImagesOnce = true }.font(.caption.bold())
+                        Button("Load images in thread") { loadImagesOnce = true }.font(.caption.bold())
                     }
                 }
                 ForEach(thread) { row in
@@ -71,8 +82,6 @@ struct GmailMessageView: View {
                         confirmingDraftDeletion = true
                     }
                 }
-                if let error = localError ?? runtime.gmail?.error { Text(error).foregroundStyle(.red) }
-
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Message").navigationBarTitleDisplayMode(.inline)
@@ -101,7 +110,7 @@ struct GmailMessageView: View {
         }
         .task {
             if !message.isRead { runtime.gmail?.action("read", message: message) }
-            await runtime.gmail?.loadThread(message)
+            await refreshThread()
         }
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
         .confirmationDialog("Delete this Gmail draft?", isPresented: $confirmingDraftDeletion, titleVisibility: .visible) {
@@ -115,6 +124,14 @@ struct GmailMessageView: View {
                 }
             }
         }
+    }
+    private func refreshThread(syncFirst: Bool = false) async {
+        guard !loadingThread, let gmail = runtime.gmail else { return }
+        loadingThread = true; localError = nil
+        defer { loadingThread = false }
+        if syncFirst { await gmail.sync(message.accountID) }
+        do { try await gmail.loadThread(message) }
+        catch { if !Task.isCancelled { localError = error.localizedDescription } }
     }
     private func reply(_ row: MailMessage, all: Bool) {
         let own = accounts.first { $0.id == row.accountID }?.email.lowercased() ?? ""

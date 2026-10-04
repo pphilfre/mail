@@ -149,7 +149,7 @@ final class GmailCoordinator {
             try savePageToken(page.nextPageToken, mailbox: selection, accountID: id)
         } catch { self.error = error.localizedDescription }
     }
-    func loadThread(_ message: MailMessage) async {
+    func loadThread(_ message: MailMessage) async throws {
         do {
             let api = try client(message.accountID)
             let thread = try await api.thread(message.remoteThreadID)
@@ -176,7 +176,7 @@ final class GmailCoordinator {
                     try repository.context.save()
                 }
             }
-        } catch { self.error = error.localizedDescription }
+        } catch { throw error }
     }
     func action(_ kind: String, message: MailMessage) {
         do { try repository.enqueue(kind, message: message); Task { await sync(message.accountID) } }

@@ -9,8 +9,9 @@ struct InboxView: View {
     @Query(sort: \MailMessage.receivedAt, order: .reverse) private var messages: [MailMessage]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
     @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" }) private var uncertain: [OutgoingMessage]
-    @State private var accountFilter: UUID?
-    @State private var mailbox = "Inbox"
+    @AppStorage("selectedMailAccount") private var accountFilterRaw = ""
+    @AppStorage("selectedMailbox") private var mailbox = "Inbox"
+    private var accountFilter: UUID? { UUID(uuidString: accountFilterRaw) }
     @State private var labelFilter: String?
     @State private var showingDrawer = false
     @State private var showingAccounts = false
@@ -24,7 +25,11 @@ struct InboxView: View {
     private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
     private var uncertainCount: Int { uncertain.filter { accountFilter == nil || $0.accountID == accountFilter }.count }
     private var inboxError: String? {
-        session.storageError ?? selectedAccounts.first(where: { $0.lastSyncError != nil }).map { "\($0.email): \($0.lastSyncError ?? "")" } ?? runtime.gmail?.error
+        if let error = session.storageError { return error }
+        if !accounts.isEmpty && runtime.connectivity.isConnected == false {
+            return "Saved mail is available offline. Mailbox changes will retry when your connection returns."
+        }
+        return selectedAccounts.first(where: { $0.lastSyncError != nil }).map { "\($0.email): \($0.lastSyncError ?? "")" } ?? runtime.gmail?.error
     }
     private var filtered: [MailMessage] {
         messages.filter { row in
@@ -42,6 +47,13 @@ struct InboxView: View {
             }
         }
     }
+    private var filteredSamples: [SampleMessage] {
+        switch mailbox {
+        case "Inbox", "All Mail": session.sampleMessages
+        case "Unread": session.sampleMessages.filter { !$0.isRead }
+        default: []
+        }
+    }
 
     var body: some View {
         List {
@@ -54,7 +66,8 @@ struct InboxView: View {
                             Button("Accounts") { showingAccounts = true }
                         }.buttonStyle(.bordered)
                     } label: {
-                        Label("Mail needs attention", systemImage: "exclamationmark.triangle").font(.subheadline)
+                        Label(runtime.connectivity.isConnected == false ? "Offline · Saved mail is available" : "Mail needs attention",
+                              systemImage: runtime.connectivity.isConnected == false ? "wifi.slash" : "exclamationmark.triangle").font(.subheadline)
                     }
                 }
             }
@@ -115,10 +128,15 @@ struct InboxView: View {
                 }
             } else if showSamples {
                 Section {
-                    ForEach(session.sampleMessages) { message in
+                    ForEach(filteredSamples) { message in
                         NavigationLink {
                             MessageView(message: message)
                         } label: { MessageRow(message: message) }
+                    }
+                    if filteredSamples.isEmpty {
+                        ContentUnavailableView("No sample messages here", systemImage: "tray",
+                            description: Text("Explore Inbox, All Mail, or Unread to see sample mail."))
+                            .listRowBackground(Color.clear)
                     }
                 } header: {
                     Text("Sample inbox")
@@ -186,9 +204,13 @@ struct InboxView: View {
             NavigationStack { LocalSearchView(initialAccountID: accountFilter) }
         }
         .onChange(of: mailbox) { _, _ in loadMailbox() }
-        .task { loadMailbox() }
+        .task {
+            if !mailboxes.contains(mailbox) { mailbox = "Inbox" }
+            if let selected = accountFilter, !accounts.contains(where: { $0.id == selected }) { accountFilterRaw = "" }
+            loadMailbox()
+        }
         .onChange(of: accounts.map(\.id)) { _, ids in
-            if let selected = accountFilter, !ids.contains(selected) { accountFilter = nil }
+            if let selected = accountFilter, !ids.contains(selected) { accountFilterRaw = "" }
         }
         .onChange(of: accountFilter) { _, _ in labelFilter = nil; loadMailbox() }
         .onChange(of: labelFilter) { _, _ in loadMailbox() }
@@ -216,9 +238,9 @@ struct InboxView: View {
             }.padding(20)
             List {
                 Section("Accounts") {
-                    Button { accountFilter = nil } label: { drawerLabel("All accounts", symbol: "tray.2", selected: accountFilter == nil) }
+                    Button { accountFilterRaw = "" } label: { drawerLabel("All accounts", symbol: "tray.2", selected: accountFilter == nil) }
                     ForEach(accounts) { account in
-                        Button { accountFilter = account.id } label: {
+                        Button { accountFilterRaw = account.id.uuidString } label: {
                             drawerLabel(account.email, symbol: "person.crop.circle", selected: accountFilter == account.id)
                         }
                     }

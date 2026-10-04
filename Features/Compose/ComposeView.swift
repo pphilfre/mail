@@ -100,6 +100,7 @@ struct ComposeView: View {
         .onAppear {
             if editor == nil {
                 editor = DraftEditingSession(draft: draft, alreadySaved: session.drafts.contains { $0.id == draft.id })
+                if let id = draft.accountID, !accounts.contains(where: { $0.id == id }) { draft.accountID = nil }
                 if draft.accountID == nil && accounts.count == 1 { draft.accountID = accounts.first?.id }
                 scheduleAutosave()
             }

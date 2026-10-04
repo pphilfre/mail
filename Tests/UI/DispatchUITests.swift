@@ -88,4 +88,14 @@ final class DispatchUITests: XCTestCase {
         app.staticTexts["On-device drafts"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
     }
+
+    func testSampleUnreadMailboxFiltersReadMessages() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        app.buttons["mailboxDrawerButton"].tap()
+        app.buttons["Unread"].tap()
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
+    }
 }

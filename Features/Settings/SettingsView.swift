@@ -62,7 +62,7 @@ struct SettingsView: View {
         Form {
             Section("Reading") {
                 Toggle("Load remote images", isOn: $remoteImages)
-                Text("Remote images can tell senders when you open their mail. You can also load images for one message in the reader.")
+                Text("Remote images can tell senders when you open their mail. You can also load images for one conversation in the reader.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show company icons", isOn: $senderPictures)
                 Text("Loads website icons from the sender’s domain. Icons are decorative and do not verify a sender’s identity.")
