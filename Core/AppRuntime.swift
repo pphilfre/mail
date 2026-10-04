@@ -19,6 +19,9 @@ final class AppRuntime {
             UserDefaults.standard.set(sampleInbox == "YES", forKey: "showSampleInbox")
             UserDefaults.standard.set("Inbox", forKey: "selectedMailbox")
             UserDefaults.standard.set("", forKey: "selectedMailAccount")
+            UserDefaults.standard.set(true, forKey: "conversationRows")
+            UserDefaults.standard.set("", forKey: "defaultSendingAccount")
+            UserDefaults.standard.set("[]", forKey: "recentMailSearches")
         }
         #endif
         openStorage()

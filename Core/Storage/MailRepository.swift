@@ -82,6 +82,10 @@ final class MailRepository: DraftPersistence {
 
     func removeAccountData(id: UUID) throws {
         try context.transaction {
+            // Undo can span accounts; remove the whole record rather than retaining deleted identities.
+            if let undo = try context.fetch(FetchDescriptor<StoreMetadata>(predicate: #Predicate { $0.key == "mail-triage-undo" })).first {
+                context.delete(undo)
+            }
             for metadata in try context.fetch(FetchDescriptor<StoreMetadata>())
                 where metadata.key.hasPrefix(GmailMailbox.pagePrefix(id)) || metadata.key.hasPrefix(DraftLinks.prefix(id)) { context.delete(metadata) }
             try context.delete(model: MailAttachment.self, where: #Predicate { $0.accountID == id })

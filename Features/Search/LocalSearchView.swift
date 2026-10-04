@@ -24,9 +24,14 @@ struct LocalSearchView: View {
             let filenames = (messageAttachments[message.id] ?? []).map(\.filename)
             let fields = addresses + [message.subject, message.snippet] + (accountNames[message.accountID] ?? []) + labelNames + filenames
             return MailSearchDocument(id: message.id, accountID: message.accountID, fields: fields,
-                                      isTrash: message.isTrash, isSpam: message.isSpam)
+                isTrash: message.isTrash, isSpam: message.isSpam,
+                sender: "\(message.sender.displayName) \(message.senderEmail)",
+                recipients: (message.to + message.cc + message.bcc).flatMap { [$0.displayName, $0.email] },
+                subject: message.subject, labels: labelNames + message.folderIDs, receivedAt: message.receivedAt,
+                isRead: message.isRead, isStarred: message.isStarred, hasAttachments: !filenames.isEmpty)
         } + samples.map {
-            MailSearchDocument(id: $0.id, accountID: nil, fields: [$0.sender, $0.address, $0.subject, $0.snippet])
+            MailSearchDocument(id: $0.id, accountID: nil, fields: [$0.sender, $0.address, $0.subject, $0.snippet],
+                sender: "\($0.sender) \($0.address)", subject: $0.subject, receivedAt: $0.date, isRead: $0.isRead)
         }
     }
 
@@ -52,6 +57,7 @@ struct LocalSearchView: View {
 }
 
 private struct SearchResultsView: View {
+    @Environment(MailFeedback.self) private var feedback
     @Environment(\.dismiss) private var dismiss
     let index: MailSearchIndex
     let indexing: Bool
@@ -62,6 +68,18 @@ private struct SearchResultsView: View {
     @State private var searchPresented = true
     @State private var accountID: UUID?
     @State private var includeTrashAndSpam = false
+    @State private var filters = MailSearchFilters()
+    @AppStorage("recentMailSearches") private var recentRaw = "[]"
+    @AppStorage("keepSearchHistory") private var keepHistory = true
+    @AppStorage("savedMailSearches") private var savedRaw = "[]"
+    @State private var namingSearch = false
+    @State private var searchName = ""
+    private var savedSearches: [SavedMailSearch] {
+        SavedMailSearch.decode(savedRaw).filter { search in
+            search.accountID == nil || accounts.contains { $0.id == search.accountID }
+        }
+    }
+    private var recent: [String] { (try? JSONDecoder().decode([String].self, from: Data(recentRaw.utf8))) ?? [] }
 
     init(index: MailSearchIndex, indexing: Bool, mailByID: [UUID: MailMessage], accounts: [MailAccount],
          samplesByID: [UUID: SampleMessage], initialAccountID: UUID?) {
@@ -72,8 +90,17 @@ private struct SearchResultsView: View {
 
     var body: some View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ids = index.matches(query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam)
+        let parsed = MailSearchQuery(query)
+        let ids = index.matches(query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters)
         List {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    filterChip("Unread", value: $filters.unread)
+                    filterChip("Starred", value: $filters.starred)
+                    filterChip("Attachments", value: $filters.attachments)
+                    if filters.active { Button("Reset") { filters = MailSearchFilters() }.font(.caption) }
+                }.padding(.vertical, 4)
+            }.listRowSeparator(.hidden)
             if accounts.count > 1 {
                 Picker("Account", selection: $accountID) {
                     Text("All accounts").tag(UUID?.none)
@@ -82,10 +109,42 @@ private struct SearchResultsView: View {
             }
             if indexing {
                 HStack { ProgressView(); Text("Preparing search…").foregroundStyle(.secondary) }
-            } else if trimmed.isEmpty {
+            } else if let error = parsed.error {
+                Label(error, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
+            } else if trimmed.isEmpty && !filters.active {
                 ContentUnavailableView("Search your mail", systemImage: "magnifyingglass",
                     description: Text("Find people, subjects, labels, or attachment names in mail saved on this device."))
                     .listRowBackground(Color.clear)
+                if !savedSearches.isEmpty {
+                    Section("Saved searches") {
+                        ForEach(savedSearches) { search in
+                            Button {
+                                query = search.query; accountID = search.accountID
+                                filters = search.filters; includeTrashAndSpam = search.includeTrashAndSpam
+                            } label: {
+                                Label(search.name, systemImage: "line.3.horizontal.decrease.circle")
+                            }.contextMenu {
+                                Button("Delete saved search", role: .destructive) {
+                                    savedRaw = SavedMailSearch.encode(SavedMailSearch.decode(savedRaw).filter { $0.id != search.id })
+                                }
+                            }
+                        }
+                    }
+                }
+                if keepHistory && !recent.isEmpty {
+                    Section("Recent searches") {
+                        ForEach(recent, id: \.self) { value in
+                            Button(value, systemImage: "clock") { query = value }
+                        }
+                        Button("Clear recent searches") { recentRaw = "[]" }
+                    }
+                }
+                Section("Search tips") {
+                    Text("Try from:alex, subject:\"weekend plans\", label:Work, before:2026-10-01 or has:attachment.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Dates use your local calendar. after: includes the specified day; before: excludes it.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             } else if ids.isEmpty {
                 ContentUnavailableView.search(text: trimmed)
                     .accessibilityIdentifier("searchNoResults")
@@ -116,21 +175,58 @@ private struct SearchResultsView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(MailStyle.paper)
         .accessibilityIdentifier("searchResultsList")
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, isPresented: $searchPresented,
                     placement: .navigationBarDrawer(displayMode: .always), prompt: "Search cached mail")
+        .onSubmit(of: .search) { rememberQuery() }
+        .onDisappear { rememberQuery() }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             ToolbarItem(placement: .topBarLeading) {
                 Menu("Search options", systemImage: "line.3.horizontal.decrease") {
                     Toggle("Include Trash and Spam", isOn: $includeTrashAndSpam)
+                    Toggle("Keep recent searches", isOn: $keepHistory)
+                    Button("Save this search") { searchName = ""; namingSearch = true }
+                        .disabled((!parsed.active && !filters.active) || parsed.error != nil || savedSearches.count >= 20)
+                    Button("Clear search") { query = ""; filters = MailSearchFilters() }
                 }
             }
         }
         .onChange(of: accounts.map(\.id)) { _, ids in
             if let selected = accountID, !ids.contains(selected) { accountID = nil }
         }
+        .onChange(of: keepHistory) { _, enabled in if !enabled { recentRaw = "[]" } }
+        .alert("Save search", isPresented: $namingSearch) {
+            TextField("Name", text: $searchName)
+            Button("Save") { saveSearch() }
+                .disabled(searchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) { }
+        } message: { Text("Reuses this query, filters and account. Results cover downloaded mail.") }
+    }
+    private func filterChip(_ title: String, value: Binding<Bool>) -> some View {
+        Button { feedback.select(); value.wrappedValue.toggle() } label: {
+            HStack(spacing: 4) {
+                if value.wrappedValue { Image(systemName: "checkmark") }
+                Text(title)
+            }.font(.subheadline.weight(.medium)).padding(.horizontal, 14).frame(minHeight: 44)
+                .background(value.wrappedValue ? MailStyle.accent.opacity(0.1) : MailStyle.canvas, in: Capsule())
+        }.buttonStyle(.plain).accessibilityAddTraits(value.wrappedValue ? [.isSelected] : [])
+    }
+    private func rememberQuery() {
+        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard keepHistory, !value.isEmpty, MailSearchQuery(value).error == nil else { return }
+        let values = Array(([value] + recent.filter { $0 != value }).prefix(10))
+        if let data = try? JSONEncoder().encode(values) { recentRaw = String(decoding: data, as: UTF8.self) }
+    }
+    private func saveSearch() {
+        let name = searchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, savedSearches.count < 20, MailSearchQuery(query).error == nil else { return }
+        let search = SavedMailSearch(name: name, query: query, accountID: accountID,
+            includeTrashAndSpam: includeTrashAndSpam, filters: filters)
+        savedRaw = SavedMailSearch.encode(savedSearches + [search])
     }
 }

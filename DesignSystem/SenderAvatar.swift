@@ -4,9 +4,10 @@ import SwiftUI
 struct SenderAvatar: View {
     let email: String
     let name: String
+    var allowsRemoteIcon = true
     @AppStorage("senderPictures") private var senderPictures = true
     private var iconURL: URL? {
-        guard senderPictures, let domain = email.split(separator: "@").last?.lowercased(),
+        guard allowsRemoteIcon, senderPictures, let domain = email.split(separator: "@").last?.lowercased(),
               domain.contains("."), domain.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") }),
               !["gmail.com", "outlook.com", "hotmail.com", "icloud.com", "yahoo.com", "live.com", "aol.com"].contains(domain)
         else { return nil }
@@ -17,20 +18,26 @@ struct SenderAvatar: View {
         return parts.prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
     }
     private var fallback: some View {
-        Text(initials).font(.system(size: 15, weight: .semibold)).foregroundStyle(MailStyle.accent)
+        Text(initials.isEmpty ? "?" : initials).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.primary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(MailStyle.accent.opacity(0.1))
+            .background(avatarColor.opacity(0.08))
+    }
+    private var avatarColor: Color {
+        let colors: [Color] = [MailStyle.accent, .teal, .purple, .indigo, .brown]
+        let hash = email.utf8.reduce(0) { ($0 &+ Int($1)) % colors.count }
+        return colors[hash]
     }
     var body: some View {
         Group {
             if let iconURL {
-                AsyncImage(url: iconURL) { image in
-                    image.resizable().scaledToFit().padding(9).background(.background)
-                } placeholder: { fallback }
+                AsyncImage(url: iconURL) { phase in
+                    if let image = phase.image { image.resizable().scaledToFit().padding(9).background(.background) }
+                    else { fallback }
+                }
             } else { fallback }
         }
-        .frame(width: 42, height: 42)
-        .clipShape(.circle)
+        .frame(width: 38, height: 38)
+        .clipShape(.rect(cornerRadius: 13))
         .accessibilityHidden(true)
     }
 }

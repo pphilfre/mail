@@ -54,13 +54,30 @@ actor GmailAPI {
     let transport: any MailHTTPTransport
     let token: @Sendable (Bool) async throws -> String
     let pause: @Sendable (TimeInterval) async throws -> Void
+    let onWait: @Sendable (TimeInterval?) async -> Void
+    // An actor alone does not serialize requests across awaits. All endpoints,
+    // including readers and mutations, share one account's request budget.
+    private var occupied = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var schedule = GmailRequestSchedule()
     init(transport: any MailHTTPTransport, pause: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
         try await Task.sleep(for: .seconds(seconds))
-    }, token: @escaping @Sendable (Bool) async throws -> String) {
+    }, onWait: @escaping @Sendable (TimeInterval?) async -> Void = { _ in }, token: @escaping @Sendable (Bool) async throws -> String) {
         self.transport = transport; self.token = token
-        self.pause = pause
+        self.pause = pause; self.onWait = onWait
+    }
+    private func acquire() async {
+        if !occupied { occupied = true; return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    private func release() {
+        if waiters.isEmpty { occupied = false }
+        else { waiters.removeFirst().resume() }
     }
     private func request(_ path: String, method: String = "GET", query: [String: String] = [:], body: Data? = nil) async throws -> Data {
+        await acquire()
+        defer { release() }
+        try Task.checkCancellation()
         var url = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/" + path)!
         url.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
         var request = URLRequest(url: url.url!)
@@ -71,6 +88,15 @@ actor GmailAPI {
         request.setValue("Bearer " + (try await token(false)), forHTTPHeaderField: "Authorization")
         while true {
             try Task.checkCancellation()
+            let delay = schedule.delay(at: ProcessInfo.processInfo.systemUptime)
+            if delay > 0 {
+                if schedule.isCoolingDown(at: ProcessInfo.processInfo.systemUptime) { await onWait(delay) }
+                do { try await pause(delay) }
+                catch { await onWait(nil); throw error }
+                await onWait(nil)
+            }
+            try Task.checkCancellation()
+            schedule.record(cost: Self.quotaCost(path, method: method), at: ProcessInfo.processInfo.systemUptime)
             let reply = try await transport.execute(request)
             if reply.status == 401 && !refreshed {
                 refreshed = true
@@ -78,16 +104,24 @@ actor GmailAPI {
                 continue
             }
             let reason = reply.status == 403 ? Self.errorReason(reply.data) : "forbidden"
-            let throttled = reply.status == 429 || (reply.status == 403 && ["rateLimitExceeded", "userRateLimitExceeded"].contains(reason))
+            let throttled = reply.status == 429 || (reply.status == 403 && ["rateLimitExceeded", "userRateLimitExceeded", "RATE_LIMIT_EXCEEDED"].contains(reason))
+            if throttled || (500...599).contains(reply.status) {
+                let backoff = pow(2, Double(retries)) + Double.random(in: 0...0.5)
+                // Retry-After is a minimum, including values beyond 60 seconds.
+                let cooldown = max(reply.retryAfter ?? 0, throttled && (method != "GET" || retries == 4) ? 60 : backoff)
+                schedule.deferRequests(for: cooldown, at: ProcessInfo.processInfo.systemUptime)
+            }
             // Retry reads only: replaying a send or draft creation can duplicate mail.
             if method == "GET", throttled || (500...599).contains(reply.status), retries < 4 {
-                let delay = min(60, max(reply.retryAfter ?? 0, pow(2, Double(retries)) + Double.random(in: 0...0.5)))
                 retries += 1
-                try await pause(delay)
                 continue
             }
             if throttled && method == "GET" { throw GmailError.throttled }
-            if reply.status == 403 && method == "GET" { throw GmailError.accessDenied(reason) }
+            // Safe label/trash mutations are queued; a quota rejection is temporary.
+            // Keep send/draft errors as explicit HTTP rejections for outcome recovery.
+            let mailboxMutation = path.hasPrefix("messages/") && ["modify", "trash", "untrash"].contains(path.split(separator: "/").last.map(String.init) ?? "")
+            if throttled && mailboxMutation { throw GmailError.throttled }
+            if reply.status == 403 && (method == "GET" || mailboxMutation) { throw GmailError.accessDenied(reason) }
             guard (200..<300).contains(reply.status) else { throw GmailError.http(reply.status) }
             return reply.data
         }
@@ -96,10 +130,23 @@ actor GmailAPI {
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let error = object?["error"] as? [String: Any]
         let reasons = error?["errors"] as? [[String: Any]]
-        let reason = reasons?.first?["reason"] as? String ?? "forbidden"
+        let details = error?["details"] as? [[String: Any]] ?? []
+        let candidates = (reasons ?? []).compactMap { $0["reason"] as? String } + details.compactMap { $0["reason"] as? String }
         // Do not expose arbitrary server content or credentials in errors.
-        let known = ["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded", "domainPolicy", "insufficientPermissions", "accessNotConfigured", "forbidden"]
-        return known.contains(reason) ? reason : "forbidden"
+        let known = ["rateLimitExceeded", "userRateLimitExceeded", "RATE_LIMIT_EXCEEDED", "dailyLimitExceeded", "domainPolicy", "insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT", "accessNotConfigured", "SERVICE_DISABLED", "forbidden"]
+        return candidates.first { known.contains($0) } ?? "forbidden"
+    }
+    static func quotaCost(_ path: String, method: String) -> Double {
+        if path == "profile" || path == "labels" { return 1 }
+        if path == "history" { return 2 }
+        if path == "drafts" && method == "POST" { return 10 }
+        if path == "messages" || path == "drafts" { return 5 }
+        if path == "messages/send" || path == "drafts/send" { return 100 }
+        if path.hasPrefix("threads/") { return 40 }
+        if path.hasSuffix("/modify") || path.hasSuffix("/untrash") { return 5 }
+        if path.hasPrefix("drafts/") && method == "PUT" { return 15 }
+        if path.hasPrefix("drafts/") && method == "DELETE" { return 10 }
+        return 20 // Message, attachment, draft retrieval and trash.
     }
     private func get<T: Decodable & Sendable>(_ type: T.Type, _ path: String, query: [String: String] = [:]) async throws -> T {
         try JSONDecoder().decode(type, from: await request(path, query: query))
@@ -165,4 +212,14 @@ actor GmailAPI {
         let data = try await request("drafts/send", method: "POST", body: JSONSerialization.data(withJSONObject: ["id": id]))
         return try JSONDecoder().decode(GmailReference.self, from: data)
     }
+}
+
+/// Smooth pacing leaves headroom below the current 6,000-unit/minute quota.
+struct GmailRequestSchedule: Sendable {
+    private var nextRequestAt: TimeInterval = 0
+    private var retryAt: TimeInterval = 0
+    func delay(at now: TimeInterval) -> TimeInterval { max(0, max(nextRequestAt, retryAt) - now) }
+    func isCoolingDown(at now: TimeInterval) -> Bool { retryAt > now }
+    mutating func record(cost: Double, at now: TimeInterval) { nextRequestAt = now + cost / 60 }
+    mutating func deferRequests(for delay: TimeInterval, at now: TimeInterval) { retryAt = max(retryAt, now + delay) }
 }
