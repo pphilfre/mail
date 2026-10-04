@@ -116,6 +116,8 @@ final class DispatchUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
         app.staticTexts["A quieter inbox"].tap()
         XCTAssertTrue(app.staticTexts["Sample message"].waitForExistence(timeout: 5))
+        let bodyText = app.webViews.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hi Freddie,")).firstMatch
+        XCTAssertTrue(bodyText.waitForExistence(timeout: 15), "The sample message body must finish rendering before capture")
         attachScreenshot("Reader redesign", app: app)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertFalse(app.staticTexts["A quieter inbox"].exists)

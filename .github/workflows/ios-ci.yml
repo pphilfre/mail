@@ -5,6 +5,12 @@ on:
     branches: [main, 'codex/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      test_filter:
+        description: 'Optional XCTest selector, such as DispatchUITests/DispatchUITests/testSampleMessageOpens'
+        required: false
+        default: ''
+        type: string
   workflow_call:
 
 permissions:
@@ -23,6 +29,8 @@ jobs:
       - name: Generate project with XcodeGen
         run: bash scripts/prepare-macos.sh
       - name: Build once and run unit and UI tests
+        env:
+          DISPATCH_TEST_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_filter || '' }}
         run: bash scripts/test-ios.sh
       - name: Export simulator screenshots
         if: always()
