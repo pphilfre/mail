@@ -71,16 +71,16 @@ struct InboxView: View {
                     }
                 }
             }
-            if !session.drafts.isEmpty {
+            if mailbox != "Drafts" && session.drafts.contains(where: { accountFilter == nil || $0.accountID == accountFilter }) {
                 Section {
                     NavigationLink {
-                        DraftsView()
+                        DraftsView(accountID: accountFilter)
                     } label: {
                         Label {
                             HStack {
                                 Text("On-device drafts")
                                 Spacer()
-                                Text(session.drafts.count, format: .number).foregroundStyle(.secondary)
+                                Text(session.drafts.filter { accountFilter == nil || $0.accountID == accountFilter }.count, format: .number).foregroundStyle(.secondary)
                             }
                         } icon: { Image(systemName: "doc") }
                     }
@@ -97,7 +97,9 @@ struct InboxView: View {
                     }
                 }
             }
-            if !accounts.isEmpty {
+            if mailbox == "Drafts" && labelFilter == nil {
+                DraftSections(accountID: accountFilter)
+            } else if !accounts.isEmpty {
                 Section {
                     ForEach(filtered) { message in
                         NavigationLink { GmailMessageView(message: message) } label: { CachedMessageRow(message: message) }

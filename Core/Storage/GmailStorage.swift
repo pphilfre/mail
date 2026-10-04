@@ -35,14 +35,21 @@ extension MailRepository {
                 row.cachedText = content.text.isEmpty ? nil : Data(content.text.utf8)
                 row.cachedHTML = content.html.isEmpty ? nil : Data(content.html.utf8)
                 let messageID = row.id
-                try context.delete(model: MailAttachment.self, where: #Predicate { $0.messageID == messageID })
+                let existingAttachments = try context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.messageID == messageID }))
+                var retained = Set<UUID>()
                 for part in content.attachments {
-                    let attachment = MailAttachment(accountID: accountID, messageID: row.id, partID: part.partId ?? "",
+                    let filename = MailMIME.decodedHeader(part.filename ?? "Attachment")
+                    let attachment = existingAttachments.first { $0.remoteID != nil && !retained.contains($0.id) && $0.partID == (part.partId ?? "") &&
+                        $0.remoteID == part.body?.attachmentId && $0.filename == filename && $0.byteCount == (part.body?.size ?? 0) &&
+                        $0.mimeType == (part.mimeType ?? "application/octet-stream") } ??
+                        MailAttachment(accountID: accountID, messageID: row.id, partID: part.partId ?? "",
                         filename: MailMIME.decodedHeader(part.filename ?? "Attachment"), mimeType: part.mimeType ?? "application/octet-stream",
                         byteCount: part.body?.size ?? 0)
                     attachment.remoteID = part.body?.attachmentId; attachment.contentID = part.header("Content-ID")
-                    context.insert(attachment)
+                    if attachment.modelContext == nil { context.insert(attachment) }
+                    retained.insert(attachment.id)
                 }
+                for attachment in existingAttachments where !retained.contains(attachment.id) { context.delete(attachment) }
                 let identity = "\(accountID.uuidString):\(dto.threadId)"
                 let thread = try context.fetch(FetchDescriptor<MailThread>(predicate: #Predicate { $0.identity == identity })).first
                 if let thread {

@@ -36,6 +36,8 @@ final class AppRuntime {
             self.repository = repository
             self.session = session
             self.gmail = GmailCoordinator(repository: repository)
+            let savedPaths = Set(try container.mainContext.fetch(FetchDescriptor<MailAttachment>()).compactMap(\.cachedRelativePath))
+            if let cache = gmail?.attachmentCache { Task { try? await cache.prune(keeping: savedPaths) } }
             storageFailed = false
         } catch {
             // No destructive reset, in-memory replacement or network fetch on storage failure.

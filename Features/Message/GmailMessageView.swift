@@ -57,9 +57,8 @@ struct GmailMessageView: View {
                         MailBodyView(html: row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText(row), remoteImages: remoteImages || loadImagesOnce)
                             .padding(.horizontal, -16)
                         ForEach(attachments.filter { $0.messageID == row.id }) { attachment in
-                            Label("\(attachment.filename) · \(attachment.byteCount.formatted()) bytes", systemImage: "paperclip").font(.caption)
+                            AttachmentRow(attachment: attachment)
                         }
-                        if attachments.contains(where: { $0.messageID == row.id }) { Text("Attachment download is coming in the reader stage.").font(.caption).foregroundStyle(.secondary) }
                         HStack {
                             Button("Reply") { reply(row, all: false) }
                             Button("Reply all") { reply(row, all: true) }

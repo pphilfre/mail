@@ -34,6 +34,15 @@ Search index construction now checks cancellation between documents, and the cac
 
 ## Still to implement
 
-General attachment transfer; unified draft navigation; background sync; permanent queued-operation recovery; conversation rows; counts; bulk actions/Undo; recipient autocomplete and validation; signatures/default-account settings; reader collapsing; adaptive iPad layout; later Zoho and push stages. Device visual/accessibility checks and live signed-device Gmail verification remain outstanding.
+Outgoing attachments; background sync; permanent queued-operation recovery; conversation rows; counts; bulk actions/Undo; recipient autocomplete and validation; signatures/default-account settings; reader collapsing; adaptive iPad layout; later Zoho and push stages. Device visual/accessibility checks and live signed-device Gmail verification remain outstanding.
+
+## Batch 4 — Unified drafts and received attachments
+
+- The Drafts mailbox and inbox shortcut use one account-scoped view of local edits and cached Gmail drafts. Durable provider draft/message links suppress duplicate Gmail rows without matching subjects. Local deletion explicitly preserves any Gmail copy.
+- Received attachments download on demand, open in native Quick Look, and share/save through the system share sheet. Protected files reopen offline. Sync preserves stable attachment identities and cached files; changed attachment parts invalidate their cached references.
+- Downloads are limited to 25 MB per file, with metadata and encoded/decoded size checks. Provider filenames cannot escape the account-specific cache directory. Account removal clears its files; unreferenced older files are pruned on storage open.
+- Existing schema V1 remains unchanged. HTML/file-containing remote drafts remain protected from the text composer. Outgoing attachments and automatic inclusion when forwarding remain deferred.
+
+Validation: six new unit tests and a Drafts-mailbox UI test added; macOS CI pending. Signed-device preview/share/offline checks remain necessary. The network transport buffers the JSON response before enforcing attachment payload limits; streaming transport is still future work.
 
 The [audit](ui-feature-audit.md) records the original findings. This page tracks implementation and verification separately.
