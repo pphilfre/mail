@@ -26,7 +26,11 @@ Added draft discard/persistence, stale-session, rich-draft protection, mailbox p
 - Account/mailbox selection persists across launches. New composers use the selected account when available.
 - Sample Unread and empty mailbox views now follow the selected mailbox instead of repeating all sample mail.
 
-Added connectivity transition, image-prompt, cached-reader failure, and sample-mailbox tests. macOS validation is pending.
+Added connectivity transition, image-prompt, cached-reader failure, and sample-mailbox tests. [macOS CI](https://github.com/pphilfre/mail/actions/runs/37214390140) passed the simulator build, all 49 unit tests, and all six UI tests for commit `039badf`. Results for later revisions are recorded in the [branch CI history](https://github.com/pphilfre/mail/actions?query=branch%3Acodex%2Flocal-mail-search).
+
+## Review follow-up — Cancel obsolete indexing
+
+Search index construction now checks cancellation between documents, and the cache-observing task forwards cancellation to its detached index build. This prevents obsolete builds from continuing when new cache batches arrive or search closes. An asynchronous unit test verifies that a cancelled build does not index its snapshot. Explicit send/upload also uses the editor's checkpoint so a provider error does not leave the local save indicator stuck on “Saving”. These follow-ups are included in the final CI gate.
 
 ## Still to implement
 

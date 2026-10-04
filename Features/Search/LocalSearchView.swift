@@ -39,7 +39,11 @@ struct LocalSearchView: View {
             .task(id: snapshot) {
                 indexing = true
                 let work = Task.detached(priority: .userInitiated) { MailSearchIndex(documents: snapshot) }
-                let updated = await work.value
+                let updated = await withTaskCancellationHandler {
+                    await work.value
+                } onCancel: {
+                    work.cancel()
+                }
                 guard !Task.isCancelled else { return }
                 index = updated
                 indexing = false

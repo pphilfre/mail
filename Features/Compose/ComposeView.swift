@@ -160,10 +160,9 @@ struct ComposeView: View {
     }
 
     private func perform(send: Bool) {
-        guard !working, !sendUnconfirmed, let gmail = runtime.gmail else { return }
+        guard !working, !sendUnconfirmed, let gmail = runtime.gmail, let editor else { return }
         autosaveTask?.cancel()
-        draft.updatedAt = Date()
-        do { try session.save(draft) } catch { saveError = error.localizedDescription; return }
+        do { try editor.checkpoint(draft, session: session) } catch { saveError = error.localizedDescription; return }
         working = true; saveError = nil
         Task {
             defer { working = false }

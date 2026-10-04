@@ -20,6 +20,7 @@ struct MailSearchIndex: Sendable {
 
     init(documents: [MailSearchDocument] = []) {
         for document in documents {
+            guard !Task.isCancelled else { return }
             let fields = document.fields.map(Self.normalize)
             let position = entries.count
             entries.append(Entry(document: document, fields: fields))

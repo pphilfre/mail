@@ -53,4 +53,13 @@ final class MailSearchTests: XCTestCase {
         XCTAssertEqual(after.matches("new"), [id])
         XCTAssertTrue(MailSearchIndex().matches("label").isEmpty)
     }
+
+    @MainActor func testCancelledBuildStopsBeforeIndexingDocuments() async {
+        let document = MailSearchDocument(id: UUID(), accountID: nil, fields: ["Should not build"])
+        // This task cannot start until the main actor yields; cancel it first.
+        let work = Task { MailSearchIndex(documents: [document]) }
+        work.cancel()
+        let index = await work.value
+        XCTAssertTrue(index.matches("build").isEmpty)
+    }
 }
