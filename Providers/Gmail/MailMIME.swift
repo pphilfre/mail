@@ -61,6 +61,18 @@ enum MailMIME {
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
     struct Content: Sendable { var text = ""; var html = ""; var attachments: [GmailPart] = [] }
+    /// Until rich composing exists, never replace a remote draft whose content we cannot round-trip.
+    static func canEditDraft(_ part: GmailPart?, depth: Int = 0) -> Bool {
+        guard let part, depth < 40 else { return false }
+        guard (part.filename ?? "").isEmpty,
+              !(part.header("Content-Disposition") ?? "").lowercased().hasPrefix("attachment") else { return false }
+        let mime = part.mimeType?.lowercased() ?? ""
+        if mime.hasPrefix("multipart/") {
+            guard let children = part.parts, !children.isEmpty else { return false }
+            return children.allSatisfy { canEditDraft($0, depth: depth + 1) }
+        }
+        return mime == "text/plain" && part.body?.attachmentId == nil
+    }
     static func inlineImages(_ root: GmailPart?, depth: Int = 0) -> [GmailPart] {
         guard let root, depth < 40 else { return [] }
         let safeTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"]

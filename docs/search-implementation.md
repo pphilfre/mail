@@ -9,6 +9,6 @@ The first audit improvement adds a native search destination to the inbox. Searc
 - Includes sample-mode search, an empty prompt, result counts, and no-results presentation.
 - Leaves the SwiftData schema unchanged. Search covers downloaded metadata, not the full remote mailbox or full message bodies.
 
-Validation: five focused search unit tests and a search UI flow were added. macOS CI is pending; this stage is not yet marked complete. Existing signed-device Gmail checks remain outstanding.
+Validation: [initial macOS CI](https://github.com/pphilfre/mail/actions/runs/37212517327) compiled the app and passed all 36 unit tests, including five search tests. The search UI assertion matched the underlying inbox; it now scopes assertions to the search results. Full CI is being rerun and this stage is not yet marked complete. Existing signed-device Gmail checks remain outstanding. See [implementation progress](improvement-progress.md).
 
 After this stage passes its build/test gate, continue with draft safety and the remaining audit improvements.

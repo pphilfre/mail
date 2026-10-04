@@ -98,9 +98,10 @@ private struct SearchResultsView: View {
                                         Text(account.email).font(.caption).foregroundStyle(.secondary).padding(.leading, 52)
                                     }
                                 }
-                            }
+                            }.accessibilityIdentifier("searchResultMail-\(id.uuidString)")
                         } else if let sample = samplesByID[id] {
                             NavigationLink { MessageView(message: sample) } label: { MessageRow(message: sample) }
+                                .accessibilityIdentifier("searchResultSample-\(sample.address)")
                         }
                     }
                 } header: {
@@ -111,6 +112,7 @@ private struct SearchResultsView: View {
             }
         }
         .listStyle(.plain)
+        .accessibilityIdentifier("searchResultsList")
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, isPresented: $searchPresented,

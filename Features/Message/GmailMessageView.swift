@@ -14,6 +14,7 @@ struct GmailMessageView: View {
     @State private var loadImagesOnce = false
     @State private var composing: LocalDraft?
     @State private var localError: String?
+    @State private var confirmingDraftDeletion = false
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
     private func bodyText(_ row: MailMessage) -> String {
         row.plainTextBody ?? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? row.snippet
@@ -67,17 +68,7 @@ struct GmailMessageView: View {
                         }
                     }
                     Button("Delete Gmail draft", role: .destructive) {
-                        Task {
-                            do {
-                                guard let gmail = runtime.gmail else { return }
-                                let draft = try await gmail.importDraft(message)
-                                if let id = try runtime.repository?.outgoing(draft.id)?.remoteDraftID {
-                                    try await gmail.client(message.accountID).deleteDraft(id)
-                                    if let row = try runtime.repository?.outgoing(draft.id) { runtime.repository?.context.delete(row); try runtime.repository?.context.save() }
-                                    try session.reloadDrafts(); await gmail.sync(message.accountID); dismiss()
-                                }
-                            } catch { localError = error.localizedDescription }
-                        }
+                        confirmingDraftDeletion = true
                     }
                 }
                 if let error = localError ?? runtime.gmail?.error { Text(error).foregroundStyle(.red) }
@@ -113,6 +104,17 @@ struct GmailMessageView: View {
             await runtime.gmail?.loadThread(message)
         }
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
+        .confirmationDialog("Delete this Gmail draft?", isPresented: $confirmingDraftDeletion, titleVisibility: .visible) {
+            Button("Delete draft", role: .destructive) {
+                Task {
+                    do {
+                        guard let gmail = runtime.gmail else { return }
+                        try await gmail.deleteRemoteDraft(message)
+                        try session.reloadDrafts(); dismiss()
+                    } catch { localError = error.localizedDescription }
+                }
+            }
+        }
     }
     private func reply(_ row: MailMessage, all: Bool) {
         let own = accounts.first { $0.id == row.accountID }?.email.lowercased() ?? ""
