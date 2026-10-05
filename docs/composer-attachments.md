@@ -21,6 +21,6 @@ The full simulator build, unit/UI suite, and device IPA build run on macOS GitHu
 
 ## Remaining gaps
 
-The next useful independent areas are reusable reply templates, label creation/rename, VIP/pinned conversations and adaptive iPad navigation. Background refresh and push need separate system/provisioning work; Zoho needs a provider implementation. Rich text, arbitrary remote attachment draft import and large-file cloud sharing remain outside this release.
+The same release adds the user-selected [email tasks and receipt organiser](mail-productivity.md). The next independent areas are reusable reply templates, label creation/rename, VIP/pinned conversations and adaptive iPad navigation. Background refresh and push need separate system/provisioning work; Zoho needs a provider implementation. Rich text, arbitrary remote attachment draft import and large-file cloud sharing remain outside this release.
 
 Provider evidence: [Gmail draft IDs and immutable messages](https://developers.google.com/workspace/gmail/api/guides/drafts), [Gmail MIME sending](https://developers.google.com/workspace/gmail/api/guides/sending). Picker evidence: [Apple file importer](https://developer.apple.com/documentation/swiftui/view/fileimporter(ispresented:allowedcontenttypes:allowsmultipleselection:oncompletion:)), [Photos picker items](https://developer.apple.com/documentation/photosui/photospickeritem).

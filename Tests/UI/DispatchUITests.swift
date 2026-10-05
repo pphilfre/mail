@@ -11,6 +11,62 @@ final class DispatchUITests: XCTestCase {
         add(attachment)
     }
 
+    func testMailTaskCanBeCreatedCompletedAndReopenedWithConversationLink() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launch()
+        let message = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 10)); message.tap()
+        app.buttons["More"].tap(); app.buttons["makeMailTaskButton"].tap()
+        let title = app.textFields["mailTaskTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        let notes = app.textViews["mailTaskNotes"]
+        notes.tap(); notes.typeText("Check the delivery date")
+        app.switches["mailTaskDueToggle"].tap()
+        app.buttons["saveMailTaskButton"].tap()
+        XCTAssertTrue(app.staticTexts["Task saved"].waitForExistence(timeout: 5))
+        let closeFeedback = app.buttons["Dismiss confirmation"]
+        if closeFeedback.exists { closeFeedback.tap() }
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openTasksButton"].tap()
+        let toggle = app.buttons["toggleTask-latest"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Check the delivery date"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["taskConversation-latest"].firstMatch.exists)
+        attachScreenshot("Tasks with a linked conversation", app: app)
+        toggle.tap()
+        XCTAssertFalse(toggle.exists)
+        app.segmentedControls["taskStatusFilter"].buttons["Completed"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
+        app.segmentedControls["taskStatusFilter"].buttons["Open"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+    }
+
+    func testReceiptIsDetectedAndCanBeReviewedWithoutProviderAccess() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_PRODUCTIVITY"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openReceiptsButton"].tap()
+        let receipt = app.descendants(matching: .any)["receipt-receipt-fixture"].firstMatch
+        XCTAssertTrue(receipt.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["GBP 22.00"].exists)
+        attachScreenshot("Local receipt organiser", app: app)
+        receipt.tap()
+        app.buttons["reviewReceiptButton"].tap()
+        let merchant = app.textFields["receiptMerchant"]
+        XCTAssertTrue(merchant.waitForExistence(timeout: 5))
+        merchant.tap(); merchant.typeText(" Shop")
+        app.buttons["saveReceiptButton"].tap()
+        XCTAssertTrue(app.staticTexts["Receipt saved"].waitForExistence(timeout: 5))
+        let closeFeedback = app.buttons["Dismiss confirmation"]
+        if closeFeedback.exists { closeFeedback.tap() }
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["Paper & Ink Shop"].waitForExistence(timeout: 5))
+    }
+
     func testAttachedDraftReopensAndRemovalPersistsAfterRelaunch() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"

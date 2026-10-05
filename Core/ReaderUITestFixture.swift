@@ -17,6 +17,14 @@ enum ReaderUITestFixture {
             message.isInbox = true; message.isRead = true; message.folderIDs = ["INBOX"]
             context.insert(message)
         }
+        if ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_PRODUCTIVITY"] == "YES" {
+            let receipt = MailMessage(accountID: account.id, remoteID: "receipt-fixture", remoteThreadID: "receipt-thread",
+                sender: MailAddress(name: "Paper & Ink", email: "receipts@example.com"),
+                subject: "Your receipt from Paper & Ink", snippet: "Order total £22.00", receivedAt: Date())
+            receipt.cachedText = Data("Receipt from Paper & Ink\nSubtotal £19.00\nTax £3.00\nOrder total £22.00\nOrder #0008".utf8)
+            receipt.isInbox = true; receipt.isRead = true; receipt.folderIDs = ["INBOX"]
+            context.insert(receipt)
+        }
         try context.save()
     }
 }

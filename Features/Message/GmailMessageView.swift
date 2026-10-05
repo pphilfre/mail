@@ -20,6 +20,8 @@ struct GmailMessageView: View {
     @State private var focusedMessage = false
     @State private var forwardingMessage: MailMessage?
     @State private var preparingForward = false
+    @State private var editingTask: MailTask?
+    @State private var editingReceipt: ReceiptEditContext?
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
     private func bodyText(_ row: MailMessage) -> String {
@@ -86,6 +88,21 @@ struct GmailMessageView: View {
                     triage(message.isStarred ? "unstar" : "star")
                 }
                 Menu("More", systemImage: "ellipsis.circle") {
+                    if !message.isDraft {
+                        Button("Make task", systemImage: "checklist") {
+                            do { editingTask = try runtime.repository?.task(for: message) }
+                            catch { localError = error.localizedDescription }
+                        }.accessibilityIdentifier("makeMailTaskButton")
+                        Button("Save receipt", systemImage: "receipt") {
+                            do {
+                                let source = ReceiptSource(message)
+                                let key = ReceiptOverride.prefix(message.accountID) + message.remoteID
+                                let value = try runtime.repository?.metadata(key).map(ReceiptOverride.decode)
+                                editingReceipt = ReceiptEditContext(source: source, detected: ReceiptDetector.detect(source), correction: value)
+                            } catch { localError = error.localizedDescription }
+                        }.accessibilityIdentifier("makeReceiptButton")
+                        Divider()
+                    }
                     Button(message.isRead ? "Mark unread" : "Mark read") { triage(message.isRead ? "unread" : "read") }
                     Button("Archive", systemImage: "archivebox") { triage("archive"); dismiss() }
                     Button(message.isSpam ? "Not spam" : "Move to Spam", systemImage: "exclamationmark.shield") {
@@ -111,6 +128,8 @@ struct GmailMessageView: View {
             await refreshThread()
         }
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
+        .sheet(item: $editingTask) { task in NavigationStack { MailTaskEditor(task: task) } }
+        .sheet(item: $editingReceipt) { context in NavigationStack { ReceiptEditor(context: context) } }
         .disabled(preparingForward)
         .confirmationDialog("Include attachments?", isPresented: Binding(
             get: { forwardingMessage != nil }, set: { if !$0 { forwardingMessage = nil } }
