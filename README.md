@@ -33,7 +33,7 @@ git tag v0.2.1
 git push origin v0.2.1
 ```
 
-The release workflow requires an already successful iOS CI run for the exact tagged commit, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`. If a tag is pushed before CI finishes, wait for CI and rerun the failed release workflow. The historical `v0.1.0` tag predates the Dispatch rename.
+The release workflow runs the full iOS CI suite for the tagged commit, then builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tests must pass before the device build or publication can start. Tags must use `vMAJOR.MINOR.PATCH`. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 

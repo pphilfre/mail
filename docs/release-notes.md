@@ -15,4 +15,6 @@ Tasks and receipt corrections stay on this device. Task due dates do not schedul
 
 The release retains the v0.4.0 conversation inbox, bulk actions/Undo, search filters/saved searches, account signatures, recipient assistance, UI redesign and Gmail pacing fixes. Automated tests use fixtures and do not send personal mail.
 
+Tag builds now run the full iOS test suite before building and publishing the device IPA.
+
 The IPA requires iOS 26 or later and is unsigned. Sign and install with your compatible sideloading tool and Apple account. Bundle identifier: dev.freddiephilpot.dispatch.

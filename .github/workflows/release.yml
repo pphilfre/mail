@@ -14,22 +14,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v5
-      - name: Require passing iOS CI for this exact commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          commit_sha="$(git rev-parse HEAD)"
-          passed_runs="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ios-ci.yml/runs" \
-            -f head_sha="$commit_sha" -f status=completed -f event=push \
-            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
-          if [[ "$passed_runs" -eq 0 ]]; then
-            echo "This commit has no passing iOS CI run. Wait for CI, then rerun this release workflow." >&2
-            exit 1
-          fi
+    uses: ./.github/workflows/ios-ci.yml
   release:
     needs: validate
     runs-on: macos-26
