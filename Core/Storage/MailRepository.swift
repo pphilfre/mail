@@ -19,7 +19,7 @@ final class MailRepository: DraftPersistence {
             predicate: #Predicate { $0.stateRaw == "draft" },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        return try context.fetch(descriptor).map(\.localDraft)
+        return try context.fetch(descriptor).map { try localDraft($0) }
     }
 
     func save(_ drafts: [LocalDraft]) throws {
@@ -31,10 +31,16 @@ final class MailRepository: DraftPersistence {
             let existing = try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.stateRaw == "draft" }))
             let incomingIDs = Set(drafts.map(\.id))
             let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
-            for row in existing where !incomingIDs.contains(row.id) { context.delete(row) }
+            for row in existing where !incomingIDs.contains(row.id) {
+                try removeDraftMetadata(row.id); context.delete(row)
+            }
             for draft in drafts {
-                if let row = byID[draft.id] { row.update(from: draft) }
+                if let row = byID[draft.id] {
+                    if row.accountID != draft.accountID { try setMetadata(DraftAttachments.revisionKey(row.id), value: nil) }
+                    row.update(from: draft)
+                }
                 else { context.insert(OutgoingMessage(draft: draft)) }
+                try saveAttachments(draft)
             }
             try context.save()
         }
@@ -49,7 +55,9 @@ final class MailRepository: DraftPersistence {
         let drafts = try legacy.load()
         try context.transaction {
             let existing = Set(try context.fetch(FetchDescriptor<OutgoingMessage>()).map(\.id))
-            for draft in drafts where !existing.contains(draft.id) { context.insert(OutgoingMessage(draft: draft)) }
+            for draft in drafts where !existing.contains(draft.id) {
+                context.insert(OutgoingMessage(draft: draft)); try saveAttachments(draft)
+            }
             context.insert(StoreMetadata(key: marker, value: "complete"))
             try context.save()
         }
@@ -82,6 +90,9 @@ final class MailRepository: DraftPersistence {
 
     func removeAccountData(id: UUID) throws {
         try context.transaction {
+            for row in try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == id })) {
+                try removeDraftMetadata(row.id)
+            }
             // Undo can span accounts; remove the whole record rather than retaining deleted identities.
             if let undo = try context.fetch(FetchDescriptor<StoreMetadata>(predicate: #Predicate { $0.key == "mail-triage-undo" })).first {
                 context.delete(undo)

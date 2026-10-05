@@ -1,12 +1,14 @@
-Dispatch v0.3.0 refreshes the inbox and reader while keeping native iOS 26 Liquid Glass controls.
+Dispatch v0.5.0 adds file and photo attachments to composing and forwarding.
 
-- New animated welcome screen with Google sign-in and a Zoho coming-soon placeholder.
-- Compact inbox header, left-hand account/mailbox drawer, full-width message rows and company website icons with initials fallback.
-- HTML email rendering, tappable links, selectable text and inline raster images.
-- Remote-image controls in Settings and a per-message load option; scripts and active web content remain blocked.
-- Custom left/right swipe actions, full-swipe preference, preview length and light/dark appearance.
-- Bounded retries for Gmail read throttling and temporary server failures, clearer access-denied diagnostics, and preservation of partially downloaded mail.
+- Attach files or photos, review names/sizes, preview with Quick Look and remove files before sending.
+- Attachments persist with local drafts and survive relaunch or discarding edits.
+- Send attachments and save/update Dispatch-created attachment drafts in Gmail.
+- Choose whether a forwarded message includes its original attachments.
+- Gmail draft revision checks protect copies edited elsewhere from replacement.
+- Missing-file reminders now recognise attached files; uncertain-send copies retain attachment previews.
 
-Company icons are decorative website icons, not verified sender identities. Zoho, push notifications and general attachment transfer remain deferred. Forwards contain text only. Live Google sign-in and sync must still be checked on a signed device; CI uses fixtures and never sends personal mail.
+Up to 20 files and 20 MB total attachment data per message. Larger files need a smaller copy or sharing link. Arbitrary Gmail drafts containing attachments or rich formatting remain protected and should be edited in Gmail. Background refresh, push notifications and Zoho remain deferred.
 
-The IPA requires iOS 26 or later and is unsigned. Sign and install it with your compatible sideloading tool and Apple account. Bundle identifier: dev.freddiephilpot.dispatch.
+The release retains the v0.4.0 conversation inbox, bulk actions/Undo, search filters/saved searches, account signatures, recipient assistance, UI redesign and Gmail pacing fixes. Automated tests use fixtures and do not send personal mail.
+
+The IPA requires iOS 26 or later and is unsigned. Sign and install with your compatible sideloading tool and Apple account. Bundle identifier: dev.freddiephilpot.dispatch.

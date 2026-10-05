@@ -47,6 +47,10 @@ struct DraftSections: View {
                         Text(draft.to.isEmpty ? "No recipients" : draft.to)
                             .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                         Text(draft.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                        if !draft.attachments.isEmpty {
+                            Label("\(draft.attachments.count) attachment\(draft.attachments.count == 1 ? "" : "s")", systemImage: "paperclip")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Text(accountName(draft.accountID)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         HStack {
                             Text(hasGmailCopy(draft) ? "Local edits · Gmail copy" : "On this device")

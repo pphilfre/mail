@@ -42,6 +42,10 @@ New unit coverage checks conversation account isolation, empty thread IDs, batch
 
 New UI coverage uses the existing provider-free reader fixture for grouped bulk archive/Undo, filtered operator search, and invalid-recipient Send gating. Existing draft, reading and sample-mail workflows remain in the suite.
 
-The initial combined macOS CI snapshot compiled successfully and passed all 78 unit tests. Its UI run caught a recipient-editing issue and ambiguous Undo/mailbox accessibility identifiers; those are being corrected before the final gate. Simulator screenshots of inbox, mailbox, reader, draft confirmation and Settings were exported for review. Final results will be recorded here.
+The final combined snapshot 6d8b12af5e7a487919773eb48c6315e3b5db21c2 compiled successfully and passed all 78 unit tests and all 14 UI tests, with zero failures. This includes the coordinated UI redesign and Gmail pacing/recovery changes. [CI run 37234045937](https://github.com/pphilfre/mail/actions/runs/37234045937), [draft PR #3](https://github.com/pphilfre/mail/pull/3).
+
+The first UI gate exposed a recipient-editing issue and ambiguous Undo/mailbox accessibility identifiers. The final source corrects those issues, keeps Undo visible until its durable expiry, and restores cached account/label counts. Exported recipient and conversation-inbox screenshots were reviewed: the address field returns to editing with its inline error visible, and the compact conversation row retains scope, count and navigation controls.
+
+The matching PR gate also passed all 92 tests. A [focused reader check](https://github.com/pphilfre/mail/actions/runs/37235775228) on 743f2d9 passed the additional body-loaded assertion and produced a fully rendered screenshot. The follow-up changes strengthen screenshot timing and allow optional targeted manual CI runs; the validated application source is unchanged.
 
 Counts and search retain the existing downloaded-mail coverage explanation. Signed-device Gmail, VoiceOver, large text, iPhone landscape and iPad checks remain required.

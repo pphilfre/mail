@@ -7,12 +7,12 @@ The brief requires implementation, build/test, fixes and documentation at each s
 | 1 — Foundation | Complete | [macOS CI passed](https://github.com/pphilfre/mail/actions/runs/37123967712): simulator build, 4 unit tests and 3 UI tests. |
 | 2 — Windows / Actions | Complete | [Dispatch release passed](https://github.com/pphilfre/mail/actions/runs/37125945882), including device build, IPA packaging and upload. |
 | 3 — SwiftData | Complete | [Storage CI passed](https://github.com/pphilfre/mail/actions/runs/37127210621), including actual simulator Keychain access. |
-| 4 — Gmail | Implemented; validation pending | Native OAuth/PKCE, REST DTOs, cached inbox/threads/labels, incremental sync, queued actions, drafts and sending. Full suite is being rerun after MIME validation fix. |
+| 4 — Gmail | Implemented and CI verified; live device check pending | [CI passed](https://github.com/pphilfre/mail/actions/runs/37130336912): simulator build, 26 unit tests and 3 UI tests. OAuth console/provisioning and actual delivery need the device checklist. |
 | 5 — Zoho | Not started | OAuth client and data centre; verify official provider capabilities. |
-| 6 — Unified inbox | Not started | Real cached account data and queued actions. |
-| 7 — Reader / compose | Not started | Untrusted HTML, attachments, provider send/reply and drafts. |
+| 6 — Unified inbox | Gmail subset implemented | Multiple Gmail accounts, account/mailbox/label filtering and native swipe actions. Zoho unification remains deferred. |
+| 7 — Reader / compose | Gmail text subset implemented | Cached threads, safe HTML-to-text, replies/forwarding, MIME sending and local/server drafts. Rich HTML and attachment transfer remain. |
 | 8 — Search | Not started | Indexed local search without per-keystroke provider requests. |
-| 9 — Offline sync | Not started | Durable queue, retries and lifecycle sync. |
+| 9 — Offline sync | Gmail subset implemented | Durable optimistic queue, launch/foreground/pull retries and protected uncertain sends. Network-return and background scheduling remain. |
 | 10 — Notification backend | Not started | Deployment choice and current official Zoho capability research. |
 | 11 — APNs | Not started | Apple signing, provisioning, backend device registration. |
 | 12 — Polish | Not started | All functional gates must pass first. |
@@ -49,3 +49,5 @@ Windows can inspect source and validate workflow/manifest syntax. It cannot comp
 - Initial All Mail/Inbox fetch and mailbox selection cache recent mail; older All Mail pages load on demand. Rich HTML and attachment transfer remain Stage 7. Zoho and push are deferred at the user's request.
 - [First Gmail test run](https://github.com/pphilfre/mail/actions/runs/37129179809): app compiled; 23 of 24 unit tests and all three UI tests passed. A header-injection test found Swift's CRLF grapheme handling could bypass character checks. Scalar-based control-character validation replaces those checks; the full suite must pass before release.
 - Real Google consent and email delivery require the signed device smoke test in [OAuth setup](oauth-setup.md); CI never logs into a personal account or sends real mail.
+- [Gmail validation passed](https://github.com/pphilfre/mail/actions/runs/37130336912) for commit `3e48f59`: simulator build, all 26 unit tests (including 14 Gmail tests) and all three UI tests. Header control characters, Unicode MIME folding, history pagination/failure recovery, expired cursors, draft-create uncertainty and reply recipient handling are covered. Tag `v0.2.0` points to this exact verified commit.
+- [Gmail release passed](https://github.com/pphilfre/mail/actions/runs/37131447707): exact-commit CI gate, physical-device build, unsigned IPA packaging and release upload. [Dispatch v0.2.0](https://github.com/pphilfre/mail/releases/tag/v0.2.0) contains the IPA and SHA-256 checksum. Live OAuth and mail delivery remain the device verification boundary.

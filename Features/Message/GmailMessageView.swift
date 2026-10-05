@@ -18,6 +18,8 @@ struct GmailMessageView: View {
     @State private var confirmingDraftDeletion = false
     @State private var loadingThread = false
     @State private var focusedMessage = false
+    @State private var forwardingMessage: MailMessage?
+    @State private var preparingForward = false
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
     private func bodyText(_ row: MailMessage) -> String {
@@ -31,6 +33,7 @@ struct GmailMessageView: View {
                     .font(.largeTitle.weight(.bold)).tracking(-0.8).textSelection(.enabled)
                     .padding(.horizontal, 4).padding(.vertical, 8)
                 if loadingThread { ProgressView("Updating conversation…").font(.caption) }
+                if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(error).font(.callout).foregroundStyle(.secondary)
@@ -108,6 +111,16 @@ struct GmailMessageView: View {
             await refreshThread()
         }
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
+        .disabled(preparingForward)
+        .confirmationDialog("Include attachments?", isPresented: Binding(
+            get: { forwardingMessage != nil }, set: { if !$0 { forwardingMessage = nil } }
+        ), titleVisibility: .visible) {
+            if let row = forwardingMessage {
+                Button("Forward with attachments") { prepareForward(row) }
+                Button("Forward text only") { composing = forwardDraft(row) }
+            }
+            Button("Cancel", role: .cancel) { forwardingMessage = nil }
+        } message: { Text("Attached files will be downloaded and copied into your new draft.") }
         .confirmationDialog("Delete this Gmail draft?", isPresented: $confirmingDraftDeletion, titleVisibility: .visible) {
             Button("Delete draft", role: .destructive) {
                 Task {
@@ -143,8 +156,37 @@ struct GmailMessageView: View {
             inReplyTo: row.internetMessageID, referencesHeader: references.isEmpty ? nil : references)
     }
     private func forward(_ row: MailMessage) {
-        composing = LocalDraft(subject: "Fwd: " + row.subject,
+        guard !preparingForward else { return }
+        if attachments.contains(where: { $0.messageID == row.id }) { forwardingMessage = row }
+        else { composing = forwardDraft(row) }
+    }
+    private func forwardDraft(_ row: MailMessage) -> LocalDraft {
+        LocalDraft(subject: "Fwd: " + row.subject,
             body: "\n\nForwarded message\nFrom: \(row.senderEmail)\nDate: \(row.receivedAt.formatted())\nSubject: \(row.subject)\n\n" + bodyText(row), accountID: row.accountID)
-        if attachments.contains(where: { $0.messageID == row.id }) { localError = "This forward contains message text only. Attachments are not included yet." }
+    }
+    private func prepareForward(_ row: MailMessage) {
+        guard let gmail = runtime.gmail else { return }
+        let files = attachments.filter { $0.messageID == row.id }
+        preparingForward = true; localError = nil
+        Task { @MainActor in
+            defer { preparingForward = false }
+            do {
+                guard files.count <= DraftAttachmentStore.maximumCount else { throw ComposeAttachmentError.tooMany }
+                var total = 0
+                for file in files {
+                    guard file.byteCount >= 0, file.byteCount <= DraftAttachmentStore.maximumBytes - total else { throw ComposeAttachmentError.tooLarge }
+                    total += file.byteCount
+                }
+                var draft = forwardDraft(row)
+                for file in files {
+                    let url = try await gmail.download(file)
+                    let item = try await runtime.draftAttachments.importFile(url, draftID: draft.id, existing: draft.attachments)
+                    draft.attachments.append(item)
+                }
+                // Open only when every selected file is preserved; failure never sends a partial copy.
+                try session.save(draft)
+                composing = draft
+            } catch { localError = error.localizedDescription }
+        }
     }
 }

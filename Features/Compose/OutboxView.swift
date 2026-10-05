@@ -32,6 +32,7 @@ struct OutboxView: View {
                                     if !row.ccRaw.isEmpty { Text("Cc: " + row.ccRaw).font(.caption).foregroundStyle(.secondary) }
                                     if !row.bccRaw.isEmpty { Text("Bcc: " + row.bccRaw).font(.caption).foregroundStyle(.secondary) }
                                     Text(row.body).frame(maxWidth: .infinity, alignment: .leading)
+                                    SavedOutgoingAttachmentsView(outgoingID: row.id)
                                 }.padding().textSelection(.enabled)
                             }.navigationTitle("Saved copy").navigationBarTitleDisplayMode(.inline)
                         } label: {

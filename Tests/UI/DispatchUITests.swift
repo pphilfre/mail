@@ -11,6 +11,28 @@ final class DispatchUITests: XCTestCase {
         add(attachment)
     }
 
+    func testAttachedDraftReopensAndRemovalPersistsAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_DRAFT_ATTACHMENT"] = "YES"
+        app.launch()
+        app.descendants(matching: .any)["draftsShortcut"].tap()
+        let draft = app.staticTexts["Attachment test draft"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 10)); draft.tap()
+        let remove = app.buttons["removeAttachment-fixture.txt"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["attachFileButton"].exists)
+        XCTAssertTrue(app.buttons["attachPhotoButton"].exists)
+        attachScreenshot("Composer with persisted attachment", app: app)
+        remove.tap()
+        app.buttons["saveDraftButton"].tap()
+        app.terminate(); app.launch()
+        app.descendants(matching: .any)["draftsShortcut"].tap()
+        XCTAssertTrue(draft.waitForExistence(timeout: 5)); draft.tap()
+        XCTAssertFalse(app.buttons["removeAttachment-fixture.txt"].exists)
+        XCTAssertEqual(app.textViews["composeBody"].value as? String, "Keep this body")
+    }
+
     func testGroupedBulkArchiveCanBeUndoneWithoutProviderAccess() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"

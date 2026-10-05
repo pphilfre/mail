@@ -59,7 +59,7 @@ enum GmailError: LocalizedError, Equatable {
         case .invalidRecipients: "Enter valid email addresses. Recipient and subject headers must not contain line breaks."
         case .uncertainSend: "Sending could not be confirmed. Check Sent in Gmail before creating another copy. Dispatch will not resend this message automatically."
         case .uncertainDraft: "The Gmail draft upload could not be confirmed. Your local draft is safe. Check Gmail Drafts, then try Save to Gmail again; Dispatch will look for the existing copy before creating another."
-        case .unsupportedDraft: "This Gmail draft contains formatting or attachments that Dispatch cannot preserve yet. Edit or send it in Gmail to keep the original content."
+        case .unsupportedDraft: "This Gmail draft changed elsewhere or contains content Dispatch cannot preserve. Edit or send it in Gmail to keep the original content."
         case .busy: "Wait for this account’s current operation to finish, then try again."
         }
     }

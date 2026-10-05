@@ -6,6 +6,7 @@ import SwiftData
 @Observable
 final class AppRuntime {
     let connectivity = NetworkConnectivity()
+    let draftAttachments = DraftAttachmentStore()
     var container: ModelContainer?
     var session: AppSession?
     var storageFailed = false
@@ -46,9 +47,26 @@ final class AppRuntime {
             self.container = container
             self.repository = repository
             self.session = session
-            self.gmail = readerFixture ? nil : GmailCoordinator(repository: repository)
+            self.gmail = readerFixture ? nil : GmailCoordinator(repository: repository, draftAttachments: draftAttachments)
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_DRAFT_ATTACHMENT"] == "YES" {
+                let fixtureID = UUID(uuidString: "C0626EB5-478F-4272-BD4E-C102B61EB052")!
+                if !session.drafts.contains(where: { $0.id == fixtureID }) {
+                    Task { @MainActor in
+                        do {
+                            var draft = LocalDraft(id: fixtureID, subject: "Attachment test draft", body: "Keep this body")
+                            let item = try await draftAttachments.store(Data("Fixture attachment".utf8), filename: "fixture.txt",
+                                mimeType: "text/plain", draftID: draft.id, existing: [])
+                            draft.attachments = [item]; try session.save(draft)
+                        } catch { session.storageError = error.localizedDescription }
+                    }
+                }
+            }
+            #endif
             let savedPaths = Set(try container.mainContext.fetch(FetchDescriptor<MailAttachment>()).compactMap(\.cachedRelativePath))
             if let cache = gmail?.attachmentCache { Task { try? await cache.prune(keeping: savedPaths) } }
+            let draftIDs = Set(try container.mainContext.fetch(FetchDescriptor<OutgoingMessage>()).map(\.id))
+            Task { try? await draftAttachments.prune(keeping: draftIDs) }
             storageFailed = false
         } catch {
             // No destructive reset, in-memory replacement or network fetch on storage failure.
