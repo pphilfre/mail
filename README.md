@@ -4,7 +4,7 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-The released v0.4.0 app passed its full macOS CI gate and device IPA build. The next release, v0.5.0, adds [compose and forward attachments](docs/composer-attachments.md), with all builds and tests running on GitHub Actions. See the [everyday feature wave](docs/feature-wave.md) and [signed device checklist](docs/oauth-setup.md).
+The released v0.4.0 app passed its full macOS CI gate and device IPA build. The next release, v0.5.0, adds [email tasks and a receipt organiser](docs/mail-productivity.md) plus [compose and forward attachments](docs/composer-attachments.md), with all builds and tests running on GitHub Actions. See the [everyday feature wave](docs/feature-wave.md) and [signed device checklist](docs/oauth-setup.md).
 
 Download the latest IPA from [Dispatch releases](https://github.com/pphilfre/mail/releases). The IPA requires re-signing with your sideloading tool.
 

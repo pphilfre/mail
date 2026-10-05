@@ -78,6 +78,12 @@ enum ReceiptDetector {
         return candidates.count == 1 ? candidates.first : nil
     }
     private static func firstMoney(in text: String) -> ReceiptMoney? { moneyMatches(in: text).first }
+    static func enteredAmount(_ input: String) -> Decimal? {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: #"^[0-9]+(?:[.,][0-9]{1,2})?$"#, options: .regularExpression) != nil,
+              value.filter(\.isNumber).count <= 12 else { return nil }
+        return Decimal(string: value.replacingOccurrences(of: ",", with: "."), locale: Locale(identifier: "en_US_POSIX"))
+    }
     private static func moneyMatches(in text: String) -> [ReceiptMoney] {
         let codes = "GBP|EUR|USD|CAD|AUD|NZD|CHF|JPY|INR"
         let currency = "(?:" + codes + "|[£€$¥])"

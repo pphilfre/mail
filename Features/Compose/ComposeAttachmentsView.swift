@@ -78,7 +78,9 @@ struct ComposeAttachmentsView: View {
                 for photo in selection {
                     do {
                         guard let data = try await photo.loadTransferable(type: Data.self) else { throw ComposeAttachmentError.unavailable }
-                        let type = photo.supportedContentTypes.first { $0.conforms(to: .image) } ?? .jpeg
+                        let type = photo.supportedContentTypes.first {
+                            $0.conforms(to: .image) && $0.preferredFilenameExtension != nil && $0.preferredMIMEType != nil
+                        } ?? .jpeg
                         let name = "Photo-\(UUID().uuidString.prefix(8)).\(type.preferredFilenameExtension ?? "jpg")"
                         let item = try await runtime.draftAttachments.store(data, filename: name,
                             mimeType: type.preferredMIMEType ?? "application/octet-stream", draftID: draftID, existing: attachments)

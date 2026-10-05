@@ -89,6 +89,8 @@ final class MailProductivityTests: XCTestCase {
         XCTAssertNil(ReceiptDetector.decimal("1,23,456"))
         XCTAssertNil(ReceiptDetector.decimal("123.45.67"))
         XCTAssertNil(ReceiptDetector.decimal("-20.00"))
+        XCTAssertEqual(ReceiptDetector.enteredAmount("12,34"), Decimal(string: "12.34"))
+        XCTAssertNil(ReceiptDetector.enteredAmount("1.234"), "Do not interpret an entered decimal as a thousands value")
     }
     func testReceiptAvoidsPromotionsFailuresAndWorksFromCachedHTML() {
         let id = UUID()

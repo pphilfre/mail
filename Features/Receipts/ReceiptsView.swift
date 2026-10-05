@@ -93,7 +93,8 @@ struct ReceiptsView: View {
                     .disabled(receipts.isEmpty || scanning)
             }
         }
-        .fileExporter(isPresented: $exporting, document: ReceiptCSVDocument(text: ReceiptExport.csv(receipts)), contentType: .commaSeparatedText, defaultFilename: "Dispatch receipts") {
+        .fileExporter(isPresented: $exporting, document: ReceiptCSVDocument(text: ReceiptExport.csv(receipts,
+            accountNames: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.email) }))), contentType: .commaSeparatedText, defaultFilename: "Dispatch receipts") {
             if case .failure(let error) = $0 { errorMessage = error.localizedDescription }
         }
         .sheet(item: $editing) { context in NavigationStack { ReceiptEditor(context: context) } }
@@ -140,7 +141,7 @@ struct ReceiptsView: View {
         }
     }
     private func exclude(_ receipt: ReceiptSummary) {
-        var value = ReceiptOverride(accountID: receipt.accountID, remoteID: receipt.remoteID)
+        var value = corrections[ReceiptOverride.prefix(receipt.accountID) + receipt.remoteID] ?? ReceiptOverride(accountID: receipt.accountID, remoteID: receipt.remoteID)
         value.inclusion = "exclude"
         do { try runtime.repository?.saveReceipt(value) }
         catch { errorMessage = error.localizedDescription }
@@ -227,7 +228,7 @@ struct ReceiptEditor: View {
         value.amountReviewed = true
         let input = amount.trimmingCharacters(in: .whitespacesAndNewlines)
         if !input.isEmpty {
-            guard let decimal = ReceiptDetector.decimal(input) else { errorMessage = ReceiptError.invalidAmount.localizedDescription; return }
+            guard let decimal = ReceiptDetector.enteredAmount(input) else { errorMessage = ReceiptError.invalidAmount.localizedDescription; return }
             value.money = ReceiptMoney(amount: decimal, currency: currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
         }
         do { try runtime.repository?.saveReceipt(value); feedback.show("Receipt saved", symbol: "receipt"); dismiss() }
@@ -244,17 +245,17 @@ struct ReceiptCSVDocument: FileDocument {
 }
 
 enum ReceiptExport {
-    static func csv(_ receipts: [ReceiptSummary]) -> String {
+    static func csv(_ receipts: [ReceiptSummary], accountNames: [UUID: String] = [:]) -> String {
         func cell(_ value: String) -> String {
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             let safe = trimmed.first.map { "=+-@".contains($0) } == true ? "'" + value : value
             return "\"" + safe.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }
         let rows = receipts.map { receipt in
-            [receipt.receivedAt.ISO8601Format(), receipt.merchant, receipt.kind,
+            [receipt.receivedAt.ISO8601Format(), accountNames[receipt.accountID] ?? "", receipt.merchant, receipt.kind,
              receipt.money.map { NSDecimalNumber(decimal: $0.amount).stringValue } ?? "",
              receipt.money?.currency ?? "", receipt.subject, receipt.senderEmail, receipt.reviewed ? "Reviewed" : "Detected"].map(cell).joined(separator: ",")
         }
-        return (["Date,Merchant,Type,Amount,Currency,Subject,Sender,Status"] + rows).joined(separator: "\r\n") + "\r\n"
+        return (["Date,Account,Merchant,Type,Amount,Currency,Subject,Sender,Status"] + rows).joined(separator: "\r\n") + "\r\n"
     }
 }
