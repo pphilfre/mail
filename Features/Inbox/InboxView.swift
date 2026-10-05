@@ -25,9 +25,13 @@ struct InboxView: View {
     @State private var showingCompose = false
     @State private var showingTasks = false
     @State private var showingReceipts = false
+    @State private var showingAttachments = false
+    @State private var showingPeople = false
+    @State private var showingCollections = false
+    @State private var showingSubscriptions = false
     @State private var quickFilter = InboxQuickFilter.all
     @State private var sheetDestination: SheetDestination?
-    private enum SheetDestination { case accounts, settings, tasks, receipts }
+    private enum SheetDestination { case accounts, settings, tasks, receipts, attachments, people, collections, subscriptions }
     @State private var selecting = false
     @State private var selectedIDs = Set<String>()
     @State private var confirmingTrash = false
@@ -112,7 +116,11 @@ struct InboxView: View {
                 openAccounts: { sheetDestination = .accounts; showingDrawer = false },
                 openSettings: { sheetDestination = .settings; showingDrawer = false },
                 openTasks: { sheetDestination = .tasks; showingDrawer = false },
-                openReceipts: { sheetDestination = .receipts; showingDrawer = false })
+                openReceipts: { sheetDestination = .receipts; showingDrawer = false },
+                openAttachments: { sheetDestination = .attachments; showingDrawer = false },
+                openPeople: { sheetDestination = .people; showingDrawer = false },
+                openCollections: { sheetDestination = .collections; showingDrawer = false },
+                openSubscriptions: { sheetDestination = .subscriptions; showingDrawer = false })
         }
         .sheet(isPresented: $showingAccounts) {
             NavigationStack { AccountsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAccounts = false } } } }
@@ -138,6 +146,30 @@ struct InboxView: View {
             NavigationStack {
                 ReceiptsView(accountID: accountFilter)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingReceipts = false } } }
+            }.modifier(MailFeedbackOverlay(playsHaptics: false))
+        }
+        .sheet(isPresented: $showingAttachments) {
+            NavigationStack {
+                AttachmentLibraryView(accountID: accountFilter)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAttachments = false } } }
+            }.modifier(MailFeedbackOverlay(playsHaptics: false))
+        }
+        .sheet(isPresented: $showingPeople) {
+            NavigationStack {
+                PeopleView(accountID: accountFilter)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingPeople = false } } }
+            }.modifier(MailFeedbackOverlay(playsHaptics: false))
+        }
+        .sheet(isPresented: $showingCollections) {
+            NavigationStack {
+                CollectionsView(accountID: accountFilter)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingCollections = false } } }
+            }.modifier(MailFeedbackOverlay(playsHaptics: false))
+        }
+        .sheet(isPresented: $showingSubscriptions) {
+            NavigationStack {
+                SubscriptionsView(accountID: accountFilter)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSubscriptions = false } } }
             }.modifier(MailFeedbackOverlay(playsHaptics: false))
         }
         .onChange(of: mailbox) { _, _ in quickFilter = .all; loadMailbox() }
@@ -307,6 +339,10 @@ struct InboxView: View {
             Divider()
             Button("Tasks", systemImage: "checklist") { showingTasks = true }.accessibilityIdentifier("openTasksButton")
             Button("Receipts", systemImage: "receipt") { showingReceipts = true }.accessibilityIdentifier("openReceiptsButton")
+            Button("Attachments", systemImage: "paperclip") { showingAttachments = true }.accessibilityIdentifier("openAttachmentsButton")
+            Button("People", systemImage: "person.2") { showingPeople = true }.accessibilityIdentifier("openPeopleButton")
+            Button("Collections", systemImage: "folder") { showingCollections = true }.accessibilityIdentifier("openCollectionsButton")
+            Button("Subscriptions", systemImage: "newspaper") { showingSubscriptions = true }.accessibilityIdentifier("openSubscriptionsButton")
         } label: {
             Group {
                 if let account = accounts.first(where: { $0.id == accountFilter }) { AccountBadge(account: account) }
@@ -347,6 +383,10 @@ struct InboxView: View {
         case .settings: showingSettings = true
         case .tasks: showingTasks = true
         case .receipts: showingReceipts = true
+        case .attachments: showingAttachments = true
+        case .people: showingPeople = true
+        case .collections: showingCollections = true
+        case .subscriptions: showingSubscriptions = true
         case nil: break
         }
         sheetDestination = nil

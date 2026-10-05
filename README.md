@@ -6,6 +6,8 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 The released v0.4.0 app passed its full macOS CI gate and device IPA build. The next release, v0.5.0, adds [email tasks and a receipt organiser](docs/mail-productivity.md) plus [compose and forward attachments](docs/composer-attachments.md), with all builds and tests running on GitHub Actions. See the [everyday feature wave](docs/feature-wave.md) and [signed device checklist](docs/oauth-setup.md).
 
+The v0.5.0 source is preserved at its release tag. A separate v0.6.0 development wave adds [sender profiles and an attachment library](docs/people-and-attachments.md), [project collections and a subscription centre](docs/collections-and-subscriptions.md). Its iOS build and tests are deferred while GitHub recovers; these features have not yet passed the macOS CI gate. Further proposals are in the [feature ideas](docs/feature-ideas.md).
+
 Download the latest IPA from [Dispatch releases](https://github.com/pphilfre/mail/releases). The IPA requires re-signing with your sideloading tool.
 
 Your supplied Google iOS client is configured. Follow the [OAuth setup guide](docs/oauth-setup.md) to confirm Gmail API access, your test user and the registered Dispatch bundle ID. Zoho is deferred.

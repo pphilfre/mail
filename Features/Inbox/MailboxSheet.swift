@@ -16,6 +16,10 @@ struct MailboxSheet: View {
     let openSettings: () -> Void
     let openTasks: () -> Void
     let openReceipts: () -> Void
+    let openAttachments: () -> Void
+    let openPeople: () -> Void
+    let openCollections: () -> Void
+    let openSubscriptions: () -> Void
 
     private var selectedAccount: MailAccount? { accounts.first { $0.id.uuidString == account } }
 
@@ -67,6 +71,14 @@ struct MailboxSheet: View {
                             .buttonStyle(.plain).accessibilityIdentifier("mailbox-Tasks")
                         Button(action: openReceipts) { mailboxRow("Receipts", symbol: "receipt", selected: false) }
                             .buttonStyle(.plain).accessibilityIdentifier("mailbox-Receipts")
+                        Button(action: openAttachments) { mailboxRow("Attachments", symbol: "paperclip", selected: false) }
+                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Attachments")
+                        Button(action: openPeople) { mailboxRow("People", symbol: "person.2", selected: false) }
+                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-People")
+                        Button(action: openCollections) { mailboxRow("Collections", symbol: "folder", selected: false) }
+                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Collections")
+                        Button(action: openSubscriptions) { mailboxRow("Subscriptions", symbol: "newspaper", selected: false) }
+                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Subscriptions")
                     }
                     Text("Counts include mail saved on this device.")
                         .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 14)

@@ -22,6 +22,8 @@ struct GmailMessageView: View {
     @State private var preparingForward = false
     @State private var editingTask: MailTask?
     @State private var editingReceipt: ReceiptEditContext?
+    @State private var senderProfile: SenderProfileRequest?
+    @State private var addingToCollection = false
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
     private func bodyText(_ row: MailMessage) -> String {
@@ -54,7 +56,8 @@ struct GmailMessageView: View {
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
                         attachments: attachments.filter { $0.messageID == row.id }, remoteImages: remoteImages || loadImagesOnce,
-                        onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) })
+                        onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) },
+                        onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) })
                         .id(row.id)
                 }
                 if message.isDraft {
@@ -89,6 +92,8 @@ struct GmailMessageView: View {
                 }
                 Menu("More", systemImage: "ellipsis.circle") {
                     if !message.isDraft {
+                        Button("Add to collection", systemImage: "folder.badge.plus") { addingToCollection = true }
+                            .accessibilityIdentifier("addToCollectionButton")
                         Button("Make task", systemImage: "checklist") {
                             do { editingTask = try runtime.repository?.task(for: message) }
                             catch { localError = error.localizedDescription }
@@ -130,6 +135,13 @@ struct GmailMessageView: View {
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
         .sheet(item: $editingTask) { task in NavigationStack { MailTaskEditor(task: task) } }
         .sheet(item: $editingReceipt) { context in NavigationStack { ReceiptEditor(context: context) } }
+        .sheet(isPresented: $addingToCollection) { NavigationStack { AddToCollectionView(message: message) } }
+        .sheet(item: $senderProfile) { person in
+            NavigationStack {
+                SenderProfileView(email: person.email, name: person.name, initialAccountID: person.accountID)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { senderProfile = nil } } }
+            }
+        }
         .disabled(preparingForward)
         .confirmationDialog("Include attachments?", isPresented: Binding(
             get: { forwardingMessage != nil }, set: { if !$0 { forwardingMessage = nil } }

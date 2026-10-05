@@ -90,6 +90,8 @@ final class MailRepository: DraftPersistence {
 
     func removeAccountData(id: UUID) throws {
         try context.transaction {
+            try removeSenderProfileAccount(id)
+            try removeCollectionAccount(id)
             for row in try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == id })) {
                 try removeDraftMetadata(row.id)
             }
@@ -99,7 +101,8 @@ final class MailRepository: DraftPersistence {
             }
             for metadata in try context.fetch(FetchDescriptor<StoreMetadata>())
                 where metadata.key.hasPrefix(GmailMailbox.pagePrefix(id)) || metadata.key.hasPrefix(DraftLinks.prefix(id)) ||
-                    metadata.key.hasPrefix(MailTask.prefix(id)) || metadata.key.hasPrefix(ReceiptOverride.prefix(id)) { context.delete(metadata) }
+                    metadata.key.hasPrefix(MailTask.prefix(id)) || metadata.key.hasPrefix(ReceiptOverride.prefix(id)) ||
+                    metadata.key.hasPrefix(SubscriptionRule.prefix(id)) { context.delete(metadata) }
             try context.delete(model: MailAttachment.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: PendingMailOperation.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: OutgoingMessage.self, where: #Predicate { $0.accountID == id })

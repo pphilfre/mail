@@ -9,12 +9,15 @@ struct ConversationMessageCard: View {
     let onReply: () -> Void
     let onReplyAll: () -> Void
     let onForward: () -> Void
+    let onSender: () -> Void
     @State private var expanded: Bool
 
     init(message: MailMessage, initiallyExpanded: Bool, attachments: [MailAttachment], remoteImages: Bool,
-         onReply: @escaping () -> Void, onReplyAll: @escaping () -> Void, onForward: @escaping () -> Void) {
+         onReply: @escaping () -> Void, onReplyAll: @escaping () -> Void, onForward: @escaping () -> Void,
+         onSender: @escaping () -> Void) {
         self.message = message; self.attachments = attachments; self.remoteImages = remoteImages
         self.onReply = onReply; self.onReplyAll = onReplyAll; self.onForward = onForward
+        self.onSender = onSender
         _expanded = State(initialValue: initiallyExpanded)
     }
     private var bodyText: String {
@@ -46,6 +49,10 @@ struct ConversationMessageCard: View {
             .accessibilityHint(expanded ? "Collapse message" : "Expand message")
             if expanded {
                 MessageRecipientDetails(message: message)
+                if MailMIME.valid(message.senderEmail) {
+                    Button("Sender profile", systemImage: "person.crop.rectangle") { onSender() }
+                        .font(.subheadline).accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
+                }
                 Divider().padding(.vertical, 2)
                 MailBodyView(html: message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText, remoteImages: remoteImages)
                     .accessibilityIdentifier("conversationBody-\(message.remoteID)")
