@@ -5,6 +5,28 @@ import XCTest
 
 @MainActor
 final class ComposeAttachmentTests: XCTestCase {
+    func testFileImportCopiesOriginalAndRejectsFoldersAndSymlinkParents() async throws {
+        let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let root = base.appending(path: "files"), source = base.appending(path: "original.txt")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        try Data("original".utf8).write(to: source)
+        let store = DraftAttachmentStore(root: root)
+        var draft = LocalDraft(to: "other@example.com")
+        let item = try await store.importFile(source, draftID: draft.id, existing: [])
+        draft.attachments = [item]
+        try Data("changed".utf8).write(to: source)
+        let raw = try await store.raw(draft, from: "me@example.com")
+        XCTAssertTrue(try XCTUnwrap(String(data: XCTUnwrap(Base64URL.decode(raw)), encoding: .utf8)).contains(Data("original".utf8).base64EncodedString()))
+        do { _ = try await store.importFile(base, draftID: draft.id, existing: []); XCTFail("Imported folder") }
+        catch { XCTAssertEqual(error as? ComposeAttachmentError, .invalidFile) }
+        let escapeID = UUID()
+        try FileManager.default.createSymbolicLink(at: root.appending(path: escapeID.uuidString), withDestinationURL: base)
+        do {
+            _ = try await store.store(Data([1]), filename: "outside", mimeType: "text/plain", draftID: escapeID, existing: [])
+            XCTFail("Escaped root through parent symlink")
+        } catch { XCTAssertEqual(error as? ComposeAttachmentError, .invalidFile) }
+    }
     func testFilesReopenWithDraftAndDiscardRestoresOriginalAttachments() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

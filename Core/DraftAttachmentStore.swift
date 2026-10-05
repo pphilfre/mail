@@ -69,6 +69,7 @@ actor DraftAttachmentStore {
         let handle = try FileHandle(forReadingFrom: source)
         defer { try? handle.close() }
         let data = try handle.read(upToCount: Self.maximumBytes + 1) ?? Data()
+        guard values.fileSize == nil || values.fileSize == data.count else { throw ComposeAttachmentError.unavailable }
         return try store(data, filename: source.lastPathComponent,
             mimeType: values.contentType?.preferredMIMEType ?? "application/octet-stream", draftID: draftID, existing: existing)
     }
