@@ -23,6 +23,7 @@ struct InboxView: View {
     @State private var showingSettings = false
     @State private var showingSearch = false
     @State private var showingCompose = false
+    @State private var editingDraft: LocalDraft?
     @State private var showingTasks = false
     @State private var showingReceipts = false
     @State private var showingAttachments = false
@@ -136,6 +137,9 @@ struct InboxView: View {
         .sheet(isPresented: $showingCompose) {
             NavigationStack { ComposeView(draft: LocalDraft(accountID: accountFilter)) }
         }
+        .sheet(item: $editingDraft) { draft in
+            NavigationStack { ComposeView(draft: draft) }
+        }
         .sheet(isPresented: $showingTasks) {
             NavigationStack {
                 MailTasksView(accountID: accountFilter)
@@ -245,7 +249,7 @@ struct InboxView: View {
                 }
             }
             if mailbox == "Drafts" && labelFilter == nil {
-                DraftSections(accountID: accountFilter)
+                DraftSections(accountID: accountFilter, onEdit: { editingDraft = $0 })
             } else if !accounts.isEmpty {
                 Section {
                     ForEach(conversations) { conversation in
