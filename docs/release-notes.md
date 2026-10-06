@@ -1,4 +1,13 @@
-Dispatch v0.5.0 adds email tasks, a local receipt organiser, and file/photo attachments.
+Dispatch v0.6.0 adds sender profiles, an attachment library, project collections and a subscription centre, alongside the v0.5.0 tasks, receipts and composer improvements.
+
+- Explore sender history, correspondence counts, weekly activity, files, linked tasks and receipts. Save private nicknames and notes on this device.
+- Search downloaded attachment metadata and local draft files, filter by category, and open the source conversation or draft. Offline availability reflects whether the file is present.
+- Group account-scoped conversations into named project collections with private notes and Mail, Files, Tasks and Receipts views.
+- Review suggested newsletter senders, explicitly include or exclude them, and archive downloaded inbox messages with confirmation and Undo.
+
+These views cover downloaded mail. Newsletter suggestions are heuristic; no automatic unsubscribe action is provided. Private notes, collection membership and newsletter choices stay on this device. Live provider actions and installation require signed-device checks.
+
+Included from v0.5.0:
 
 - Attach files or photos, review names/sizes, preview with Quick Look and remove files before sending.
 - Attachments persist with local drafts and survive relaunch or discarding edits.
