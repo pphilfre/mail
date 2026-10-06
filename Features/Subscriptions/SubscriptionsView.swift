@@ -41,7 +41,7 @@ struct SubscriptionsView: View {
                                 Text(entry.manuallyIncluded ? "Added by you" : "Suggested newsletter").font(.caption2).foregroundStyle(.secondary)
                             }
                         }
-                    }
+                    }.accessibilityIdentifier("subscription-\(entry.email)")
                     if let latest = entry.messages.first { Text("Latest: \(latest.receivedAt.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(.secondary) }
                     HStack {
                         Button("Archive downloaded inbox mail", systemImage: "archivebox") { archiving = entry }
@@ -51,7 +51,7 @@ struct SubscriptionsView: View {
                         Button("Exclude", systemImage: "minus.circle") { set(entry, included: false) }.labelStyle(.iconOnly)
                             .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Exclude \(entry.email) from subscriptions")
                     }.font(.caption)
-                }.padding(.vertical, 8).buttonStyle(.borderless).accessibilityIdentifier("subscription-\(entry.email)")
+                }.padding(.vertical, 8).buttonStyle(.borderless)
             }
             if entries.isEmpty {
                 ContentUnavailableView("No newsletters here", systemImage: "newspaper",
@@ -125,7 +125,9 @@ private struct SubscriptionSenderManager: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .navigationTitle("Newsletter senders").searchable(text: $query, prompt: "Sender name or email")
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        .toolbar { ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { dismiss() }.accessibilityIdentifier("closeSubscriptionManagerButton")
+        } }
     }
     private func set(_ email: String, included: Bool?) {
         do {

@@ -18,7 +18,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_LIBRARY"] = "YES"
         app.launch()
         app.buttons["profileMenuButton"].tap(); app.buttons["openAttachmentsButton"].tap()
-        let file = app.descendants(matching: .any)["libraryFile-Project plans.pdf"].firstMatch
+        let file = app.staticTexts["Project plans.pdf"].firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Inline logo.png"].exists)
         attachScreenshot("Attachment library", app: app)
@@ -118,12 +118,12 @@ final class DispatchUITests: XCTestCase {
         app.buttons["manageSubscriptionsButton"].tap()
         let exclude = app.buttons["excludeSubscription-news@example.com"]
         XCTAssertTrue(exclude.waitForExistence(timeout: 5)); exclude.tap()
-        app.buttons["Done"].tap()
+        app.buttons["closeSubscriptionManagerButton"].tap()
         XCTAssertTrue(app.staticTexts["No newsletters here"].waitForExistence(timeout: 5))
         app.buttons["manageSubscriptionsButton"].tap()
         let include = app.buttons["includeSubscription-news@example.com"]
         XCTAssertTrue(include.waitForExistence(timeout: 5)); include.tap()
-        app.buttons["Done"].tap()
+        app.buttons["closeSubscriptionManagerButton"].tap()
         XCTAssertTrue(newsletter.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Added by you"].exists)
     }
@@ -140,7 +140,7 @@ final class DispatchUITests: XCTestCase {
         let confirm = app.buttons["Archive 1 inbox message"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5)); confirm.tap()
         XCTAssertTrue(archive.waitForExistence(timeout: 5)); XCTAssertFalse(archive.isEnabled)
-        app.buttons["Done"].tap()
+        app.buttons["closeSubscriptionsButton"].tap()
         XCTAssertFalse(app.descendants(matching: .any)["cachedMessage-newsletter-fixture"].firstMatch.exists)
         XCTAssertTrue(app.descendants(matching: .any)["cachedMessage-latest"].firstMatch.exists)
         let undo = app.buttons["triageUndo"]
@@ -163,8 +163,7 @@ final class DispatchUITests: XCTestCase {
         app.switches["mailTaskDueToggle"].tap()
         app.buttons["saveMailTaskButton"].tap()
         XCTAssertTrue(app.staticTexts["Task saved"].waitForExistence(timeout: 5))
-        let closeFeedback = app.buttons["Dismiss confirmation"]
-        if closeFeedback.exists { closeFeedback.tap() }
+        XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["profileMenuButton"].tap(); app.buttons["openTasksButton"].tap()
         let toggle = app.buttons["toggleTask-latest"]
@@ -198,8 +197,7 @@ final class DispatchUITests: XCTestCase {
         merchant.tap(); merchant.typeText(" Shop")
         app.buttons["saveReceiptButton"].tap()
         XCTAssertTrue(app.staticTexts["Receipt saved"].waitForExistence(timeout: 5))
-        let closeFeedback = app.buttons["Dismiss confirmation"]
-        if closeFeedback.exists { closeFeedback.tap() }
+        XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.staticTexts["Paper & Ink Shop"].waitForExistence(timeout: 5))
     }
@@ -210,9 +208,11 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_DRAFT_ATTACHMENT"] = "YES"
         app.launch()
         app.descendants(matching: .any)["draftsShortcut"].tap()
-        let draft = app.staticTexts["Attachment test draft"]
+        let draft = app.buttons["localDraft-C0626EB5-478F-4272-BD4E-C102B61EB052"]
         XCTAssertTrue(draft.waitForExistence(timeout: 10)); draft.tap()
         let remove = app.buttons["removeAttachment-fixture.txt"]
+        XCTAssertTrue(app.navigationBars["New message"].waitForExistence(timeout: 10))
+        if !remove.exists { app.swipeUp() }
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["attachFileButton"].exists)
         XCTAssertTrue(app.buttons["attachPhotoButton"].exists)
@@ -353,8 +353,7 @@ final class DispatchUITests: XCTestCase {
         app.buttons["saveDraftButton"].tap()
         XCTAssertTrue(app.staticTexts["Draft saved"].waitForExistence(timeout: 5))
         attachScreenshot("Draft confirmation", app: app)
-        let dismissConfirmation = app.buttons["Dismiss confirmation"]
-        if dismissConfirmation.exists { dismissConfirmation.tap() }
+        XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
         app.descendants(matching: .any)["draftsShortcut"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
     }

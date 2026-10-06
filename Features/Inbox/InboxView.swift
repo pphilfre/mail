@@ -169,7 +169,9 @@ struct InboxView: View {
         .sheet(isPresented: $showingSubscriptions) {
             NavigationStack {
                 SubscriptionsView(accountID: accountFilter)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingSubscriptions = false } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showingSubscriptions = false }.accessibilityIdentifier("closeSubscriptionsButton")
+                    } }
             }.modifier(MailFeedbackOverlay(playsHaptics: false))
         }
         .onChange(of: mailbox) { _, _ in quickFilter = .all; loadMailbox() }

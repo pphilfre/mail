@@ -143,10 +143,10 @@ final class ComposeAttachmentTests: XCTestCase {
         draft.attachments = [item]; try repository.save([draft])
         let vault = CredentialVault(service: "dispatch.compose.\(UUID())")
         try await vault.save(OAuthCredentials(accessToken: "token", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3600), grantedScopes: [GoogleConfiguration.scope]), for: account.id)
-        let replies = [#"{"drafts":[]}"#, #"{"id":"draft","message":{"id":"one"}}"#,
-            #"{"id":"draft","message":{"id":"one","payload":{"mimeType":"multipart/mixed"}}}"#,
-            #"{"id":"draft","message":{"id":"two"}}"#,
-            #"{"id":"draft","message":{"id":"external","payload":{"mimeType":"text/plain"}}}"#]
+        let replies = [#"{"drafts":[]}"#, #"{"id":"draft","message":{"id":"one","threadId":"thread"}}"#,
+            #"{"id":"draft","message":{"id":"one","threadId":"thread","payload":{"mimeType":"multipart/mixed"}}}"#,
+            #"{"id":"draft","message":{"id":"two","threadId":"thread"}}"#,
+            #"{"id":"draft","message":{"id":"external","threadId":"thread","payload":{"mimeType":"text/plain"}}}"#]
         let transport = FixtureTransport(replies.map { HTTPReply(data: Data($0.utf8), status: 200) })
         let coordinator = GmailCoordinator(repository: repository, vault: vault, transport: transport, draftAttachments: store)
         try await coordinator.saveRemoteDraft(draft)

@@ -72,7 +72,7 @@ struct AttachmentLibraryView: View {
                         Spacer()
                         Text(file.date, format: .dateTime.day().month(.abbreviated).year())
                     }.font(.caption2).foregroundStyle(.secondary)
-                }.padding(.vertical, 7).accessibilityIdentifier("libraryFile-\(file.filename)")
+                }.padding(.vertical, 7)
             }
             if files.isEmpty && !checkingFiles {
                 ContentUnavailableView("No matching files", systemImage: "paperclip",
