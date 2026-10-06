@@ -199,12 +199,13 @@ struct ReceiptEditor: View {
     }
     var body: some View {
         Form {
-            Section("Receipt details") {
+            Section {
                 TextField("Merchant", text: $merchant).accessibilityIdentifier("receiptMerchant")
                 TextField("Amount", text: $amount).keyboardType(.decimalPad).accessibilityIdentifier("receiptAmount")
                 TextField("Currency", text: $currency).textInputAutocapitalization(.characters).autocorrectionDisabled()
                 Toggle("Include in Receipts", isOn: $included)
-            } footer: { Text("Leave the amount blank if it is unknown. Use a currency code such as GBP, EUR or USD. These changes stay on this device.") }
+            } header: { Text("Receipt details") }
+              footer: { Text("Leave the amount blank if it is unknown. Use a currency code such as GBP, EUR or USD. These changes stay on this device.") }
             Section("Original email") {
                 Text(context.source.subject)
                 Text(context.source.senderEmail).font(.caption).foregroundStyle(.secondary)
