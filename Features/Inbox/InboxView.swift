@@ -19,6 +19,7 @@ struct InboxView: View {
     private var accountFilter: UUID? { UUID(uuidString: accountFilterRaw) }
     @State private var labelFilter: String?
     @State private var showingDrawer = false
+    @State private var refreshing = false
     @State private var showingAccounts = false
     @State private var showingSettings = false
     @State private var showingSearch = false
@@ -45,7 +46,7 @@ struct InboxView: View {
     @AppStorage("previewLines") private var previewLines = 2
     private var openTaskCount: Int {
         metadata.filter { $0.key.hasPrefix("mail-task:") }.compactMap { try? MailTask.decode($0) }
-            .filter { !$0.isCompleted && (accountFilter == nil || $0.accountID == accountFilter) }.count
+            .filter { !$0.isCompleted && ($0.isStandalone || accountFilter == nil || $0.accountID == accountFilter) }.count
     }
     private let mailboxes = MailboxScope.names
     private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
@@ -200,6 +201,8 @@ struct InboxView: View {
         .onChange(of: quickFilter) { _, _ in selectedIDs.removeAll() }
         .onChange(of: conversationRows) { _, _ in selectedIDs.removeAll() }
         .refreshable {
+            refreshing = true
+            defer { refreshing = false }
             await runtime.gmail?.syncAll()
             if !accounts.isEmpty { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
         }
@@ -327,14 +330,7 @@ struct InboxView: View {
         }
     }
     private var inboxHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
-        if let deadline = waitingUntil { GmailWaitStatus(deadline: deadline).font(.caption) }
-        else if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
-            Label("Updating mail…", systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.secondary)
-        }
-        InboxHeader(scope: scopeTitle,
-            count: mailbox == "Drafts" ? draftCount : accounts.isEmpty ? filteredSamples.count : conversations.count,
-            grouped: !accounts.isEmpty && conversationRows && mailbox != "Drafts",
+        InboxHeader(
             filter: $quickFilter, showFilters: mailbox != "Drafts", allowStarred: !accounts.isEmpty,
             canSelect: !accounts.isEmpty && mailbox != "Drafts", selecting: selecting,
             search: { feedback.select(); showingSearch = true },
@@ -342,45 +338,26 @@ struct InboxView: View {
                 feedback.select()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { selecting.toggle(); selectedIDs.removeAll() }
             })
-        }
     }
     private var profileMenu: some View {
-        let counts = accountUnreadCounts
-        return Menu {
-            if !accounts.isEmpty {
-                Picker("Account", selection: $accountFilterRaw) {
-                    Text("All accounts").tag("")
-                    ForEach(accounts) { Text(MailStyle.accountTitle($0, unread: counts[$0.id] ?? 0)).tag($0.id.uuidString) }
-                }
-                Divider()
-            }
-            Button("Accounts", systemImage: "person.crop.circle") { showingAccounts = true }
-            Button("Settings", systemImage: "gearshape") { showingSettings = true }
-            Divider()
-            Button("Tasks", systemImage: "checklist") { showingTasks = true }.accessibilityIdentifier("openTasksButton")
-            Button("Receipts", systemImage: "receipt") { showingReceipts = true }.accessibilityIdentifier("openReceiptsButton")
-            Button("Attachments", systemImage: "paperclip") { showingAttachments = true }.accessibilityIdentifier("openAttachmentsButton")
-            Button("People", systemImage: "person.2") { showingPeople = true }.accessibilityIdentifier("openPeopleButton")
-            Button("Collections", systemImage: "folder") { showingCollections = true }.accessibilityIdentifier("openCollectionsButton")
-            Button("Subscriptions", systemImage: "newspaper") { showingSubscriptions = true }.accessibilityIdentifier("openSubscriptionsButton")
-        } label: {
+        Button { toggleDrawer()        } label: {
             Group {
                 if let account = accounts.first(where: { $0.id == accountFilter }) { AccountBadge(account: account) }
                 else { Image(systemName: "person.crop.circle").font(.system(size: 21, weight: .regular)) }
             }.frame(minWidth: 44, minHeight: 44)
         }
-        .accessibilityLabel("Accounts and settings")
+        .accessibilityLabel("Mail and tools")
         .accessibilityIdentifier("profileMenuButton")
     }
     private var composeDock: some View {
         HStack(alignment: .center) {
             HStack(spacing: 0) {
                 Button { feedback.select(); showingDrawer = true } label: {
-                    Label("Emails", systemImage: "envelope").frame(minHeight: 44).padding(.horizontal, 14)
+                    Label("Emails", systemImage: "envelope").frame(height: 56).padding(.horizontal, 14)
                 }.accessibilityIdentifier("dockEmailsButton")
                 Divider().frame(height: 18)
                 Button { feedback.select(); showingTasks = true } label: {
-                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(minHeight: 44).padding(.horizontal, 14)
+                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(height: 56).padding(.horizontal, 14)
                 }.accessibilityIdentifier("dockTasksButton")
             }.font(.subheadline.weight(.medium)).buttonStyle(.plain)
                 .glassEffect(.regular, in: .capsule)
@@ -389,10 +366,19 @@ struct InboxView: View {
                 feedback.select(); showingCompose = true
             } label: {
                 Image(systemName: "square.and.pencil").font(.system(size: 22, weight: .medium))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 56, height: 56).contentShape(.circle)
             }
-            .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+            .buttonStyle(.plain).foregroundStyle(.white)
+            .glassEffect(.regular.tint(MailStyle.accent).interactive(), in: .circle)
             .accessibilityLabel("Compose").accessibilityIdentifier("composeButton")
+        }
+        .overlay(alignment: .topLeading) {
+            if refreshing || selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
+                ProgressView().frame(width: 32, height: 32).glassEffect(.regular, in: .circle)
+                    .offset(y: -40).accessibilityLabel("Updating mail").accessibilityIdentifier("mailSyncSpinner")
+            } else if let deadline = waitingUntil {
+                GmailWaitStatus(deadline: deadline).font(.caption).padding(8).glassEffect(.regular, in: .capsule).offset(y: -40)
+            }
         }
         .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 8)
     }
@@ -513,7 +499,7 @@ struct CachedMessageRow: View {
     @AppStorage("compactInbox") private var compactInbox = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.senderEmail, name: message.sender.displayName, size: compactInbox ? 30 : 38)
+            SenderAvatar(email: message.senderEmail, name: message.sender.displayName, size: compactInbox ? 36 : 38)
                 .overlay(alignment: .bottomTrailing) {
                     if !isRead { Circle().fill(MailStyle.accent).frame(width: 9, height: 9).overlay(Circle().stroke(.background, lineWidth: 2)) }
                 }
@@ -550,7 +536,7 @@ struct MessageRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false, size: compactInbox ? 30 : 38)
+            SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false, size: compactInbox ? 36 : 38)
                 .overlay(alignment: .bottomTrailing) {
                     if !message.isRead {
                         Circle().fill(MailStyle.accent).frame(width: 9, height: 9)

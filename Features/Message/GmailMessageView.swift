@@ -11,6 +11,20 @@ struct GmailMessageView: View {
     @Query private var attachments: [MailAttachment]
     @Query private var accounts: [MailAccount]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
+    init(message: MailMessage) {
+        self.message = message
+        let accountID = message.accountID
+        let threadID = message.remoteThreadID
+        let remoteID = message.remoteID
+        let hasThread = !threadID.isEmpty
+        if hasThread {
+            _allMessages = Query(filter: #Predicate<MailMessage> { $0.accountID == accountID && $0.remoteThreadID == threadID }, sort: \MailMessage.receivedAt)
+        } else {
+            _allMessages = Query(filter: #Predicate<MailMessage> { $0.accountID == accountID && $0.remoteID == remoteID }, sort: \MailMessage.receivedAt)
+        }
+        _attachments = Query(filter: #Predicate<MailAttachment> { $0.accountID == accountID })
+        _folders = Query(filter: #Predicate<MailFolder> { $0.accountID == accountID }, sort: \MailFolder.name)
+    }
     @AppStorage("remoteImages") private var remoteImages = false
     @State private var loadImagesOnce = false
     @State private var composing: LocalDraft?
@@ -25,18 +39,18 @@ struct GmailMessageView: View {
     @State private var senderProfile: SenderProfileRequest?
     @State private var addingToCollection = false
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
-    private var thread: [MailMessage] { allMessages.filter { $0.accountID == message.accountID && $0.remoteThreadID == message.remoteThreadID } }
+    private var thread: [MailMessage] { allMessages.isEmpty ? [message] : allMessages }
     private func bodyText(_ row: MailMessage) -> String {
         row.plainTextBody ?? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? row.snippet
     }
     var body: some View {
+      let files = Dictionary(grouping: attachments, by: \.messageID)
       ScrollViewReader { proxy in
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)
                     .font(.largeTitle.weight(.bold)).tracking(-0.8).textSelection(.enabled)
                     .padding(.horizontal, 4).padding(.vertical, 8)
-                if loadingThread { ProgressView("Updating conversation…").font(.caption) }
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
                     VStack(alignment: .leading, spacing: 8) {
@@ -55,7 +69,7 @@ struct GmailMessageView: View {
                 }
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
-                        attachments: attachments.filter { $0.messageID == row.id }, remoteImages: remoteImages || loadImagesOnce,
+                        attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
                         onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) },
                         onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) })
                         .id(row.id)
@@ -108,7 +122,8 @@ struct GmailMessageView: View {
                         }.accessibilityIdentifier("makeReceiptButton")
                         Divider()
                     }
-                    Button(message.isRead ? "Mark unread" : "Mark read") { triage(message.isRead ? "unread" : "read") }
+                    Button(message.isRead ? "Mark unread" : "Mark read", systemImage: message.isRead ? "envelope.badge" : "envelope.open") { triage(message.isRead ? "unread" : "read") }
+                        .accessibilityIdentifier("readerReadButton")
                     Button("Archive", systemImage: "archivebox") { triage("archive"); dismiss() }
                     Button(message.isSpam ? "Not spam" : "Move to Spam", systemImage: "exclamationmark.shield") {
                         triage(message.isSpam ? "notSpam" : "spam"); dismiss()
@@ -129,6 +144,7 @@ struct GmailMessageView: View {
             }
         }
         .task {
+            await Task.yield()
             if !message.isRead { runtime.gmail?.action("read", message: message) }
             await refreshThread()
         }
@@ -173,7 +189,7 @@ struct GmailMessageView: View {
         loadingThread = true; localError = nil
         defer { loadingThread = false }
         if syncFirst { await gmail.sync(message.accountID) }
-        do { try await gmail.loadThread(message) }
+        do { try await gmail.loadThread(message, force: syncFirst) }
         catch { if !Task.isCancelled { localError = error.localizedDescription } }
     }
     private func reply(_ row: MailMessage, all: Bool) {

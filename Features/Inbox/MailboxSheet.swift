@@ -22,6 +22,7 @@ struct MailboxSheet: View {
     let openSubscriptions: () -> Void
 
     @State private var moreMailboxes = false
+    @State private var detent: PresentationDetent = .height(530)
 
     private var selectedAccount: MailAccount? { accounts.first { $0.id.uuidString == account } }
 
@@ -82,10 +83,8 @@ struct MailboxSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Menu("Accounts and settings", systemImage: "person.crop.circle") {
-                        Button("Accounts", systemImage: "person.crop.circle", action: openAccounts)
-                        Button("Settings", systemImage: "gearshape", action: openSettings)
-                    }.accessibilityIdentifier("mailboxProfileMenu")
+                    Button("Accounts", systemImage: "person.crop.circle", action: openAccounts)
+                        .labelStyle(.iconOnly).accessibilityIdentifier("mailboxProfileMenu")
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Settings", systemImage: "gearshape", action: openSettings)
@@ -97,11 +96,12 @@ struct MailboxSheet: View {
                 }
             }
         }
-        .presentationDetents([.large])
+        .presentationDetents([.height(530), .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(32)
         .presentationBackground(.regularMaterial)
         .onChange(of: account) { _, _ in feedback.select(); label = nil }
+        .onChange(of: moreMailboxes) { _, expanded in if expanded { detent = .large } }
     }
 
     private func mailboxButton(_ name: String) -> some View {
@@ -117,7 +117,7 @@ struct MailboxSheet: View {
                 Image(systemName: symbol).font(.system(size: 19, weight: .medium))
                 Text(title).font(.caption).lineLimit(1).minimumScaleFactor(0.8)
             }.frame(maxWidth: .infinity, minHeight: 64)
-                .background(MailStyle.paper, in: .rect(cornerRadius: 16))
+                .background(MailStyle.tile, in: .rect(cornerRadius: 16))
         }.buttonStyle(.plain).accessibilityIdentifier("mailbox-\(title)")
     }
 
@@ -134,7 +134,7 @@ struct MailboxSheet: View {
             if !accounts.isEmpty {
                 Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             }
-        }.padding(10).background(MailStyle.paper, in: .rect(cornerRadius: 20))
+        }.padding(10).background(MailStyle.tile, in: .rect(cornerRadius: 20))
     }
 
     private func mailboxRow(_ name: String, symbol: String, selected: Bool, count: Int = 0) -> some View {
@@ -153,7 +153,7 @@ struct MailboxSheet: View {
         .foregroundStyle(selected ? MailStyle.accent : .primary)
         .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(minHeight: 48)
-        .background(selected ? MailStyle.accent.opacity(0.09) : .clear, in: .rect(cornerRadius: 14))
+        .background(selected ? MailStyle.accent.opacity(0.14) : MailStyle.tile, in: .rect(cornerRadius: 14))
         .contentShape(.rect)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name)

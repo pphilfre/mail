@@ -5,6 +5,7 @@ enum MailStyle {
     static let success = Color(red: 0.16, green: 0.62, blue: 0.43)
     static let canvas = Color(uiColor: .systemGroupedBackground)
     static let paper = Color(uiColor: .secondarySystemGroupedBackground)
+    static let tile = Color(uiColor: .tertiarySystemFill)
     static let rowSpacing: CGFloat = 5
     static let contentPadding: CGFloat = 20
 

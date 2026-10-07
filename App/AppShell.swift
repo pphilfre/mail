@@ -28,6 +28,8 @@ struct AppShell: View {
         .environment(feedback)
         .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
         .task {
+            await Task.yield()
+            MailWebViewPool.prepare()
             if let record = undoRecord, record.expiresAt > Date() { showTriageConfirmation(record) }
             await runtime.gmail?.syncAll()
         }
@@ -71,6 +73,7 @@ struct WelcomeView: View {
     @Environment(MailFeedback.self) private var feedback
     @AppStorage("showSampleInbox") private var showSamples = false
     @State private var arrived = false
+    @State private var showingTasks = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -86,6 +89,11 @@ struct WelcomeView: View {
                 .ignoresSafeArea()
         }
         .task { withAnimation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.12)) { arrived = true } }
+        .sheet(isPresented: $showingTasks) {
+            NavigationStack { MailTasksView(accountID: nil).toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTasks = false } }
+            } }
+        }
     }
     private var welcomeContent: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -115,6 +123,8 @@ struct WelcomeView: View {
                 .disabled(runtime.gmail == nil || runtime.gmail?.connecting == true)
                 Button("Explore sample mail") { feedback.select(); showSamples = true }
                     .font(.subheadline.weight(.medium)).frame(minHeight: 44)
+                Button("Tasks", systemImage: "checklist") { showingTasks = true }
+                    .buttonStyle(.glass).accessibilityIdentifier("welcomeTasksButton")
                 Text("Gmail, for now. Zoho is on its way.")
                     .font(.caption).foregroundStyle(.secondary)
             }

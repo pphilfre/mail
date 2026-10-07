@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 /// Website icons are decorative; they are never evidence of sender verification.
 struct SenderAvatar: View {
@@ -31,14 +32,61 @@ struct SenderAvatar: View {
     var body: some View {
         Group {
             if let iconURL {
-                AsyncImage(url: iconURL) { phase in
-                    if let image = phase.image { image.resizable().scaledToFit().padding(9).background(.background) }
-                    else { fallback }
-                }
+                CompanyIcon(url: iconURL, size: size) { fallback }
             } else { fallback }
         }
         .frame(width: size, height: size)
         .clipShape(.rect(cornerRadius: 13))
         .accessibilityHidden(true)
+    }
+}
+
+private actor CompanyIconStore {
+    static let shared = CompanyIconStore()
+    private var cache: [URL: Data] = [:]
+    private var requests: [URL: Task<Data?, Never>] = [:]
+    private var misses: [URL: Date] = [:]
+    private var bytes = 0
+    func data(for url: URL) async -> Data? {
+        if let data = cache[url] { return data }
+        if let until = misses[url], until > Date() { return nil }
+        if let request = requests[url] { return await request.value }
+        let request = Task<Data?, Never> {
+            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 8)
+            request.setValue("image/*", forHTTPHeaderField: "Accept")
+            guard let (data, response) = try? await URLSession.shared.data(for: request),
+                  let response = response as? HTTPURLResponse, response.statusCode == 200,
+                  data.count <= 1_000_000 else { return nil }
+            return data
+        }
+        requests[url] = request
+        let result = await request.value
+        requests[url] = nil
+        if let result {
+            if cache.count >= 100 || bytes + result.count > 8_000_000 { cache.removeAll(keepingCapacity: true); bytes = 0 }
+            cache[url] = result
+            bytes += result.count
+        } else { if misses.count >= 100 { misses.removeAll() }; misses[url] = Date().addingTimeInterval(60) }
+        return result
+    }
+}
+private struct CompanyIcon<Fallback: View>: View {
+    let url: URL
+    let size: CGFloat
+    @ViewBuilder let fallback: () -> Fallback
+    @State private var icon: UIImage?
+    var body: some View {
+        Group {
+            if let icon { Image(uiImage: icon).resizable().scaledToFit().padding(max(3, size * 0.1)).background(.background) }
+            else { fallback() }
+        }.task(id: url) {
+            if let data = await CompanyIconStore.shared.data(for: url), !Task.isCancelled,
+               let source = CGImageSourceCreateWithData(data as CFData, nil),
+               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                   kCGImageSourceCreateThumbnailFromImageAlways: true,
+                   kCGImageSourceThumbnailMaxPixelSize: 96,
+                   kCGImageSourceCreateThumbnailWithTransform: true
+               ] as CFDictionary) { icon = UIImage(cgImage: image) }
+        }
     }
 }

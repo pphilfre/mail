@@ -6,9 +6,11 @@ import WebKit
 final class MailHTMLLayoutTests: XCTestCase {
     func testFixedWidthHTMLFitsAndRefitsWhileEmailScriptsStayDisabled() async throws {
         let configuration = MailHTMLView.configuration()
+        let heightObserver = HTMLHeightObserver()
+        configuration.userContentController.add(heightObserver, contentWorld: .defaultClient, name: "mailLayout")
         XCTAssertFalse(configuration.defaultWebpagePreferences.allowsContentJavaScript)
         XCTAssertFalse(configuration.websiteDataStore.isPersistent)
-        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 80), configuration: configuration)
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 800), configuration: configuration)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 800, height: 800))
         let controller = UIViewController()
         window.rootViewController = controller
@@ -27,6 +29,8 @@ final class MailHTMLLayoutTests: XCTestCase {
         }
         XCTAssertTrue(observer.didLoad, "Email must finish loading before layout is measured")
         try await assertFits(web, expectedWidth: 320)
+        XCTAssertGreaterThan(heightObserver.height, 200)
+        XCTAssertLessThan(heightObserver.height, 400, "Report scaled content height rather than the 800-point viewport")
         web.frame.size.width = 480
         web.layoutIfNeeded()
         try await assertFits(web, expectedWidth: 480)
@@ -53,6 +57,14 @@ final class MailHTMLLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(metrics[1], expectedWidth + 2, "Fixed-width email must fit without horizontal clipping")
         XCTAssertGreaterThan(metrics[2], 200, "The full scaled body must retain its height")
         XCTAssertEqual(metrics[3], 0, "Sender-provided JavaScript must never execute")
+    }
+}
+
+@MainActor
+private final class HTMLHeightObserver: NSObject, WKScriptMessageHandler {
+    var height: Double = 0
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        height = (message.body as? NSNumber)?.doubleValue ?? 0
     }
 }
 

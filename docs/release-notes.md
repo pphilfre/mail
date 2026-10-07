@@ -1,4 +1,14 @@
-Dispatch v0.6.1 makes everyday navigation and reading more compact.
+Dispatch v0.7.0 adds standalone tasks and makes the mail controls and reader faster to use.
+
+- Create a task from a title without linking an email or connecting an account. Add status, priority, due date, notes, a list and checklist steps; search tasks and filter by list, progress or due date. Personal tasks survive account removal.
+- Use a single icon row for inbox search, All, Unread, Starred and selection. Sync status floats above the dock without increasing header height.
+- Emails/Tasks and Compose share a 56-point height. Company logos use more of their compact avatars, with bounded caching and shared requests.
+- Both mail controls open the smaller mailbox sheet. Darker tiles separate tools and folders; the profile button opens Accounts directly beside Settings. Secondary folders expand the sheet when needed.
+- Accounts uses consistent action typography and icons for connection, reconnect, account preferences and queued changes.
+- Cached plain-text messages render natively with selectable text and links. The reader fetches the selected conversation rather than the whole mailbox, uses lazy cards, reuses warm HTML renderers and briefly caches successful thread refreshes. Explicit Retry bypasses that cache.
+- HTML reports the actual rendered body height instead of the viewport height, avoiding sizing feedback. Mark read/unread now includes an icon.
+
+Included from v0.6.1:
 
 - Inbox and other mailbox titles now live in the top bar. A Liquid Glass Emails / Tasks pill replaces the bottom tagline.
 - The mailbox menu puts frequent folders and tools in a compact grid, keeps Settings beside the profile icon, and folds secondary folders and labels into expandable groups.

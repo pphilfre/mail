@@ -21,7 +21,7 @@ struct ConversationMessageCard: View {
         _expanded = State(initialValue: initiallyExpanded)
     }
     private var bodyText: String {
-        message.plainTextBody ?? message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? message.snippet
+        message.plainTextBody ?? message.snippet
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
