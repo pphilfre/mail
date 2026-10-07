@@ -353,11 +353,11 @@ struct InboxView: View {
         HStack(alignment: .center) {
             HStack(spacing: 0) {
                 Button { feedback.select(); showingDrawer = true } label: {
-                    Label("Emails", systemImage: "envelope").frame(height: 56).padding(.horizontal, 14)
+                    Label("Emails", systemImage: "envelope").frame(height: 56).padding(.horizontal, 14).contentShape(.rect)
                 }.accessibilityIdentifier("dockEmailsButton")
                 Divider().frame(height: 18)
                 Button { feedback.select(); showingTasks = true } label: {
-                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(height: 56).padding(.horizontal, 14)
+                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(height: 56).padding(.horizontal, 14).contentShape(.rect)
                 }.accessibilityIdentifier("dockTasksButton")
             }.font(.subheadline.weight(.medium)).buttonStyle(.plain)
                 .glassEffect(.regular, in: .capsule)

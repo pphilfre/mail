@@ -47,6 +47,7 @@ struct MailTasksView: View {
         let grouped = Dictionary(grouping: snapshot, by: { $0.section(now: timeline.date) })
         List {
             Section {
+                VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     TextField("Add a task", text: $quickTitle).submitLabel(.done).onSubmit(quickAdd)
                         .focused($quickFocused)
@@ -56,11 +57,10 @@ struct MailTasksView: View {
                     }.buttonStyle(.borderless).accessibilityLabel("Add task").accessibilityIdentifier("quickAddTaskButton")
                         .disabled(quickTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }
-            Section {
                 Picker("Tasks", selection: $status) {
                     Text("Open").tag("Open"); Text("All").tag("All"); Text("Completed").tag("Completed")
                 }.pickerStyle(.segmented).accessibilityIdentifier("taskStatusFilter")
+                }.accessibilityElement(children: .contain)
             }
                 ForEach(completed ? ["Completed"] : ["Overdue", "Today", "Upcoming", "No due date"] + (status == "All" ? ["Completed"] : []), id: \.self) { section in
                     let rows = grouped[section] ?? []
@@ -77,6 +77,7 @@ struct MailTasksView: View {
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
+        .listSectionSpacing(.compact)
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
         .navigationTitle("Tasks")
         .navigationBarTitleDisplayMode(.inline)
@@ -134,14 +135,14 @@ struct MailTasksView: View {
             }.accessibilityLabel(task.isCompleted ? "Reopen \(task.title)" : "Complete \(task.title)")
                 .accessibilityIdentifier("toggleTask-\(task.accessibilityKey)")
             VStack(alignment: .leading, spacing: 6) {
-                Button { editing = task } label: { Text(task.title).font(.headline).foregroundStyle(.primary).multilineTextAlignment(.leading) }
+                Button { editing = task } label: { Text(task.title).font(.subheadline.weight(.semibold)).foregroundStyle(Color.primary).multilineTextAlignment(.leading).lineLimit(2) }
                 if !task.notes.isEmpty { Text(task.notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(3) }
                 HStack(spacing: 10) {
-                    if task.status == .inProgress { Label("In progress", systemImage: "circle.lefthalf.filled") }
-                    if task.priority != .normal { Label(task.priority.rawValue, systemImage: task.priority.symbol) }
-                    if !task.steps.isEmpty { Label("\(task.steps.filter(\.isCompleted).count)/\(task.steps.count)", systemImage: "checklist") }
-                    if !task.list.isEmpty { Label(task.list, systemImage: "folder") }
+                    if task.status == .inProgress { Label("In progress", systemImage: "circle.lefthalf.filled").fixedSize() }
+                    if task.priority != .normal { Label(task.priority.rawValue, systemImage: task.priority.symbol).fixedSize() }
+                    if !task.steps.isEmpty { Label("\(task.steps.filter(\.isCompleted).count)/\(task.steps.count)", systemImage: "checklist").fixedSize() }
                 }.font(.caption).foregroundStyle(.secondary)
+                if !task.list.isEmpty { Label(task.list, systemImage: "folder").font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 if let dueAt = task.dueAt {
                     Label(dueAt.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
                         .font(.caption).foregroundStyle(task.section(now: Date()) == "Overdue" ? .red : .secondary)
@@ -153,7 +154,7 @@ struct MailTasksView: View {
                 } else if !task.isStandalone { Text("Original message is no longer cached").font(.caption).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 0)
-            Menu("Task actions", systemImage: "ellipsis") {
+            Menu {
                 ForEach(TaskStatus.allCases) { value in
                     Button(value.rawValue) {
                         var valueTask = task; valueTask.move(to: value)
@@ -162,7 +163,9 @@ struct MailTasksView: View {
                 }
                 Button("Edit task", systemImage: "pencil") { editing = task }
                 Button("Delete task", systemImage: "trash", role: .destructive) { deleting = task }
-            }.frame(minWidth: 44, minHeight: 44)
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(.rect)
+            }.accessibilityLabel("Task actions")
         }
         .buttonStyle(.borderless).padding(.vertical, 5)
         .contextMenu {
