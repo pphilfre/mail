@@ -127,7 +127,7 @@ struct MailboxSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(selectedAccount?.displayName ?? (accounts.isEmpty ? "Sample mail" : "All accounts"))
                     .font(.headline).foregroundStyle(.primary).lineLimit(1)
-                Text(selectedAccount?.email ?? "\(accounts.count) connected accounts")
+                Text(selectedAccount?.email ?? (accounts.isEmpty ? "On this device" : "\(accounts.count) connected accounts"))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
@@ -138,10 +138,10 @@ struct MailboxSheet: View {
     }
 
     private func mailboxRow(_ name: String, symbol: String, selected: Bool, count: Int = 0) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 8) {
             Image(systemName: selected ? symbol + (symbol == "tray" || symbol == "star" || symbol == "archivebox" ? ".fill" : "") : symbol)
                 .font(.system(size: 18, weight: selected ? .semibold : .regular)).frame(width: 24)
-            Text(name).font(.subheadline.weight(selected ? .semibold : .regular)).lineLimit(1)
+            Text(name).font(.subheadline.weight(selected ? .semibold : .regular)).lineLimit(1).layoutPriority(1)
             Spacer()
             if count > 0 {
                 Text(count, format: .number).font(.subheadline.monospacedDigit())
@@ -151,7 +151,7 @@ struct MailboxSheet: View {
             if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)) }
         }
         .foregroundStyle(selected ? MailStyle.accent : .primary)
-        .padding(.horizontal, 14).padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(minHeight: 48)
         .background(selected ? MailStyle.accent.opacity(0.09) : .clear, in: .rect(cornerRadius: 14))
         .contentShape(.rect)
