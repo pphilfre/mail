@@ -110,8 +110,9 @@ struct SenderProfileView: View {
                     Text(email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 Spacer(minLength: 0)
-                Button("Compose to sender", systemImage: "square.and.pencil") { composing = true }
-                    .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                Button { composing = true } label: {
+                    Image(systemName: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }.accessibilityLabel("Compose to sender")
                     .accessibilityIdentifier("senderComposeButton")
             }
             HStack(spacing: 16) {
@@ -130,8 +131,9 @@ struct SenderProfileView: View {
                         .font(.caption).lineLimit(1).frame(minHeight: 44)
                 }
                 Spacer()
-                Button("Edit nickname and notes", systemImage: "note.text") { editingProfile = true }
-                    .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                Button { editingProfile = true } label: {
+                    Image(systemName: "note.text").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }.accessibilityLabel("Edit nickname and notes")
                     .disabled(profileRow != nil && profile == nil)
                     .accessibilityIdentifier("editSenderProfileButton")
             }
@@ -144,14 +146,14 @@ struct SenderProfileView: View {
                         VStack(spacing: 4) {
                             Image(systemName: value.symbol).font(.system(size: 18, weight: .medium))
                             Text(tabCount(value), format: .number).font(.caption.monospacedDigit())
-                        }.frame(maxWidth: .infinity, minHeight: 52)
+                    }.frame(maxWidth: .infinity, minHeight: 52).contentShape(.rect)
                             .background(tab == value ? MailStyle.accent.opacity(0.12) : .clear, in: .rect(cornerRadius: 14))
                     }.buttonStyle(.plain).foregroundStyle(tab == value ? MailStyle.accent : .secondary)
                         .accessibilityLabel(value.rawValue).accessibilityValue("\(tabCount(value))")
                         .accessibilityAddTraits(tab == value ? [.isSelected] : [])
                         .accessibilityIdentifier("senderTab-\(value.rawValue)")
                 }
-            }.accessibilityIdentifier("senderContentPicker")
+            }
         }
     }
     private var senderDetails: some View {

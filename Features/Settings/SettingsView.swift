@@ -87,7 +87,7 @@ struct SettingsView: View {
                 Toggle("Compact inbox", isOn: $compactInbox).accessibilityIdentifier("compactInboxToggle")
                 Picker("Preview lines", selection: $previewLines) {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
-                }
+                }.accessibilityIdentifier("previewLinesPicker")
                 Toggle("Group conversations", isOn: $conversationRows)
             } header: { Text("Reading") } footer: {
                 Text("Remote images can reveal when you open mail. Company icons load from senders’ websites and do not verify their identity.")

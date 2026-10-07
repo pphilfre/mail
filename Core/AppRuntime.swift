@@ -12,11 +12,15 @@ final class AppRuntime {
     var storageFailed = false
     var gmail: GmailCoordinator?
     @ObservationIgnored var repository: MailRepository?
+    #if DEBUG
+    private static var seededUITestPreferences = false
+    #endif
 
     init() {
         #if DEBUG
         // Seed the normal preferences domain so UI tests can change it after launch.
-        if let sampleInbox = ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_SAMPLE_INBOX"] {
+        if !Self.seededUITestPreferences, let sampleInbox = ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_SAMPLE_INBOX"] {
+            Self.seededUITestPreferences = true
             UserDefaults.standard.set(sampleInbox == "YES", forKey: "showSampleInbox")
             UserDefaults.standard.set("Inbox", forKey: "selectedMailbox")
             UserDefaults.standard.set("", forKey: "selectedMailAccount")

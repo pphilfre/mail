@@ -42,6 +42,7 @@ struct InboxView: View {
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
     @AppStorage("fullSwipe") private var fullSwipe = false
     @AppStorage("compactInbox") private var compactInbox = false
+    @AppStorage("previewLines") private var previewLines = 2
     private var openTaskCount: Int {
         metadata.filter { $0.key.hasPrefix("mail-task:") }.compactMap { try? MailTask.decode($0) }
             .filter { !$0.isCompleted && (accountFilter == nil || $0.accountID == accountFilter) }.count
@@ -86,6 +87,8 @@ struct InboxView: View {
 
     var body: some View {
         mailList
+        // Recreate the list's size cache when reading density changes, rather than keeping old cell heights.
+        .id("mail-density-\(compactInbox)-\(previewLines)")
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(MailStyle.paper)
