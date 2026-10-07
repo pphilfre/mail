@@ -8,7 +8,6 @@ enum InboxQuickFilter: String, CaseIterable, Identifiable {
 struct InboxHeader: View {
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let title: String
     let scope: String
     let count: Int
     let grouped: Bool
@@ -23,23 +22,20 @@ struct InboxHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(scope).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer(minLength: 12)
-                    if canSelect {
-                        Button(action: select) {
-                            Text(selecting ? "Done" : "Select").font(.subheadline.weight(.medium))
-                                .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
-                        }.buttonStyle(.plain).foregroundStyle(MailStyle.accent)
-                            .accessibilityIdentifier("selectMailButton")
-                    }
-                }
-                HStack {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(scope).lineLimit(1)
                     Text("\(count) \(grouped ? (count == 1 ? "conversation" : "conversations") : (count == 1 ? "message" : "messages"))")
                         .accessibilityIdentifier("inboxResultCount")
-                    Spacer(minLength: 12)
                 }.font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength: 12)
+                if canSelect {
+                    Button(action: select) {
+                        Text(selecting ? "Done" : "Select").font(.subheadline.weight(.medium))
+                            .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                    }.buttonStyle(.plain).foregroundStyle(MailStyle.accent)
+                        .accessibilityIdentifier("selectMailButton")
+                }
             }
             Button(action: search) {
                 HStack(spacing: 10) {

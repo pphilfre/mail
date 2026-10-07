@@ -329,7 +329,7 @@ struct InboxView: View {
         else if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
             Label("Updating mail…", systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.secondary)
         }
-        InboxHeader(title: mailboxTitle, scope: scopeTitle,
+        InboxHeader(scope: scopeTitle,
             count: mailbox == "Drafts" ? draftCount : accounts.isEmpty ? filteredSamples.count : conversations.count,
             grouped: !accounts.isEmpty && conversationRows && mailbox != "Drafts",
             filter: $quickFilter, showFilters: mailbox != "Drafts", allowStarred: !accounts.isEmpty,

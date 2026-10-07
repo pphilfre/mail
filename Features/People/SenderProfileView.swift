@@ -102,79 +102,79 @@ struct SenderProfileView: View {
         }
     }
     private var profileHeader: some View {
-            Section {
-                HStack(spacing: 12) {
-                    SenderAvatar(email: email, name: title, size: 44)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(title).font(.headline).lineLimit(2)
-                        Text(email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                    Spacer(minLength: 0)
-                    Button("Compose to sender", systemImage: "square.and.pencil") { composing = true }
-                        .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
-                        .accessibilityIdentifier("senderComposeButton")
+        Section {
+            HStack(spacing: 12) {
+                SenderAvatar(email: email, name: title, size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.headline).lineLimit(2)
+                    Text(email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
-                HStack(spacing: 16) {
-                    Text("\(incoming.count) received")
-                    Text("\(outgoing.count) sent")
-                    Label("\(incoming.filter { !$0.isRead }.count)", systemImage: "envelope.badge")
-                }.font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Menu {
-                        Picker("Account", selection: $accountID) {
-                            Text("All accounts").tag(nil as UUID?)
-                            ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
-                        }
-                    } label: {
-                        Label(accounts.first { $0.id == accountID }?.displayName ?? "All accounts", systemImage: "person.crop.circle")
-                            .font(.caption).lineLimit(1).frame(minHeight: 44)
-                    }
-                    Spacer()
-                    Button("Edit nickname and notes", systemImage: "note.text") { editingProfile = true }
-                        .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
-                        .disabled(profileRow != nil && profile == nil)
-                        .accessibilityIdentifier("editSenderProfileButton")
-                }
-                if let notes = profile?.notes, !notes.isEmpty {
-                    Text(notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                }
-                HStack(spacing: 4) {
-                    ForEach(SenderProfileTab.allCases) { value in
-                        Button { tab = value } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: value.symbol).font(.system(size: 18, weight: .medium))
-                                Text(tabCount(value), format: .number).font(.caption.monospacedDigit())
-                            }.frame(maxWidth: .infinity, minHeight: 52)
-                                .background(tab == value ? MailStyle.accent.opacity(0.12) : .clear, in: .rect(cornerRadius: 14))
-                        }.buttonStyle(.plain).foregroundStyle(tab == value ? MailStyle.accent : .secondary)
-                            .accessibilityLabel(value.rawValue).accessibilityValue("\(tabCount(value))")
-                            .accessibilityAddTraits(tab == value ? [.isSelected] : [])
-                            .accessibilityIdentifier("senderTab-\(value.rawValue)")
-                    }
-                }.accessibilityIdentifier("senderContentPicker")
+                Spacer(minLength: 0)
+                Button("Compose to sender", systemImage: "square.and.pencil") { composing = true }
+                    .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("senderComposeButton")
             }
+            HStack(spacing: 16) {
+                Text("\(incoming.count) received")
+                Text("\(outgoing.count) sent")
+                Label("\(incoming.filter { !$0.isRead }.count)", systemImage: "envelope.badge")
+            }.font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Menu {
+                    Picker("Account", selection: $accountID) {
+                        Text("All accounts").tag(nil as UUID?)
+                        ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
+                    }
+                } label: {
+                    Label(accounts.first { $0.id == accountID }?.displayName ?? "All accounts", systemImage: "person.crop.circle")
+                        .font(.caption).lineLimit(1).frame(minHeight: 44)
+                }
+                Spacer()
+                Button("Edit nickname and notes", systemImage: "note.text") { editingProfile = true }
+                    .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    .disabled(profileRow != nil && profile == nil)
+                    .accessibilityIdentifier("editSenderProfileButton")
+            }
+            if let notes = profile?.notes, !notes.isEmpty {
+                Text(notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+            HStack(spacing: 4) {
+                ForEach(SenderProfileTab.allCases) { value in
+                    Button { tab = value } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: value.symbol).font(.system(size: 18, weight: .medium))
+                            Text(tabCount(value), format: .number).font(.caption.monospacedDigit())
+                        }.frame(maxWidth: .infinity, minHeight: 52)
+                            .background(tab == value ? MailStyle.accent.opacity(0.12) : .clear, in: .rect(cornerRadius: 14))
+                    }.buttonStyle(.plain).foregroundStyle(tab == value ? MailStyle.accent : .secondary)
+                        .accessibilityLabel(value.rawValue).accessibilityValue("\(tabCount(value))")
+                        .accessibilityAddTraits(tab == value ? [.isSelected] : [])
+                        .accessibilityIdentifier("senderTab-\(value.rawValue)")
+                }
+            }.accessibilityIdentifier("senderContentPicker")
+        }
     }
     private var senderDetails: some View {
-            Section {
-                DisclosureGroup("Sender details", isExpanded: $showingDetails) {
-                    if profileRow != nil && profile == nil {
-                        Text(SenderProfileError.invalidData.localizedDescription).font(.caption)
-                    }
-                    if let first = incoming.last?.receivedAt, let latest = incoming.first?.receivedAt {
-                        LabeledContent("First received", value: first.formatted(date: .abbreviated, time: .omitted))
-                        LabeledContent("Latest received", value: latest.formatted(date: .abbreviated, time: .omitted))
-                    }
-                    if showingDetails && !incoming.isEmpty {
-                        Chart(SenderInsights.activity(incoming)) { point in
-                            BarMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Messages", point.count))
-                                .foregroundStyle(MailStyle.accent)
-                        }.frame(height: 100).accessibilityIdentifier("senderActivityChart")
-                    }
-                    Text("History covers mail saved on this device. Spam, trash and drafts are excluded.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if let notes = profile?.notes, !notes.isEmpty { Text(notes).textSelection(.enabled) }
+        Section {
+            DisclosureGroup("Sender details", isExpanded: $showingDetails) {
+                if profileRow != nil && profile == nil {
+                    Text(SenderProfileError.invalidData.localizedDescription).font(.caption)
                 }
+                if let first = incoming.last?.receivedAt, let latest = incoming.first?.receivedAt {
+                    LabeledContent("First received", value: first.formatted(date: .abbreviated, time: .omitted))
+                    LabeledContent("Latest received", value: latest.formatted(date: .abbreviated, time: .omitted))
+                }
+                if showingDetails && !incoming.isEmpty {
+                    Chart(SenderInsights.activity(incoming)) { point in
+                        BarMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Messages", point.count))
+                            .foregroundStyle(MailStyle.accent)
+                    }.frame(height: 100).accessibilityIdentifier("senderActivityChart")
+                }
+                Text("History covers mail saved on this device. Spam, trash and drafts are excluded.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let notes = profile?.notes, !notes.isEmpty { Text(notes).textSelection(.enabled) }
             }
+        }
     }
     private func tabCount(_ value: SenderProfileTab) -> Int {
         switch value {

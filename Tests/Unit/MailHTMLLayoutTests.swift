@@ -15,14 +15,17 @@ final class MailHTMLLayoutTests: XCTestCase {
         controller.view.addSubview(web)
         window.makeKeyAndVisible()
         defer { web.stopLoading(); window.isHidden = true }
-        let loaded = expectation(description: "Email loaded")
-        let observer = HTMLLoadObserver(loaded)
+        let observer = HTMLLoadObserver()
         web.navigationDelegate = observer
         web.loadHTMLString(MailHTMLView.document("""
             <div style="width:640px;min-width:640px;height:600px">Wide receipt</div>
             <script>document.body.setAttribute('data-email-script', 'ran')</script>
             """, remoteImages: false), baseURL: nil)
-        await fulfillment(of: [loaded], timeout: 15)
+        for _ in 0..<150 {
+            if observer.didLoad { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(observer.didLoad, "Email must finish loading before layout is measured")
         try await assertFits(web, expectedWidth: 320)
         web.frame.size.width = 480
         web.layoutIfNeeded()
@@ -55,7 +58,6 @@ final class MailHTMLLayoutTests: XCTestCase {
 
 @MainActor
 private final class HTMLLoadObserver: NSObject, WKNavigationDelegate {
-    let loaded: XCTestExpectation
-    init(_ loaded: XCTestExpectation) { self.loaded = loaded }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loaded.fulfill() }
+    var didLoad = false
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { didLoad = true }
 }
