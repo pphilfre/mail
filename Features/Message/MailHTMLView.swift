@@ -95,7 +95,7 @@ struct MailHTMLView: UIViewRepresentable {
         var document = ""
         init(height: Binding<CGFloat>) { self.height = height }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                     decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             if navigationAction.navigationType == .linkActivated,
                let url = navigationAction.request.url, let scheme = url.scheme?.lowercased(),
                ["https", "http", "mailto", "tel"].contains(scheme) {
