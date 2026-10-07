@@ -138,10 +138,10 @@ struct MailTasksView: View {
                 Button { editing = task } label: { Text(task.title).font(.subheadline.weight(.semibold)).foregroundStyle(Color.primary).multilineTextAlignment(.leading).lineLimit(2) }
                 if !task.notes.isEmpty { Text(task.notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(3) }
                 HStack(spacing: 10) {
-                    if task.status == .inProgress { Label("In progress", systemImage: "circle.lefthalf.filled").fixedSize() }
-                    if task.priority != .normal { Label(task.priority.rawValue, systemImage: task.priority.symbol).fixedSize() }
-                    if !task.steps.isEmpty { Label("\(task.steps.filter(\.isCompleted).count)/\(task.steps.count)", systemImage: "checklist").fixedSize() }
-                }.font(.caption).foregroundStyle(.secondary)
+                    if task.status == .inProgress { taskBadge("In progress", symbol: "circle.lefthalf.filled") }
+                    if task.priority != .normal { taskBadge(task.priority.rawValue, symbol: task.priority.symbol) }
+                    if !task.steps.isEmpty { taskBadge("\(task.steps.filter(\.isCompleted).count)/\(task.steps.count)", symbol: "checklist") }
+                }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if !task.list.isEmpty { Label(task.list, systemImage: "folder").font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 if let dueAt = task.dueAt {
                     Label(dueAt.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
@@ -152,7 +152,7 @@ struct MailTasksView: View {
                     NavigationLink { GmailMessageView(message: message) } label: { Label("Open conversation", systemImage: "envelope") }
                         .font(.caption).accessibilityIdentifier("taskConversation-\(task.remoteMessageID)")
                 } else if !task.isStandalone { Text("Original message is no longer cached").font(.caption).foregroundStyle(.secondary) }
-            }
+            }.fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Menu {
                 ForEach(TaskStatus.allCases) { value in
@@ -168,10 +168,15 @@ struct MailTasksView: View {
             }.accessibilityLabel("Task actions")
         }
         .buttonStyle(.borderless).padding(.vertical, 5)
+        .accessibilityElement(children: .contain).accessibilityIdentifier("taskRow-\(task.accessibilityKey)")
         .contextMenu {
             Button("Edit task", systemImage: "pencil") { editing = task }
             Button("Delete task", systemImage: "trash", role: .destructive) { deleting = task }
         }
+    }
+    private func taskBadge(_ title: String, symbol: String) -> some View {
+        HStack(spacing: 4) { Image(systemName: symbol); Text(title) }
+            .fixedSize(horizontal: true, vertical: true)
     }
 }
 

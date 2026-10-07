@@ -28,6 +28,11 @@ final class DispatchUITests: XCTestCase {
         app.buttons["taskWorkflowPicker"].tap(); app.buttons["In progress"].tap()
         app.buttons["saveMailTaskButton"].tap()
         XCTAssertTrue(app.staticTexts["High"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["High"].isHittable)
+        XCTAssertTrue(app.staticTexts["In progress"].isHittable)
+        let taskRow = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "taskRow-")).firstMatch
+        XCTAssertTrue(taskRow.waitForExistence(timeout: 5))
+        XCTAssertLessThan(taskRow.frame.height, 140, "A title and two badges should fit in a compact task row")
         attachScreenshot("Standalone task workflow", app: app)
         app.buttons["Complete \(title)"].tap()
         app.segmentedControls["taskStatusFilter"].buttons["Completed"].tap()
