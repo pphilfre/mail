@@ -11,6 +11,221 @@ final class DispatchUITests: XCTestCase {
         add(attachment)
     }
 
+    func testAttachmentLibrarySearchAndSourceConversation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_LIBRARY"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openAttachmentsButton"].tap()
+        let file = app.staticTexts["Project plans.pdf"].firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Inline logo.png"].exists)
+        attachScreenshot("Attachment library", app: app)
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Project")
+        XCTAssertTrue(file.waitForExistence(timeout: 5))
+        let source = app.descendants(matching: .any)["attachmentSource-Project plans.pdf"].firstMatch
+        XCTAssertTrue(source.exists); source.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["conversationBody-latest"].firstMatch.waitForExistence(timeout: 5))
+    }
+
+    func testPeopleProfileCanSaveNicknameAndShowSenderFiles() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_LIBRARY"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openPeopleButton"].tap()
+        let person = app.descendants(matching: .any)["senderProfile-reader-fixture@gmail.com"].firstMatch
+        XCTAssertTrue(person.waitForExistence(timeout: 10)); person.tap()
+        XCTAssertTrue(app.staticTexts["Received"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["senderActivityChart"].firstMatch.exists)
+        let edit = app.buttons["editSenderProfileButton"]
+        if !edit.isHittable { app.swipeUp() }
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+        let nickname = app.textFields["senderNicknameField"]
+        XCTAssertTrue(nickname.waitForExistence(timeout: 5)); nickname.tap(); nickname.typeText("Alex")
+        let notes = app.textViews["senderNotesField"]
+        notes.tap(); notes.typeText("Prefers email after lunch")
+        app.buttons["saveSenderProfileButton"].tap()
+        XCTAssertTrue(app.staticTexts["Prefers email after lunch"].waitForExistence(timeout: 5))
+        let tabs = app.segmentedControls["senderContentPicker"]
+        if !tabs.isHittable { app.swipeUp() }
+        tabs.buttons["Files"].tap()
+        XCTAssertTrue(app.staticTexts["Project plans.pdf"].waitForExistence(timeout: 5))
+        attachScreenshot("Sender profile with files", app: app)
+        app.swipeDown()
+        XCTAssertTrue(app.staticTexts["Alex"].waitForExistence(timeout: 5))
+    }
+
+    func testConversationOpensSenderProfile() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launch()
+        let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
+        let profile = app.buttons["openSenderProfile-latest"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 5)); profile.tap()
+        XCTAssertTrue(app.navigationBars["Sender profile"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["reader-fixture@gmail.com"].exists)
+    }
+
+    func testCollectionCreatedFromReaderIncludesThreadFilesAndCanRemoveMembership() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_LIBRARY"] = "YES"
+        app.launch()
+        let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
+        app.buttons["More"].tap(); app.buttons["addToCollectionButton"].tap()
+        app.buttons["New collection"].tap()
+        let name = app.textFields["collectionNameField"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("House move")
+        app.buttons["saveCollectionButton"].tap()
+        XCTAssertTrue(app.buttons["House move"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openCollectionsButton"].tap()
+        let collection = app.descendants(matching: .any)["collection-House move"].firstMatch
+        XCTAssertTrue(collection.waitForExistence(timeout: 5)); collection.tap()
+        app.segmentedControls["collectionContentPicker"].buttons["Files"].tap()
+        XCTAssertTrue(app.staticTexts["Project plans.pdf"].waitForExistence(timeout: 5))
+        attachScreenshot("Project collection files", app: app)
+        app.buttons["addCollectionMailButton"].tap()
+        let member = app.buttons["collectionMember-latest"]
+        XCTAssertTrue(member.waitForExistence(timeout: 5)); XCTAssertEqual(member.value as? String, "Included")
+        member.tap(); XCTAssertEqual(member.value as? String, "Not included")
+        app.buttons["Done"].tap()
+        XCTAssertFalse(app.staticTexts["Project plans.pdf"].exists)
+        XCTAssertTrue(app.staticTexts["No files in these downloaded conversations."].exists)
+    }
+
+    func testSubscriptionsDetectSenderAndManualExclusionCanBeReversed() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_SUBSCRIPTIONS"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openSubscriptionsButton"].tap()
+        let newsletter = app.descendants(matching: .any)["subscription-news@example.com"].firstMatch
+        XCTAssertTrue(newsletter.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["1 unread · 1 message · 1 in 7 days"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["subscription-reader-fixture@gmail.com"].firstMatch.exists)
+        attachScreenshot("Subscription centre", app: app)
+        app.buttons["manageSubscriptionsButton"].tap()
+        let exclude = app.buttons["excludeSubscription-news@example.com"]
+        XCTAssertTrue(exclude.waitForExistence(timeout: 5)); exclude.tap()
+        app.buttons["closeSubscriptionManagerButton"].tap()
+        XCTAssertTrue(app.staticTexts["No newsletters here"].waitForExistence(timeout: 5))
+        app.buttons["manageSubscriptionsButton"].tap()
+        let include = app.buttons["includeSubscription-news@example.com"]
+        XCTAssertTrue(include.waitForExistence(timeout: 5)); include.tap()
+        app.buttons["closeSubscriptionManagerButton"].tap()
+        XCTAssertTrue(newsletter.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Added by you"].exists)
+    }
+
+    func testSubscriptionArchiveConfirmsCountAndCanUndoWithoutAProvider() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_SUBSCRIPTIONS"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openSubscriptionsButton"].tap()
+        let archive = app.buttons["archiveSubscription-news@example.com"]
+        XCTAssertTrue(archive.waitForExistence(timeout: 10)); archive.tap()
+        let confirm = app.buttons["Archive 1 inbox message"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5)); confirm.tap()
+        XCTAssertTrue(archive.waitForExistence(timeout: 5)); XCTAssertFalse(archive.isEnabled)
+        app.buttons["closeSubscriptionsButton"].tap()
+        XCTAssertFalse(app.descendants(matching: .any)["cachedMessage-newsletter-fixture"].firstMatch.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["cachedMessage-latest"].firstMatch.exists)
+        let undo = app.buttons["triageUndo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5)); undo.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["cachedMessage-newsletter-fixture"].firstMatch.waitForExistence(timeout: 5))
+    }
+
+    func testMailTaskCanBeCreatedCompletedAndReopenedWithConversationLink() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launch()
+        let message = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 10)); message.tap()
+        app.buttons["More"].tap(); app.buttons["makeMailTaskButton"].tap()
+        let title = app.textFields["mailTaskTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        let notes = app.textViews["mailTaskNotes"]
+        notes.tap(); notes.typeText("Check the delivery date")
+        app.switches["mailTaskDueToggle"].tap()
+        app.buttons["saveMailTaskButton"].tap()
+        XCTAssertTrue(app.staticTexts["Task saved"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openTasksButton"].tap()
+        let toggle = app.buttons["toggleTask-latest"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Check the delivery date"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["taskConversation-latest"].firstMatch.exists)
+        attachScreenshot("Tasks with a linked conversation", app: app)
+        toggle.tap()
+        XCTAssertFalse(toggle.exists)
+        app.segmentedControls["taskStatusFilter"].buttons["Completed"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
+        app.segmentedControls["taskStatusFilter"].buttons["Open"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+    }
+
+    func testReceiptIsDetectedAndCanBeReviewedWithoutProviderAccess() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_PRODUCTIVITY"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap(); app.buttons["openReceiptsButton"].tap()
+        let receipt = app.descendants(matching: .any)["receipt-receipt-fixture"].firstMatch
+        XCTAssertTrue(receipt.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["GBP 22.00"].exists)
+        attachScreenshot("Local receipt organiser", app: app)
+        receipt.tap()
+        app.buttons["reviewReceiptButton"].tap()
+        let merchant = app.textFields["receiptMerchant"]
+        XCTAssertTrue(merchant.waitForExistence(timeout: 5))
+        merchant.tap(); merchant.typeText(" Shop")
+        app.buttons["saveReceiptButton"].tap()
+        XCTAssertTrue(app.staticTexts["Receipt saved"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["Paper & Ink Shop"].waitForExistence(timeout: 5))
+    }
+
+    func testAttachedDraftReopensAndRemovalPersistsAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_DRAFT_ATTACHMENT"] = "YES"
+        app.launch()
+        app.descendants(matching: .any)["draftsShortcut"].tap()
+        let draft = app.buttons["localDraft-C0626EB5-478F-4272-BD4E-C102B61EB052"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 10)); draft.tap()
+        let remove = app.buttons["removeAttachment-fixture.txt"]
+        XCTAssertTrue(app.navigationBars["New message"].waitForExistence(timeout: 10))
+        if !remove.exists { app.swipeUp() }
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["attachFileButton"].exists)
+        XCTAssertTrue(app.buttons["attachPhotoButton"].exists)
+        attachScreenshot("Composer with persisted attachment", app: app)
+        remove.tap()
+        app.buttons["saveDraftButton"].tap()
+        app.terminate(); app.launch()
+        app.descendants(matching: .any)["draftsShortcut"].tap()
+        XCTAssertTrue(draft.waitForExistence(timeout: 5)); draft.tap()
+        XCTAssertFalse(app.buttons["removeAttachment-fixture.txt"].exists)
+        XCTAssertEqual(app.textViews["composeBody"].value as? String, "Keep this body")
+    }
+
     func testGroupedBulkArchiveCanBeUndoneWithoutProviderAccess() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
@@ -138,8 +353,7 @@ final class DispatchUITests: XCTestCase {
         app.buttons["saveDraftButton"].tap()
         XCTAssertTrue(app.staticTexts["Draft saved"].waitForExistence(timeout: 5))
         attachScreenshot("Draft confirmation", app: app)
-        let dismissConfirmation = app.buttons["Dismiss confirmation"]
-        if dismissConfirmation.exists { dismissConfirmation.tap() }
+        XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
         app.descendants(matching: .any)["draftsShortcut"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
     }

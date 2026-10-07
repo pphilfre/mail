@@ -3,23 +3,27 @@ import SwiftData
 
 struct DraftsView: View {
     var accountID: UUID? = nil
+    @State private var editingDraft: LocalDraft?
     var body: some View {
-        List { DraftSections(accountID: accountID) }
+        List { DraftSections(accountID: accountID, onEdit: { editingDraft = $0 }) }
             .listStyle(.plain).scrollContentBackground(.hidden).background(MailStyle.paper)
             .navigationTitle("Drafts")
+            .sheet(item: $editingDraft) { draft in
+                NavigationStack { ComposeView(draft: draft) }
+            }
     }
 }
 
 /// Shared by the Drafts mailbox and the inbox shortcut; local copies remain editable offline.
 struct DraftSections: View {
     var accountID: UUID? = nil
+    let onEdit: (LocalDraft) -> Void
     @Environment(AppSession.self) private var session
     @Environment(AppRuntime.self) private var runtime
     @Query(sort: \MailAccount.email) private var accounts: [MailAccount]
     @Query(sort: \MailMessage.receivedAt, order: .reverse) private var messages: [MailMessage]
     @Query private var outgoing: [OutgoingMessage]
     @Query private var links: [StoreMetadata]
-    @State private var editingDraft: LocalDraft?
     @State private var errorMessage: String?
     @State private var deletingDraft: LocalDraft?
     @State private var refreshing = false
@@ -40,13 +44,17 @@ struct DraftSections: View {
               Section {
                 ForEach(local) { draft in
                 Button {
-                    editingDraft = draft
+                    onEdit(draft)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(draft.displaySubject).font(.headline).foregroundStyle(.primary)
                         Text(draft.to.isEmpty ? "No recipients" : draft.to)
                             .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                         Text(draft.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                        if !draft.attachments.isEmpty {
+                            Label("\(draft.attachments.count) attachment\(draft.attachments.count == 1 ? "" : "s")", systemImage: "paperclip")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Text(accountName(draft.accountID)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         HStack {
                             Text(hasGmailCopy(draft) ? "Local edits · Gmail copy" : "On this device")
@@ -95,9 +103,6 @@ struct DraftSections: View {
                     Button("Retry") { Task { await refresh() } }.disabled(refreshing)
                 }
             }
-        }
-        .sheet(item: $editingDraft) { draft in
-            NavigationStack { ComposeView(draft: draft) }
         }
         .confirmationDialog("Delete the local copy?", isPresented: Binding(
             get: { deletingDraft != nil }, set: { if !$0 { deletingDraft = nil } }

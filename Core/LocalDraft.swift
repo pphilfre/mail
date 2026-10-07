@@ -13,15 +13,35 @@ struct LocalDraft: Identifiable, Codable, Equatable, Sendable {
     var remoteThreadID: String?
     var inReplyTo: String?
     var referencesHeader: String?
+    var attachments: [DraftAttachment] = []
 
     var isEmpty: Bool {
-        [to, cc, bcc, subject, body].allSatisfy {
+        attachments.isEmpty && [to, cc, bcc, subject, body].allSatisfy {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
     var displaySubject: String {
         subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No subject" : subject
+    }
+}
+
+// Older foundation JSON drafts predate attachments. Keep their import compatible.
+extension LocalDraft {
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        to = try values.decode(String.self, forKey: .to)
+        cc = try values.decode(String.self, forKey: .cc)
+        bcc = try values.decode(String.self, forKey: .bcc)
+        subject = try values.decode(String.self, forKey: .subject)
+        body = try values.decode(String.self, forKey: .body)
+        updatedAt = try values.decode(Date.self, forKey: .updatedAt)
+        accountID = try values.decodeIfPresent(UUID.self, forKey: .accountID)
+        remoteThreadID = try values.decodeIfPresent(String.self, forKey: .remoteThreadID)
+        inReplyTo = try values.decodeIfPresent(String.self, forKey: .inReplyTo)
+        referencesHeader = try values.decodeIfPresent(String.self, forKey: .referencesHeader)
+        attachments = try values.decodeIfPresent([DraftAttachment].self, forKey: .attachments) ?? []
     }
 }
 

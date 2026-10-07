@@ -10,6 +10,7 @@ final class GmailCoordinator {
     var writing: Set<UUID> = []
     var downloading: Set<UUID> = []
     @ObservationIgnored let attachmentCache: AttachmentCache
+    @ObservationIgnored let draftAttachments: DraftAttachmentStore
     var error: String?
     var waitingUntil: [UUID: Date] = [:]
     var mailboxPageTokens: [String: String] = [:]
@@ -23,10 +24,11 @@ final class GmailCoordinator {
     @ObservationIgnored private var mailboxRequests: [UUID: MailboxRequest] = [:]
     private struct MailboxRequest { let name: String; let label: String? }
     private static let uncertainDraftMarker = "remote-draft-create-unconfirmed"
-    init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport(), attachmentCache: AttachmentCache = AttachmentCache(),
+    init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport(), attachmentCache: AttachmentCache = AttachmentCache(), draftAttachments: DraftAttachmentStore = DraftAttachmentStore(),
          requestPause: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.repository = repository; self.vault = vault; self.transport = transport
         self.attachmentCache = attachmentCache
+        self.draftAttachments = draftAttachments
         self.requestPause = requestPause
         do { mailboxPageTokens = try repository.gmailPageTokens() }
         catch { self.error = error.localizedDescription }
@@ -324,7 +326,7 @@ final class GmailCoordinator {
         guard row.stateRaw == "draft" else { throw GmailError.uncertainSend }
         guard !writing.contains(id) else { throw GmailError.busy }
         writing.insert(id); defer { writing.remove(id) }
-        let raw = try MailMIME.raw(draft, from: account.email, requireRecipient: false)
+        let raw = try await draftAttachments.raw(draft, from: account.email, requireRecipient: false)
         let api = try client(id)
         // Recover a previous ambiguous create by stable Message-ID before creating a new remote draft.
         var remoteID = row.remoteDraftID
@@ -335,12 +337,11 @@ final class GmailCoordinator {
         }
         if remoteID == nil { row.lastError = Self.uncertainDraftMarker; try repository.context.save() }
         if let remoteID {
-            guard MailMIME.canEditDraft(try await api.draft(remoteID).message?.payload) else { throw GmailError.unsupportedDraft }
+            guard try repository.canReplaceDraft(try await api.draft(remoteID), row: row) else { throw GmailError.unsupportedDraft }
         }
         do {
             let remote = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
-            row.remoteDraftID = remote.id; row.lastError = nil; try repository.context.save()
-            if let messageID = remote.message?.id { try repository.saveDraftLink(accountID: id, draftID: remote.id, messageID: messageID) }
+            try repository.acknowledgeDraft(remote, row: row)
         } catch {
             if remoteID == nil {
                 if let failure = error as? GmailError, case .http(let code) = failure, (400..<500).contains(code) {
@@ -361,14 +362,15 @@ final class GmailCoordinator {
             let drafts = try await api.drafts(page: page)
             if let reference = drafts.drafts?.first(where: { $0.message?.id == message.remoteID }) {
                 let remote = try await api.draft(reference.id)
-                guard MailMIME.canEditDraft(remote.message?.payload) else { throw GmailError.unsupportedDraft }
                 guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 if let messageID = remote.message?.id { try repository.saveDraftLink(accountID: accountID, draftID: reference.id, messageID: messageID) }
                 if let existing = try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID }))
                     .first(where: { $0.remoteDraftID == reference.id }) {
                     guard existing.stateRaw == "draft" else { throw GmailError.uncertainSend }
-                    return existing.localDraft
+                    guard try repository.canReplaceDraft(remote, row: existing) else { throw GmailError.unsupportedDraft }
+                    return try repository.localDraft(existing)
                 }
+                guard MailMIME.canEditDraft(remote.message?.payload) else { throw GmailError.unsupportedDraft }
                 guard try repository.account(id: accountID) != nil else { throw GmailError.reconnect }
                 guard let dto = remote.message else { throw GmailError.invalidResponse }
                 let header = dto.payload; let content = MailMIME.content(header)
@@ -394,7 +396,9 @@ final class GmailCoordinator {
             if let reference = drafts.drafts?.first(where: { $0.message?.id == message.remoteID }) {
                 try await api.deleteDraft(reference.id)
                 for row in try repository.context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == accountID && $0.stateRaw == "draft" }))
-                    where row.remoteDraftID == reference.id { repository.context.delete(row) }
+                    where row.remoteDraftID == reference.id {
+                        try repository.removeDraftMetadata(row.id); repository.context.delete(row)
+                    }
                 try repository.apply([], deleted: [message.remoteID], accountID: accountID)
                 return
             }
@@ -408,13 +412,14 @@ final class GmailCoordinator {
         guard row.lastError != Self.uncertainDraftMarker else { throw GmailError.uncertainDraft }
         guard !writing.contains(id) else { throw GmailError.busy }
         writing.insert(id); defer { writing.remove(id) }
-        let raw = try MailMIME.raw(draft, from: account.email)
+        let raw = try await draftAttachments.raw(draft, from: account.email)
         let api = try client(id)
         // Refresh before committing sending state so an expired credential cannot create an uncertain send.
         _ = try await api.profile()
         if let remoteID = row.remoteDraftID {
-            guard MailMIME.canEditDraft(try await api.draft(remoteID).message?.payload) else { throw GmailError.unsupportedDraft }
-            _ = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
+            guard try repository.canReplaceDraft(try await api.draft(remoteID), row: row) else { throw GmailError.unsupportedDraft }
+            let remote = try await api.saveDraft(id: remoteID, raw: raw, threadID: draft.remoteThreadID)
+            try repository.acknowledgeDraft(remote, row: row)
         }
         row.stateRaw = "sending"; try repository.context.save()
         do {

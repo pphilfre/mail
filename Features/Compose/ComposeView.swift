@@ -23,6 +23,8 @@ struct ComposeView: View {
     @State private var appliedSignature: String?
     @State private var manageSignature = false
     @State private var confirmingAttachment = false
+    @State private var importingAttachments = false
+    @State private var attachmentError: String?
     private var recipientErrors: Bool {
         [draft.to, draft.cc, draft.bcc].contains { !RecipientInput.invalid($0).isEmpty } ||
         !RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).isEmpty
@@ -74,17 +76,21 @@ struct ComposeView: View {
                     Text("Separate multiple addresses with commas.")
                 }
             }
+            ComposeAttachmentsView(draftID: draft.id, attachments: $draft.attachments, importing: $importingAttachments) {
+                attachmentError = $0
+            }
             Section {
                 TextEditor(text: $draft.body)
                     .font(.body).scrollContentBackground(.hidden)
                     .frame(minHeight: 280)
                     .accessibilityLabel("Message body")
                     .accessibilityIdentifier("composeBody")
-            } footer: {
-                Text("Messages contain text only. Attachments are not included.")
             }
             if let saveError {
                 Section { Text(saveError).foregroundStyle(.red) }
+            }
+            if let attachmentError {
+                Section { Text(attachmentError).foregroundStyle(.red) }
             }
             if !accounts.isEmpty {
                 Section {
@@ -115,7 +121,7 @@ struct ComposeView: View {
                         .accessibilityIdentifier("saveDraftButton")
                 } else {
                     Button("Send", systemImage: "paperplane") {
-                        if MailSignature.mentionsAttachment(draft.body) { confirmingAttachment = true }
+                        if draft.attachments.isEmpty && MailSignature.mentionsAttachment(draft.body) { confirmingAttachment = true }
                         else { perform(send: true) }
                     }
                         .buttonStyle(.glassProminent)
@@ -124,7 +130,7 @@ struct ComposeView: View {
                 }
             }
         }
-        .interactiveDismissDisabled(!draft.isEmpty)
+        .interactiveDismissDisabled(!draft.isEmpty || importingAttachments)
         .onAppear {
             if editor == nil {
                 let saved = session.drafts.contains { $0.id == draft.id }
@@ -144,11 +150,14 @@ struct ComposeView: View {
             }
         }
         .onChange(of: draft) { _, _ in scheduleAutosave() }
+        .onChange(of: importingAttachments) { _, value in
+            if value { attachmentError = nil } else { checkpoint() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { autosaveTask?.cancel(); checkpoint() }
         }
         .onDisappear { autosaveTask?.cancel(); checkpoint() }
-        .disabled(working)
+        .disabled(working || importingAttachments)
         .confirmationDialog("Keep this draft?", isPresented: $confirmingClose, titleVisibility: .visible) {
             Button("Save draft", action: save)
             Button("Discard changes", role: .destructive, action: discard)
@@ -157,7 +166,7 @@ struct ComposeView: View {
         .confirmationDialog("Your message mentions an attachment", isPresented: $confirmingAttachment, titleVisibility: .visible) {
             Button("Send without attachments") { perform(send: true) }
             Button("Keep editing", role: .cancel) { }
-        } message: { Text("This composer sends text only. No files will be included.") }
+        } message: { Text("No files are attached. Keep editing to add one, or send this message as it is.") }
     }
 
     private func recipientField(_ title: String, text: Binding<String>) -> some View {

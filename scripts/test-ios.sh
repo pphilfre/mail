@@ -24,3 +24,7 @@ if [[ -n "${DISPATCH_TEST_ONLY:-}" ]]; then
 fi
 xcodebuild "${common[@]}" test-without-building -parallel-testing-enabled NO \
   -resultBundlePath build/Tests.xcresult 2>&1 | tee build/test.log
+if [[ -z "${DISPATCH_TEST_ONLY:-}" ]]; then
+  app_container="$(xcrun simctl get_app_container "$simulator_id" dev.freddiephilpot.dispatch data)"
+  python3 scripts/verify-compose-mime.py "$app_container/Library/Application Support/Dispatch/compose-mime-fixture.eml"
+fi

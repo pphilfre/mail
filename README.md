@@ -4,11 +4,15 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-Stages 1 and 2 are verified: [Dispatch CI](https://github.com/pphilfre/mail/actions/runs/37124979822) built the renamed app and passed four unit tests and three UI tests; the IPA release pipeline is verified. Stage 3 passed [SwiftData and actual simulator Keychain tests](https://github.com/pphilfre/mail/actions/runs/37127210621). Gmail integration is implemented and undergoing macOS validation. Gmail is the current provider priority. See [stage status](docs/stages.md).
+The released v0.4.0 app passed its full macOS CI gate and device IPA build. The next release, v0.5.0, adds [email tasks and a receipt organiser](docs/mail-productivity.md) plus [compose and forward attachments](docs/composer-attachments.md), with all builds and tests running on GitHub Actions. See the [everyday feature wave](docs/feature-wave.md) and [signed device checklist](docs/oauth-setup.md).
+
+The v0.5.0 source is preserved at its release tag. A separate v0.6.0 development wave adds [sender profiles and an attachment library](docs/people-and-attachments.md), [project collections and a subscription centre](docs/collections-and-subscriptions.md). Its iOS build and tests are deferred while GitHub recovers; these features have not yet passed the macOS CI gate. Further proposals are in the [feature ideas](docs/feature-ideas.md).
+
+Download the latest IPA from [Dispatch releases](https://github.com/pphilfre/mail/releases). The IPA requires re-signing with your sideloading tool.
 
 Your supplied Google iOS client is configured. Follow the [OAuth setup guide](docs/oauth-setup.md) to confirm Gmail API access, your test user and the registered Dispatch bundle ID. Zoho is deferred.
 
-The foundation includes Inbox, Accounts, Settings, a sample message reader, and a compose sheet that saves real on-device drafts. Sample messages are opt-in under Settings and clearly labelled. Connect Gmail in Accounts. Cached messages, threads, labels, incremental sync, read/star/archive/trash, sending, drafts, reply/reply-all and text forwarding are implemented. See [Gmail details and limitations](Providers/Gmail/README.md). Live login and mail delivery require an installed, signed device build and your configured Google test user.
+The foundation includes Inbox, Accounts, Settings, a sample message reader, and a compose sheet that saves real on-device drafts. Sample messages are opt-in under Settings and clearly labelled. Connect Gmail in Accounts. Cached messages, threads, labels, incremental sync, read/star/archive/trash, sending, drafts, reply/reply-all forwarding, file/photo attachments, conversation rows, bulk actions and Undo, saved/operator searches, account signatures and recipient assistance are implemented. See [Gmail details and limitations](Providers/Gmail/README.md). Live login and mail delivery require an installed, signed device build and your configured Google test user.
 
 ## Windows workflow
 
@@ -27,11 +31,11 @@ The runner uses macOS 26 with Xcode 26.6, generates the project using XcodeGen, 
 After the intended commit passes CI:
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
-The release workflow requires an already successful iOS CI run for the exact tagged commit, builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v0.2.0.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tags must use `vMAJOR.MINOR.PATCH`. If a tag is pushed before CI finishes, wait for CI and rerun the failed release workflow. The historical `v0.1.0` tag predates the Dispatch rename.
+The release workflow runs the full iOS CI suite for the tagged commit, then builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tests must pass before the device build or publication can start. Tags must use `vMAJOR.MINOR.PATCH`. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 

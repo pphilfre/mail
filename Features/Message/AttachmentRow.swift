@@ -34,6 +34,7 @@ struct AttachmentRow: View {
             if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(.secondary) }
         }
         .padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .buttonStyle(.borderless)
         .quickLookPreview($previewURL)
         .task(id: attachment.cachedRelativePath) {
             fileURL = try? await runtime.gmail?.attachmentCache.existing(attachment.cachedRelativePath)

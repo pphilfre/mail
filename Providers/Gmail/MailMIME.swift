@@ -134,7 +134,30 @@ enum MailMIME {
         if !chunk.isEmpty { chunks.append(chunk) }
         return chunks.map { "=?UTF-8?B?\($0.base64EncodedString())?=" }.joined(separator: "\r\n ")
     }
-    static func raw(_ draft: LocalDraft, from: String, requireRecipient: Bool = true) throws -> String {
+    struct OutgoingAttachment: Sendable {
+        let filename: String
+        let mimeType: String
+        let data: Data
+    }
+    private static func attachmentDisposition(_ filename: String) -> String {
+        let safe = AttachmentCache.safeFilename(filename)
+        // RFC 2231 continuations preserve Unicode and keep each header line short.
+        var segments: [String] = []; var current = ""
+        for byte in safe.utf8 {
+            let token = String(format: "%%%02X", byte)
+            if current.count + token.count > 54 { segments.append(current); current = "" }
+            current += token
+        }
+        if !current.isEmpty { segments.append(current) }
+        let parameters = segments.enumerated().map { index, value in
+            "filename*\(index)*=" + (index == 0 ? "UTF-8''" : "") + value
+        }
+        return "Content-Disposition: attachment;\r\n " + parameters.joined(separator: ";\r\n ")
+    }
+    static func raw(_ draft: LocalDraft, from: String, requireRecipient: Bool = true, attachments: [OutgoingAttachment] = []) throws -> String {
+        // Never silently drop files when a caller forgets to load the saved originals.
+        guard attachments.count == draft.attachments.count else { throw ComposeAttachmentError.unavailable }
+        try DraftAttachmentStore.validate(draft.attachments)
         let values = [draft.to, draft.cc, draft.bcc, draft.subject, from, draft.inReplyTo ?? "", draft.referencesHeader ?? ""]
         guard !values.contains(where: { $0.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }), valid(from),
               (!requireRecipient || !addresses(draft.to).isEmpty) else { throw GmailError.invalidRecipients }
@@ -146,11 +169,31 @@ enum MailMIME {
         var lines = ["From: \(from)", "To: \(header(recipientLists[0]))"]
         if !recipientLists[1].isEmpty { lines.append("Cc: \(header(recipientLists[1]))") }
         if !recipientLists[2].isEmpty { lines.append("Bcc: \(header(recipientLists[2]))") }
-        lines += ["Subject: " + encodedWord(draft.subject), "Message-ID: <\(draft.id.uuidString.lowercased())@dev.freddiephilpot.dispatch>",
-                  "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64"]
+        lines += ["Subject: " + encodedWord(draft.subject), "Message-ID: <\(draft.id.uuidString.lowercased())@dev.freddiephilpot.dispatch>", "MIME-Version: 1.0"]
         if let reply = draft.inReplyTo { lines.append("In-Reply-To: " + reply) }
         if let references = draft.referencesHeader { lines.append("References: " + references) }
-        let encoded = Data(draft.body.utf8).base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed])
-        return Base64URL.encode(Data((lines.joined(separator: "\r\n") + "\r\n\r\n" + encoded + "\r\n").utf8))
+        let normalizedBody = draft.body.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n").replacingOccurrences(of: "\n", with: "\r\n")
+        func encoded(_ data: Data) -> String {
+            data.base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed])
+        }
+        let textHeaders = "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64"
+        var body: String
+        if attachments.isEmpty {
+            lines.append(textHeaders)
+            body = encoded(Data(normalizedBody.utf8)) + "\r\n"
+        } else {
+            let boundary = "dispatch_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            lines.append("Content-Type: multipart/mixed; boundary=\"\(boundary)\"")
+            body = "--\(boundary)\r\n\(textHeaders)\r\n\r\n" + encoded(Data(normalizedBody.utf8)) + "\r\n"
+            for file in attachments {
+                let type = file.mimeType.range(of: #"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"#, options: .regularExpression) != nil ? file.mimeType : "application/octet-stream"
+                body += "--\(boundary)\r\nContent-Type: \(type)\r\nContent-Transfer-Encoding: base64\r\n" +
+                    attachmentDisposition(file.filename) + "\r\n\r\n" + encoded(file.data) + "\r\n"
+            }
+            body += "--\(boundary)--\r\n"
+        }
+        let message = Data((lines.joined(separator: "\r\n") + "\r\n\r\n" + body).utf8)
+        guard message.count <= 28 * 1024 * 1024 else { throw ComposeAttachmentError.tooLarge }
+        return Base64URL.encode(message)
     }
 }
