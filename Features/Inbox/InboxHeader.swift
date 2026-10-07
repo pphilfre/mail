@@ -22,11 +22,10 @@ struct InboxHeader: View {
     @Namespace private var selection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(title).font(.largeTitle.weight(.bold)).tracking(-0.8)
-                        .foregroundStyle(.primary).accessibilityAddTraits(.isHeader)
+                    Text(scope).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 12)
                     if canSelect {
                         Button(action: select) {
@@ -37,10 +36,9 @@ struct InboxHeader: View {
                     }
                 }
                 HStack {
-                    Text(scope).lineLimit(1)
-                    Spacer(minLength: 12)
                     Text("\(count) \(grouped ? (count == 1 ? "conversation" : "conversations") : (count == 1 ? "message" : "messages"))")
                         .accessibilityIdentifier("inboxResultCount")
+                    Spacer(minLength: 12)
                 }.font(.caption).foregroundStyle(.secondary)
             }
             Button(action: search) {

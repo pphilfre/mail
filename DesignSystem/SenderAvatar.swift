@@ -5,6 +5,7 @@ struct SenderAvatar: View {
     let email: String
     let name: String
     var allowsRemoteIcon = true
+    var size: CGFloat = 38
     @AppStorage("senderPictures") private var senderPictures = true
     private var iconURL: URL? {
         guard allowsRemoteIcon, senderPictures, let domain = email.split(separator: "@").last?.lowercased(),
@@ -36,7 +37,7 @@ struct SenderAvatar: View {
                 }
             } else { fallback }
         }
-        .frame(width: 38, height: 38)
+        .frame(width: size, height: size)
         .clipShape(.rect(cornerRadius: 13))
         .accessibilityHidden(true)
     }

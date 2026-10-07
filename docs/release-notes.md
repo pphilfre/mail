@@ -1,4 +1,16 @@
-Dispatch v0.6.0 adds sender profiles, an attachment library, project collections and a subscription centre, alongside the v0.5.0 tasks, receipts and composer improvements.
+Dispatch v0.6.1 makes everyday navigation and reading more compact.
+
+- Inbox and other mailbox titles now live in the top bar. A Liquid Glass Emails / Tasks pill replaces the bottom tagline.
+- The mailbox menu puts frequent folders and tools in a compact grid, keeps Settings beside the profile icon, and folds secondary folders and labels into expandable groups.
+- Sender profiles put identity, compose, private notes and icon shortcuts first. Activity charts and detailed history are available on demand.
+- Compact inbox reduces padding, avatar size and previews. Preview line settings now reduce actual row height.
+- Tasks has an All view alongside Open and Completed, with a direct shortcut from the inbox.
+- Receipt detection recognises more transaction confirmations and uses HTML when plain text is empty or incomplete.
+- Fixed-width HTML emails fit the reader and resize with the available width. Email scripts remain disabled.
+
+Manual GitHub Actions builds run the full test suite before saving an IPA and checksum as downloadable artifacts. Tag builds also publish a release.
+
+Included from v0.6.0: sender profiles, an attachment library, project collections and a subscription centre, alongside the v0.5.0 tasks, receipts and composer improvements.
 
 - Explore sender history, correspondence counts, weekly activity, files, linked tasks and receipts. Save private nicknames and notes on this device.
 - Search downloaded attachment metadata and local draft files, filter by category, and open the source conversation or draft. Offline availability reflects whether the file is present.

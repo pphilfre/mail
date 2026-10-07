@@ -1,0 +1,61 @@
+import XCTest
+import WebKit
+@testable import DispatchMail
+
+@MainActor
+final class MailHTMLLayoutTests: XCTestCase {
+    func testFixedWidthHTMLFitsAndRefitsWhileEmailScriptsStayDisabled() async throws {
+        let configuration = MailHTMLView.configuration()
+        XCTAssertFalse(configuration.defaultWebpagePreferences.allowsContentJavaScript)
+        XCTAssertFalse(configuration.websiteDataStore.isPersistent)
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 80), configuration: configuration)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 800, height: 800))
+        let controller = UIViewController()
+        window.rootViewController = controller
+        controller.view.addSubview(web)
+        window.makeKeyAndVisible()
+        defer { web.stopLoading(); window.isHidden = true }
+        let loaded = expectation(description: "Email loaded")
+        let observer = HTMLLoadObserver(loaded)
+        web.navigationDelegate = observer
+        web.loadHTMLString(MailHTMLView.document("""
+            <div style="width:640px;min-width:640px;height:600px">Wide receipt</div>
+            <script>document.body.setAttribute('data-email-script', 'ran')</script>
+            """, remoteImages: false), baseURL: nil)
+        await fulfillment(of: [loaded], timeout: 15)
+        try await assertFits(web, expectedWidth: 320)
+        web.frame.size.width = 480
+        web.layoutIfNeeded()
+        try await assertFits(web, expectedWidth: 480)
+    }
+
+    private func assertFits(_ web: WKWebView, expectedWidth: Double) async throws {
+        var metrics: [Double] = []
+        for _ in 0..<50 {
+            let json: String = try await withCheckedThrowingContinuation { continuation in
+                web.evaluateJavaScript("JSON.stringify([document.documentElement.clientWidth, document.getElementById('dispatch-mail-body').getBoundingClientRect().width, document.getElementById('dispatch-mail-body').getBoundingClientRect().height, document.body.hasAttribute('data-email-script') ? 1 : 0])", in: nil, in: .defaultClient) { result in
+                    switch result {
+                    case .success(let value): continuation.resume(returning: value as? String ?? "[]")
+                    case .failure(let error): continuation.resume(throwing: error)
+                    }
+                }
+            }
+            metrics = try JSONDecoder().decode([Double].self, from: Data(json.utf8))
+            if metrics.count == 4 && abs(metrics[0] - expectedWidth) < 2 && abs(metrics[1] - expectedWidth) < 2 { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertEqual(metrics.count, 4)
+        guard metrics.count == 4 else { return }
+        XCTAssertEqual(metrics[0], expectedWidth, accuracy: 2)
+        XCTAssertLessThanOrEqual(metrics[1], expectedWidth + 2, "Fixed-width email must fit without horizontal clipping")
+        XCTAssertGreaterThan(metrics[2], 200, "The full scaled body must retain its height")
+        XCTAssertEqual(metrics[3], 0, "Sender-provided JavaScript must never execute")
+    }
+}
+
+@MainActor
+private final class HTMLLoadObserver: NSObject, WKNavigationDelegate {
+    let loaded: XCTestExpectation
+    init(_ loaded: XCTestExpectation) { self.loaded = loaded }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loaded.fulfill() }
+}

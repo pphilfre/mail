@@ -60,6 +60,7 @@ struct SettingsView: View {
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
     @AppStorage("fullSwipe") private var fullSwipe = false
     @AppStorage("previewLines") private var previewLines = 2
+    @AppStorage("compactInbox") private var compactInbox = false
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("conversationRows") private var conversationRows = true
     @AppStorage("hapticFeedback") private var haptics = true
@@ -83,6 +84,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Load remote images", isOn: $remoteImages)
                 Toggle("Show company icons", isOn: $senderPictures)
+                Toggle("Compact inbox", isOn: $compactInbox).accessibilityIdentifier("compactInboxToggle")
                 Picker("Preview lines", selection: $previewLines) {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
                 }
@@ -136,7 +138,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(MailStyle.canvas)
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: appearance) { _, _ in feedback.select() }
         .onChange(of: haptics) { _, enabled in if enabled { feedback.select() } }
         .onChange(of: confirmationAnimations) { _, enabled in

@@ -8,7 +8,8 @@ struct MailTasksView: View {
     @Query private var metadata: [StoreMetadata]
     @Query private var messages: [MailMessage]
     @Query private var accounts: [MailAccount]
-    @State private var completed = false
+    @State private var status = "Open"
+    private var completed: Bool { status == "Completed" }
     @State private var editing: MailTask?
     @State private var deleting: MailTask?
     @State private var errorMessage: String?
@@ -16,7 +17,7 @@ struct MailTasksView: View {
         metadata.filter { $0.key.hasPrefix(accountID.map(MailTask.prefix) ?? "mail-task:") }
     }
     private var tasks: [MailTask] {
-        taskRows.compactMap { try? MailTask.decode($0) }.filter { $0.isCompleted == completed }
+        taskRows.compactMap { try? MailTask.decode($0) }.filter { status == "All" || $0.isCompleted == completed }
             .sorted {
                 if completed { return ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
                 if $0.dueAt != $1.dueAt { return ($0.dueAt ?? .distantFuture) < ($1.dueAt ?? .distantFuture) }
@@ -27,11 +28,11 @@ struct MailTasksView: View {
       TimelineView(.periodic(from: .now, by: 60)) { timeline in
         List {
             Section {
-                Picker("Tasks", selection: $completed) {
-                    Text("Open").tag(false); Text("Completed").tag(true)
+                Picker("Tasks", selection: $status) {
+                    Text("Open").tag("Open"); Text("All").tag("All"); Text("Completed").tag("Completed")
                 }.pickerStyle(.segmented).accessibilityIdentifier("taskStatusFilter")
             }
-                ForEach(completed ? ["Completed"] : ["Overdue", "Today", "Upcoming", "No due date"], id: \.self) { section in
+                ForEach(completed ? ["Completed"] : ["Overdue", "Today", "Upcoming", "No due date"] + (status == "All" ? ["Completed"] : []), id: \.self) { section in
                     let rows = tasks.filter { $0.section(now: timeline.date) == section }
                     if !rows.isEmpty {
                         Section(section) { ForEach(rows) { task in taskRow(task) } }
@@ -48,6 +49,7 @@ struct MailTasksView: View {
         }
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
         .navigationTitle("Tasks")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { task in NavigationStack { MailTaskEditor(task: task) } }
         .confirmationDialog("Delete this task?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete task", role: .destructive) {

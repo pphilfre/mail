@@ -15,21 +15,27 @@ struct MailHTMLView: UIViewRepresentable {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src \(images); font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>
         :root { color-scheme: light dark; }
-        body { margin: 0; padding: 0; font: -apple-system-body; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+        html, body { margin: 0; padding: 0; width: 100%; font: -apple-system-body; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
         img { max-width: 100% !important; height: auto; }
         table { max-width: 100% !important; }
         pre { white-space: pre-wrap; }
         a { color: #007aff; }
-        </style></head><body>\(html)</body></html>
+        </style></head><body><div id="dispatch-mail-body">\(html)</div></body></html>
         """
     }
     func makeCoordinator() -> Coordinator { Coordinator(height: $height) }
-    func makeUIView(context: Context) -> WKWebView {
+    static func configuration() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        // App-owned layout code runs in an isolated world. Email scripts remain disabled by both preferences and CSP.
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.fitScript,
+            injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
         configuration.dataDetectorTypes = [.link, .phoneNumber]
-        let view = WKWebView(frame: .zero, configuration: configuration)
+        return configuration
+    }
+    func makeUIView(context: Context) -> WKWebView {
+        let view = WKWebView(frame: .zero, configuration: Self.configuration())
         view.isOpaque = false
         view.backgroundColor = .clear
         view.scrollView.backgroundColor = .clear
@@ -47,6 +53,30 @@ struct MailHTMLView: UIViewRepresentable {
         }
         return view
     }
+    static let fitScript = """
+    (() => {
+        const content = document.getElementById('dispatch-mail-body');
+        if (!content) return;
+        let pending = false;
+        const fit = () => {
+            pending = false;
+            const width = document.documentElement.clientWidth;
+            if (width <= 0) return;
+            content.style.zoom = '1';
+            content.style.width = width + 'px';
+            const naturalWidth = Math.max(width, content.scrollWidth);
+            const scale = Math.min(1, width / naturalWidth);
+            content.style.width = naturalWidth + 'px';
+            content.style.zoom = String(scale);
+        };
+        const schedule = () => {
+            if (!pending) { pending = true; requestAnimationFrame(fit); }
+        };
+        window.addEventListener('resize', schedule);
+        document.addEventListener('load', schedule, true);
+        fit();
+    })();
+    """
     func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.height = $height
         let document = Self.document(html, remoteImages: remoteImages)

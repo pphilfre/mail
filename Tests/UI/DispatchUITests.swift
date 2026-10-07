@@ -39,8 +39,8 @@ final class DispatchUITests: XCTestCase {
         app.buttons["profileMenuButton"].tap(); app.buttons["openPeopleButton"].tap()
         let person = app.descendants(matching: .any)["senderProfile-reader-fixture@gmail.com"].firstMatch
         XCTAssertTrue(person.waitForExistence(timeout: 10)); person.tap()
-        XCTAssertTrue(app.staticTexts["Received"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["senderActivityChart"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["senderTab-Mail"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["senderTab-Files"].isHittable)
         let edit = app.buttons["editSenderProfileButton"]
         if !edit.isHittable { app.swipeUp() }
         XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
@@ -50,9 +50,7 @@ final class DispatchUITests: XCTestCase {
         notes.tap(); notes.typeText("Prefers email after lunch")
         app.buttons["saveSenderProfileButton"].tap()
         XCTAssertTrue(app.staticTexts["Prefers email after lunch"].waitForExistence(timeout: 5))
-        let tabs = app.segmentedControls["senderContentPicker"]
-        if !tabs.isHittable { app.swipeUp() }
-        tabs.buttons["Files"].tap()
+        app.buttons["senderTab-Files"].tap()
         XCTAssertTrue(app.staticTexts["Project plans.pdf"].waitForExistence(timeout: 5))
         attachScreenshot("Sender profile with files", app: app)
         app.swipeDown()
@@ -322,6 +320,40 @@ final class DispatchUITests: XCTestCase {
         attachScreenshot("Settings redesign", app: app)
     }
 
+    func testCompactInboxAndPreviewSettingReduceActualRowHeight() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        let row = app.cells.containing(.staticText, identifier: "A quieter inbox").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let normalHeight = row.frame.height
+        app.buttons["mailboxDrawerButton"].tap()
+        XCTAssertTrue(app.buttons["mailbox-Tasks"].isHittable)
+        XCTAssertTrue(app.buttons["mailbox-Receipts"].isHittable)
+        XCTAssertTrue(app.buttons["mailbox-Subscriptions"].isHittable)
+        attachScreenshot("Compact navigation grid", app: app)
+        app.buttons["mailboxSettingsButton"].tap()
+        let compact = app.switches["compactInboxToggle"]
+        XCTAssertTrue(compact.waitForExistence(timeout: 5)); compact.tap()
+        app.buttons["Done"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertLessThan(row.frame.height, normalHeight)
+        let compactHeight = row.frame.height
+        attachScreenshot("Compact inbox", app: app)
+        app.buttons["mailboxDrawerButton"].tap()
+        app.buttons["mailboxSettingsButton"].tap()
+        app.buttons["Preview lines"].tap()
+        app.buttons["Off"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertLessThan(row.frame.height, compactHeight)
+        XCTAssertTrue(app.buttons["dockTasksButton"].isHittable)
+        app.buttons["dockTasksButton"].tap()
+        XCTAssertTrue(app.segmentedControls["taskStatusFilter"].waitForExistence(timeout: 5))
+        app.segmentedControls["taskStatusFilter"].buttons["All"].tap()
+        attachScreenshot("All tasks", app: app)
+    }
+
     func testQuickUnreadFilterUpdatesAfterReadingAndCanReturnToAll() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
@@ -445,6 +477,7 @@ final class DispatchUITests: XCTestCase {
         subject.tap(); subject.typeText(title)
         app.buttons["saveDraftButton"].tap()
         app.buttons["mailboxDrawerButton"].tap()
+        app.buttons["More mailboxes"].tap()
         app.buttons["mailbox-Drafts"].tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
         app.staticTexts[title].tap()

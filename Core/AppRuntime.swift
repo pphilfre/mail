@@ -21,6 +21,8 @@ final class AppRuntime {
             UserDefaults.standard.set("Inbox", forKey: "selectedMailbox")
             UserDefaults.standard.set("", forKey: "selectedMailAccount")
             UserDefaults.standard.set(true, forKey: "conversationRows")
+            UserDefaults.standard.set(false, forKey: "compactInbox")
+            UserDefaults.standard.set(2, forKey: "previewLines")
             UserDefaults.standard.set("", forKey: "defaultSendingAccount")
             UserDefaults.standard.set("[]", forKey: "recentMailSearches")
         }

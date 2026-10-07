@@ -103,6 +103,20 @@ final class MailProductivityTests: XCTestCase {
         html.cachedText = nil; html.cachedHTML = Data("<p>Invoice</p><p>Total <b>€45,20</b></p><script>USD 99</script>".utf8)
         XCTAssertEqual(ReceiptDetector.detect(ReceiptSource(html))?.money, ReceiptMoney(amount: Decimal(string: "45.20")!, currency: "EUR"))
     }
+    func testReceiptUsesHTMLWhenPlainPartIsEmptyOrIncomplete() {
+        let mail = message(accountID: UUID(), subject: "Thanks for shopping", body: "   ")
+        mail.cachedHTML = Data("<p>Payment successful</p><p>Order total £42.00</p>".utf8)
+        XCTAssertEqual(ReceiptDetector.detect(ReceiptSource(mail))?.money, ReceiptMoney(amount: 42, currency: "GBP"))
+        mail.cachedText = Data("View your purchase online".utf8)
+        XCTAssertEqual(ReceiptDetector.detect(ReceiptSource(mail))?.money, ReceiptMoney(amount: 42, currency: "GBP"))
+    }
+    func testReceiptDetectsTransactionEvidenceWithoutGenericMoneyFalsePositive() {
+        let mail = message(accountID: UUID(), subject: "Shopping update", body: "Order number 882\nTotal paid GBP 17.50\nPayment method Visa")
+        XCTAssertNotNil(ReceiptDetector.detect(ReceiptSource(mail)))
+        mail.subject = "Weekend sale ends today"
+        XCTAssertNil(ReceiptDetector.detect(ReceiptSource(mail)))
+        XCTAssertNil(ReceiptDetector.detect(ReceiptSource(message(accountID: UUID(), subject: "Budget discussion", body: "We should spend £17.50"))))
+    }
     func testReceiptCorrectionsPersistAndExclusionPreservesOriginal() throws {
         let container = try MailStorage.open(inMemory: true), account = MailAccount(provider: .gmail, email: "me@example.com")
         let repository = MailRepository(context: container.mainContext)

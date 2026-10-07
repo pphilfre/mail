@@ -21,12 +21,14 @@ struct MailboxSheet: View {
     let openCollections: () -> Void
     let openSubscriptions: () -> Void
 
+    @State private var moreMailboxes = false
+
     private var selectedAccount: MailAccount? { accounts.first { $0.id.uuidString == account } }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 12) {
                     if accounts.isEmpty { accountSummary }
                     else {
                         Menu {
@@ -39,22 +41,28 @@ struct MailboxSheet: View {
                         } label: { accountSummary }.buttonStyle(.plain)
                     }
 
-                    VStack(spacing: 4) {
-                        ForEach(MailboxScope.names, id: \.self) { name in
-                            Button {
-                                feedback.select(); label = nil; mailbox = name; dismiss()
-                            } label: {
-                                mailboxRow(name, symbol: MailStyle.mailboxSymbol(name), selected: mailbox == name && label == nil,
-                                           count: counts[name] ?? 0)
-                            }.buttonStyle(.plain)
-                                .accessibilityIdentifier("mailbox-\(name)")
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 4) {
+                        ForEach(["Inbox", "Unread", "Starred", "Sent"], id: \.self) { name in
+                            mailboxButton(name)
                         }
                     }
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        shortcut("Tasks", symbol: "checklist", action: openTasks)
+                        shortcut("Receipts", symbol: "receipt", action: openReceipts)
+                        shortcut("Attachments", symbol: "paperclip", action: openAttachments)
+                        shortcut("People", symbol: "person.2", action: openPeople)
+                        shortcut("Collections", symbol: "folder", action: openCollections)
+                        shortcut("Subscriptions", symbol: "newspaper", action: openSubscriptions)
+                    }
+                    DisclosureGroup("More mailboxes", isExpanded: $moreMailboxes) {
+                        ForEach(["All Mail", "Drafts", "Archive", "Spam", "Trash"], id: \.self) { name in
+                            mailboxButton(name)
+                        }
+                    }.font(.subheadline).padding(.horizontal, 14)
                     if let selectedAccount {
                         let labels = folders.filter { $0.accountID == selectedAccount.id && $0.kindRaw == "user" }
                         if !labels.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Labels").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 14)
+                            DisclosureGroup("Labels") {
                                 ForEach(labels) { folder in
                                     Button {
                                         feedback.select(); label = folder.remoteID; dismiss()
@@ -66,23 +74,9 @@ struct MailboxSheet: View {
                             }
                         }
                     }
-                    VStack(spacing: 4) {
-                        Button(action: openTasks) { mailboxRow("Tasks", symbol: "checklist", selected: false) }
-                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Tasks")
-                        Button(action: openReceipts) { mailboxRow("Receipts", symbol: "receipt", selected: false) }
-                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Receipts")
-                        Button(action: openAttachments) { mailboxRow("Attachments", symbol: "paperclip", selected: false) }
-                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Attachments")
-                        Button(action: openPeople) { mailboxRow("People", symbol: "person.2", selected: false) }
-                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-People")
-                        Button(action: openCollections) { mailboxRow("Collections", symbol: "folder", selected: false) }
-                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Collections")
-                        Button(action: openSubscriptions) { mailboxRow("Subscriptions", symbol: "newspaper", selected: false) }
-                            .buttonStyle(.plain).accessibilityIdentifier("mailbox-Subscriptions")
-                    }
                     Text("Counts include mail saved on this device.")
                         .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 14)
-                }.padding(20)
+                }.padding(16)
             }
             .navigationTitle("Mailboxes")
             .navigationBarTitleDisplayMode(.inline)
@@ -92,6 +86,10 @@ struct MailboxSheet: View {
                         Button("Accounts", systemImage: "person.crop.circle", action: openAccounts)
                         Button("Settings", systemImage: "gearshape", action: openSettings)
                     }.accessibilityIdentifier("mailboxProfileMenu")
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Settings", systemImage: "gearshape", action: openSettings)
+                        .labelStyle(.iconOnly).accessibilityIdentifier("mailboxSettingsButton")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     MailCloseButton(title: "Close mailboxes") { dismiss() }
@@ -106,27 +104,44 @@ struct MailboxSheet: View {
         .onChange(of: account) { _, _ in feedback.select(); label = nil }
     }
 
+    private func mailboxButton(_ name: String) -> some View {
+        Button {
+            feedback.select(); label = nil; mailbox = name; dismiss()
+        } label: {
+            mailboxRow(name, symbol: MailStyle.mailboxSymbol(name), selected: mailbox == name && label == nil, count: counts[name] ?? 0)
+        }.buttonStyle(.plain).accessibilityIdentifier("mailbox-\(name)")
+    }
+    private func shortcut(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button { feedback.select(); action() } label: {
+            VStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 19, weight: .medium))
+                Text(title).font(.caption).lineLimit(1).minimumScaleFactor(0.8)
+            }.frame(maxWidth: .infinity, minHeight: 64)
+                .background(MailStyle.paper, in: .rect(cornerRadius: 16))
+        }.buttonStyle(.plain).accessibilityIdentifier("mailbox-\(title)")
+    }
+
     private var accountSummary: some View {
         HStack(spacing: 12) {
             AccountBadge(account: selectedAccount)
             VStack(alignment: .leading, spacing: 3) {
                 Text(selectedAccount?.displayName ?? (accounts.isEmpty ? "Sample mail" : "All accounts"))
                     .font(.headline).foregroundStyle(.primary).lineLimit(1)
-                Text(selectedAccount?.email ?? "Your mail, together")
+                Text(selectedAccount?.email ?? "\(accounts.count) connected accounts")
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             if !accounts.isEmpty {
                 Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             }
-        }.padding(14).background(MailStyle.paper, in: .rect(cornerRadius: 20))
+        }.padding(10).background(MailStyle.paper, in: .rect(cornerRadius: 20))
     }
 
     private func mailboxRow(_ name: String, symbol: String, selected: Bool, count: Int = 0) -> some View {
         HStack(spacing: 14) {
             Image(systemName: selected ? symbol + (symbol == "tray" || symbol == "star" || symbol == "archivebox" ? ".fill" : "") : symbol)
                 .font(.system(size: 18, weight: selected ? .semibold : .regular)).frame(width: 24)
-            Text(name).font(.body.weight(selected ? .semibold : .regular)).lineLimit(1)
+            Text(name).font(.subheadline.weight(selected ? .semibold : .regular)).lineLimit(1)
             Spacer()
             if count > 0 {
                 Text(count, format: .number).font(.subheadline.monospacedDigit())
@@ -136,7 +151,7 @@ struct MailboxSheet: View {
             if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)) }
         }
         .foregroundStyle(selected ? MailStyle.accent : .primary)
-        .padding(.horizontal, 14).padding(.vertical, 13)
+        .padding(.horizontal, 14).padding(.vertical, 8)
         .frame(minHeight: 48)
         .background(selected ? MailStyle.accent.opacity(0.09) : .clear, in: .rect(cornerRadius: 14))
         .contentShape(.rect)

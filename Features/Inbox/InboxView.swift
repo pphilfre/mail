@@ -41,6 +41,11 @@ struct InboxView: View {
     @AppStorage("leadingSwipe") private var leadingSwipe = "read"
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
     @AppStorage("fullSwipe") private var fullSwipe = false
+    @AppStorage("compactInbox") private var compactInbox = false
+    private var openTaskCount: Int {
+        metadata.filter { $0.key.hasPrefix("mail-task:") }.compactMap { try? MailTask.decode($0) }
+            .filter { !$0.isCompleted && (accountFilter == nil || $0.accountID == accountFilter) }.count
+    }
     private let mailboxes = MailboxScope.names
     private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
     private var waitingUntil: Date? { selectedAccounts.compactMap { runtime.gmail?.waitingUntil[$0.id] }.filter { $0 > Date() }.max() }
@@ -85,7 +90,7 @@ struct InboxView: View {
         .scrollContentBackground(.hidden)
         .background(MailStyle.paper)
         .listRowSpacing(0)
-        .environment(\.defaultMinListRowHeight, 64)
+        .environment(\.defaultMinListRowHeight, compactInbox ? 44 : 48)
         .environment(\.editMode, .constant(selecting ? .active : .inactive))
         .safeAreaInset(edge: .bottom) {
             if selecting { bulkToolbar }
@@ -94,11 +99,11 @@ struct InboxView: View {
         .confirmationDialog("Move \(selectedMessages.count) loaded messages to Trash?", isPresented: $confirmingTrash, titleVisibility: .visible) {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
-        .navigationTitle("Dispatch")
+        .navigationTitle(mailboxTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("Dispatch").font(.system(.subheadline, weight: .semibold)).foregroundStyle(.secondary)
+                Text(mailboxTitle).font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader)
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
@@ -199,7 +204,7 @@ struct InboxView: View {
     private var mailList: some View {
         List(selection: $selectedIDs) {
             inboxHeader
-                .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 18, trailing: 20))
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
                 .listRowSeparator(.hidden)
                 .listRowBackground(MailStyle.paper)
             if let error = inboxError {
@@ -319,6 +324,11 @@ struct InboxView: View {
         }
     }
     private var inboxHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+        if let deadline = waitingUntil { GmailWaitStatus(deadline: deadline).font(.caption) }
+        else if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
+            Label("Updating mail…", systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.secondary)
+        }
         InboxHeader(title: mailboxTitle, scope: scopeTitle,
             count: mailbox == "Drafts" ? draftCount : accounts.isEmpty ? filteredSamples.count : conversations.count,
             grouped: !accounts.isEmpty && conversationRows && mailbox != "Drafts",
@@ -329,6 +339,7 @@ struct InboxView: View {
                 feedback.select()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { selecting.toggle(); selectedIDs.removeAll() }
             })
+        }
     }
     private var profileMenu: some View {
         let counts = accountUnreadCounts
@@ -360,17 +371,16 @@ struct InboxView: View {
     }
     private var composeDock: some View {
         HStack(alignment: .center) {
-            HStack(spacing: 6) {
-                if let deadline = waitingUntil {
-                    GmailWaitStatus(deadline: deadline)
-                } else if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
-                    ProgressView().controlSize(.mini)
-                    Text("Updating mail…")
-                } else {
-                    Image(systemName: runtime.connectivity.isConnected == false ? "wifi.slash" : inboxError != nil ? "exclamationmark.circle" : "checkmark.circle")
-                    Text(accounts.isEmpty ? "Sample mail" : runtime.connectivity.isConnected == false ? "Reading offline" : inboxError != nil ? "Mail needs attention" : "Your mail, together")
-                }
-            }.font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 0) {
+                Button { feedback.select(); showingDrawer = true } label: {
+                    Label("Emails", systemImage: "envelope").frame(minHeight: 44).padding(.horizontal, 14)
+                }.accessibilityIdentifier("dockEmailsButton")
+                Divider().frame(height: 18)
+                Button { feedback.select(); showingTasks = true } label: {
+                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(minHeight: 44).padding(.horizontal, 14)
+                }.accessibilityIdentifier("dockTasksButton")
+            }.font(.subheadline.weight(.medium)).buttonStyle(.plain)
+                .glassEffect(.regular, in: .capsule)
             Spacer(minLength: 12)
             Button {
                 feedback.select(); showingCompose = true
@@ -497,13 +507,14 @@ struct CachedMessageRow: View {
     var account: MailAccount? = nil
     private var isRead: Bool { !(unread ?? !message.isRead) }
     @AppStorage("previewLines") private var previewLines = 2
+    @AppStorage("compactInbox") private var compactInbox = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.senderEmail, name: message.sender.displayName)
+            SenderAvatar(email: message.senderEmail, name: message.sender.displayName, size: compactInbox ? 30 : 38)
                 .overlay(alignment: .bottomTrailing) {
                     if !isRead { Circle().fill(MailStyle.accent).frame(width: 9, height: 9).overlay(Circle().stroke(.background, lineWidth: 2)) }
                 }
-            VStack(alignment: .leading, spacing: MailStyle.rowSpacing) {
+            VStack(alignment: .leading, spacing: compactInbox ? 2 : MailStyle.rowSpacing) {
                 HStack {
                     Text(message.sender.displayName).font(.system(.subheadline, weight: isRead ? .medium : .semibold)).lineLimit(1)
                     if messageCount > 1 {
@@ -517,7 +528,7 @@ struct CachedMessageRow: View {
                     MailRowDate(date: message.receivedAt)
                 }
                 Text(message.subject.isEmpty ? "No subject" : message.subject).font(.subheadline.weight(isRead ? .regular : .medium)).lineLimit(1)
-                if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
+                if previewLines > 0 { Text(message.snippet).font(compactInbox ? .caption : .subheadline).foregroundStyle(.secondary).lineLimit(compactInbox ? min(previewLines, 1) : previewLines).fixedSize(horizontal: false, vertical: true) }
                 if let account {
                     HStack(spacing: 4) {
                         Circle().fill(Color(mailHex: account.colourHex)).frame(width: 6, height: 6).accessibilityHidden(true)
@@ -525,34 +536,35 @@ struct CachedMessageRow: View {
                     }.font(.caption2).foregroundStyle(.secondary)
                 }
             }
-        }.padding(.vertical, 10).accessibilityElement(children: .combine).accessibilityValue(isRead ? "Read" : "Unread")
+        }.padding(.vertical, compactInbox ? 3 : 6).accessibilityElement(children: .combine).accessibilityValue(isRead ? "Read" : "Unread")
     }
 }
 
 struct MessageRow: View {
     let message: SampleMessage
     @AppStorage("previewLines") private var previewLines = 2
+    @AppStorage("compactInbox") private var compactInbox = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false)
+            SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false, size: compactInbox ? 30 : 38)
                 .overlay(alignment: .bottomTrailing) {
                     if !message.isRead {
                         Circle().fill(MailStyle.accent).frame(width: 9, height: 9)
                             .overlay(Circle().stroke(MailStyle.paper, lineWidth: 2))
                     }
                 }
-            VStack(alignment: .leading, spacing: MailStyle.rowSpacing) {
+            VStack(alignment: .leading, spacing: compactInbox ? 2 : MailStyle.rowSpacing) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(message.sender).font(.system(.subheadline, weight: message.isRead ? .medium : .semibold)).lineLimit(1)
                     Spacer(minLength: 8)
                     MailRowDate(date: message.date)
                 }
                 Text(message.subject).font(.subheadline.weight(message.isRead ? .regular : .medium)).lineLimit(1)
-                if previewLines > 0 { Text(message.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(previewLines) }
+                if previewLines > 0 { Text(message.snippet).font(compactInbox ? .caption : .subheadline).foregroundStyle(.secondary).lineLimit(compactInbox ? min(previewLines, 1) : previewLines).fixedSize(horizontal: false, vertical: true) }
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, compactInbox ? 3 : 6)
         .accessibilityElement(children: .combine)
         .accessibilityValue(message.isRead ? "Read" : "Unread")
     }
