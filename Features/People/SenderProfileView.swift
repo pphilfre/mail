@@ -103,6 +103,7 @@ struct SenderProfileView: View {
     }
     private var profileHeader: some View {
         Section {
+            VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 SenderAvatar(email: email, name: title, size: 44)
                 VStack(alignment: .leading, spacing: 3) {
@@ -154,6 +155,7 @@ struct SenderProfileView: View {
                         .accessibilityIdentifier("senderTab-\(value.rawValue)")
                 }
             }
+            }.accessibilityElement(children: .contain)
         }
     }
     private var senderDetails: some View {
@@ -171,6 +173,12 @@ struct SenderProfileView: View {
                         BarMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Messages", point.count))
                             .foregroundStyle(MailStyle.accent)
                     }.frame(height: 100).accessibilityIdentifier("senderActivityChart")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Frequent subjects").font(.subheadline.weight(.semibold))
+                        ForEach(Array(SenderInsights.commonSubjects(incoming).prefix(3))) { subject in
+                            LabeledContent(subject.subject, value: "\(subject.count)")
+                        }
+                    }
                 }
                 Text("History covers mail saved on this device. Spam, trash and drafts are excluded.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -197,13 +205,6 @@ struct SenderProfileView: View {
                     }
                 }
                 if correspondence.isEmpty { Text("No downloaded messages in this account.").foregroundStyle(.secondary) }
-            }
-            if !incoming.isEmpty {
-                Section("Frequent subjects") {
-                    ForEach(Array(SenderInsights.commonSubjects(incoming).prefix(3))) { subject in
-                        LabeledContent(subject.subject, value: "\(subject.count)")
-                    }
-                }
             }
         case .files:
             Section("Files exchanged") {
