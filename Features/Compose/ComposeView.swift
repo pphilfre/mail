@@ -210,19 +210,23 @@ struct ComposeView: View {
     }
     private var composerDock: some View {
         HStack(spacing: 6) {
-            Button("Signature", systemImage: "signature", action: insertSignature)
-                .disabled(signatureForAccount().isEmpty).labelStyle(.iconOnly).frame(width: 48, height: 48)
-            Menu("Text tools", systemImage: "textformat") {
+            Button(action: insertSignature) {
+                Image(systemName: "signature").frame(width: 48, height: 48).contentShape(.rect)
+            }.disabled(signatureForAccount().isEmpty).accessibilityLabel("Signature")
+            Menu {
                 Button("Add bullet") { draft.body += "\n• " }
                 Button("Add quote") { draft.body += "\n> " }
                 Label("Rich text · Coming soon", systemImage: "textformat")
-            }.labelStyle(.iconOnly).frame(width: 48, height: 48)
+            } label: {
+                Image(systemName: "textformat").frame(width: 48, height: 48).contentShape(.rect)
+            }.accessibilityLabel("Text tools")
             PhotosPicker(selection: $photos, maxSelectionCount: max(1, DraftAttachmentStore.maximumCount - draft.attachments.count), matching: .images, preferredItemEncoding: .current) {
-                Image(systemName: "photo")
-            }.frame(width: 48, height: 48).disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
+                Image(systemName: "photo").frame(width: 48, height: 48).contentShape(.rect)
+            }.disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityLabel("Attach photo").accessibilityIdentifier("attachPhotoButton")
-            Button("Attach file", systemImage: "paperclip") { feedback.select(); choosingFiles = true }
-                .labelStyle(.iconOnly).frame(width: 48, height: 48).disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
+            Button { feedback.select(); choosingFiles = true } label: {
+                Image(systemName: "paperclip").frame(width: 48, height: 48).contentShape(.rect)
+            }.accessibilityLabel("Attach file").disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityIdentifier("attachFileButton")
         }
         .buttonStyle(.plain).font(.system(size: 21)).frame(height: 52)
