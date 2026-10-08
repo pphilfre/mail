@@ -13,6 +13,7 @@ struct MessageActionsSheet: View {
     let choose: (MessageSheetAction) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(MailFeedback.self) private var feedback
+    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         List {
             Section {
@@ -24,9 +25,12 @@ struct MessageActionsSheet: View {
                     }
                 }.padding(.vertical, 4)
                 if !message.isDraft {
-                    ViewThatFits(in: .horizontal) {
-                        HStack { quick("Reply", "arrowshape.turn.up.left", .reply); quick("Reply All", "arrowshape.turn.up.left.2", .replyAll); quick("Forward", "arrowshape.turn.up.right", .forward) }
-                        VStack { quick("Reply", "arrowshape.turn.up.left", .reply); quick("Reply All", "arrowshape.turn.up.left.2", .replyAll); quick("Forward", "arrowshape.turn.up.right", .forward) }
+                    Group {
+                        if typeSize.isAccessibilitySize {
+                            VStack { quick("Reply", "arrowshape.turn.up.left", .reply); quick("Reply All", "arrowshape.turn.up.left.2", .replyAll); quick("Forward", "arrowshape.turn.up.right", .forward) }
+                        } else {
+                            HStack { quick("Reply", "arrowshape.turn.up.left", .reply); quick("Reply All", "arrowshape.turn.up.left.2", .replyAll); quick("Forward", "arrowshape.turn.up.right", .forward) }
+                        }
                     }.listRowBackground(Color.clear)
                 }
             }
@@ -43,8 +47,7 @@ struct MessageActionsSheet: View {
                         Button("In one week") { select(.snooze(Date().addingTimeInterval(7 * 86400))) }
                     } label: { Label("Snooze", systemImage: "clock") }
                 }
-                row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"))
-                    .accessibilityIdentifier("readerReadButton")
+                row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"), identifier: "readerReadButton")
             } header: { Text("Organisation") }
               footer: { Text("Pins and snoozes are saved on this device. Flag uses the account’s starred label.") }
             Section("Management") {
@@ -64,11 +67,11 @@ struct MessageActionsSheet: View {
                 row("Print", "printer", .printMessage)
                 row("Save PDF", "doc.richtext", .savePDF)
                 if !message.isDraft { row("Forward as Attachment", "paperclip", .forwardAttachment) }
-                row("Create Reminder", "checklist", .task).accessibilityIdentifier("makeMailTaskButton")
+                row("Create Reminder", "checklist", .task, identifier: "makeMailTaskButton")
                 row("Add Calendar Event", "calendar.badge.plus", .calendar)
                 if !message.isDraft {
-                    row("Add to collection", "folder.badge.plus", .collection).accessibilityIdentifier("addToCollectionButton")
-                    row("Save receipt", "receipt", .receipt).accessibilityIdentifier("makeReceiptButton")
+                    row("Add to collection", "folder.badge.plus", .collection, identifier: "addToCollectionButton")
+                    row("Save receipt", "receipt", .receipt, identifier: "makeReceiptButton")
                 }
             } header: { Text("Tools") }
               footer: { Text("Reminders use Dispatch tasks. Print and PDF use a readable text copy. Forward as attachment includes the original message file.") }
@@ -80,14 +83,17 @@ struct MessageActionsSheet: View {
         .presentationDetents([.large]).presentationDragIndicator(.visible)
     }
     private func select(_ action: MessageSheetAction) { feedback.select(); choose(action) }
-    private func row(_ title: String, _ symbol: String, _ action: MessageSheetAction, destructive: Bool = false) -> some View {
-        Button(role: destructive ? .destructive : nil) { select(action) } label: { Label(title, systemImage: symbol) }
-            .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.primary).frame(minHeight: 32)
+    private func row(_ title: String, _ symbol: String, _ action: MessageSheetAction, destructive: Bool = false, identifier: String? = nil) -> some View {
+        Button(role: destructive ? .destructive : nil) { select(action) } label: {
+            Label(title, systemImage: symbol).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
+        }
+        .accessibilityIdentifier(identifier ?? title).accessibilityLabel(title)
+        .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.primary)
     }
     private func quick(_ title: String, _ symbol: String, _ action: MessageSheetAction) -> some View {
         Button { select(action) } label: {
             VStack(spacing: 8) { Image(systemName: symbol).font(.title2); Text(title).font(.subheadline) }
-                .frame(maxWidth: .infinity, minHeight: 78)
+                .frame(maxWidth: .infinity, minHeight: 68)
         }.buttonStyle(.glass).accessibilityLabel(title)
     }
     private func unavailable(_ title: String, _ symbol: String) -> some View {

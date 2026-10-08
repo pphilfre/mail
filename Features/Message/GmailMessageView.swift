@@ -60,7 +60,7 @@ struct GmailMessageView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)
-                    .font(.largeTitle.weight(.bold)).tracking(-0.8).textSelection(.enabled)
+                    .font(.title2.weight(.bold)).textSelection(.enabled)
                     .padding(.horizontal, 4).padding(.vertical, 8)
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
@@ -105,12 +105,7 @@ struct GmailMessageView: View {
         conversationContent
         .background(MailStyle.paper)
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden()
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Back", systemImage: "chevron.left") { feedback.select(); dismiss() }
-                    .labelStyle(.iconOnly).accessibilityLabel("Back to inbox")
-            }
             ToolbarItemGroup(placement: .primaryAction) {
                 ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Share message")

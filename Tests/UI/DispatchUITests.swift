@@ -22,12 +22,12 @@ final class DispatchUITests: XCTestCase {
         app.buttons["readerMoreButton"].tap()
         XCTAssertTrue(app.navigationBars["Message actions"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Reply All"].exists)
-        XCTAssertTrue(app.buttons["Pin"].exists)
+        XCTAssertTrue(revealAction("Pin", app: app).exists)
         attachScreenshot("Grouped message actions", app: app)
-        app.buttons["Pin"].tap()
+        revealAction("Pin", app: app).tap()
         XCTAssertTrue(app.buttons["readerMoreButton"].waitForExistence(timeout: 5))
         app.buttons["readerMoreButton"].tap()
-        XCTAssertTrue(app.buttons["Unpin"].waitForExistence(timeout: 5))
+        XCTAssertTrue(revealAction("Unpin", app: app).exists)
     }
 
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
@@ -35,6 +35,20 @@ final class DispatchUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+    private func revealAction(_ identifier: String, app: XCUIApplication) -> XCUIElement {
+        let action = app.buttons[identifier]
+        for _ in 0..<8 {
+            if action.exists && action.isHittable { return action }
+            app.swipeUp()
+        }
+        XCTAssertTrue(action.waitForExistence(timeout: 5), "The action must be available in the scrollable sheet")
+        XCTAssertTrue(action.isHittable)
+        return action
+    }
+    private func openReaderActions(app: XCUIApplication) {
+        app.buttons["readerMoreButton"].tap()
+        XCTAssertTrue(app.navigationBars["Message actions"].waitForExistence(timeout: 5))
     }
     func testStandaloneTasksCanBeQuicklyCreatedEditedAndCompletedWithoutAnAccount() {
         let app = XCUIApplication()
@@ -89,8 +103,8 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Latest message body")).firstMatch.waitForExistence(timeout: 3))
         XCTAssertEqual(app.webViews.count, 0)
-        app.buttons["More"].tap()
-        XCTAssertTrue(app.buttons["readerReadButton"].waitForExistence(timeout: 5))
+        openReaderActions(app: app)
+        XCTAssertTrue(revealAction("readerReadButton", app: app).exists)
     }
 
     func testAttachmentLibrarySearchAndSourceConversation() {
@@ -160,7 +174,7 @@ final class DispatchUITests: XCTestCase {
         app.launch()
         let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
         XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
-        app.buttons["More"].tap(); app.buttons["addToCollectionButton"].tap()
+        openReaderActions(app: app); revealAction("addToCollectionButton", app: app).tap()
         app.buttons["New collection"].tap()
         let name = app.textFields["collectionNameField"]
         XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("House move")
@@ -235,7 +249,7 @@ final class DispatchUITests: XCTestCase {
         app.launch()
         let message = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
         XCTAssertTrue(message.waitForExistence(timeout: 10)); message.tap()
-        app.buttons["More"].tap(); app.buttons["makeMailTaskButton"].tap()
+        openReaderActions(app: app); revealAction("makeMailTaskButton", app: app).tap()
         let title = app.textFields["mailTaskTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         let notes = app.textViews["mailTaskNotes"]

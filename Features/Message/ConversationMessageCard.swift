@@ -31,19 +31,24 @@ struct ConversationMessageCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
           HStack(alignment: .top, spacing: 6) {
+            Button { feedback.select(); onSender() } label: {
+                SenderAvatar(email: message.senderEmail, name: message.sender.displayName).frame(width: 44, height: 44)
+            }.buttonStyle(.plain).disabled(!MailMIME.valid(message.senderEmail))
+                .accessibilityLabel("Show \(message.sender.displayName)’s contact sheet")
+                .accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
             Button {
                 feedback.select()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }
             } label: {
                 HStack(alignment: .top, spacing: 10) {
-                    SenderAvatar(email: message.senderEmail, name: message.sender.displayName)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(message.sender.displayName).font(.headline).foregroundStyle(.primary)
-                        Text(expanded ? message.senderEmail : message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        if !expanded { Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                        else { Text(message.receivedAt, format: .dateTime.day().month().hour().minute()).font(.caption).foregroundStyle(.secondary) }
                     }
                     Spacer(minLength: 4)
                     VStack(alignment: .trailing, spacing: 6) {
-                        MailRowDate(date: message.receivedAt)
+                        if !expanded { MailRowDate(date: message.receivedAt) }
                         Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(.secondary)
                     }
                 }.contentShape(Rectangle())
@@ -59,16 +64,7 @@ struct ConversationMessageCard: View {
                 .accessibilityLabel("Security Inspector, not analysed").accessibilityIdentifier("securityInspector-\(message.remoteID)")
           }
             if expanded {
-                HStack(spacing: 8) {
-                    Circle().fill(Color(mailHex: account?.colourHex ?? "007AFF")).frame(width: 7, height: 7)
-                    Text(account?.email ?? "Account unavailable").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer()
-                }
-                MessageRecipientDetails(message: message)
-                if MailMIME.valid(message.senderEmail) {
-                    Button("Sender profile", systemImage: "person.crop.rectangle") { onSender() }
-                        .font(.subheadline).accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
-                }
+                MessageRecipientDetails(message: message, account: account)
                 Divider().padding(.vertical, 2)
                 if !remoteImages, let html = message.cachedHTML.flatMap({ String(data: $0, encoding: .utf8) }), MailMIME.hasRemoteImages(html) {
                     Button("Load External Images", systemImage: "photo") { feedback.select(); onLoadImages() }
@@ -107,10 +103,11 @@ struct ConversationMessageCard: View {
 
 private struct MessageRecipientDetails: View {
     let message: MailMessage
+    let account: MailAccount?
     private var summary: String {
         guard let first = message.to.first else { return "Recipient details" }
         let others = message.to.count + message.cc.count - 1
-        return "To \(first.displayName)" + (others > 0 ? " and \(others) more" : "")
+        return "To: \(first.email)" + (others > 0 ? " and \(others) more" : "")
     }
     var body: some View {
         DisclosureGroup {
@@ -118,9 +115,17 @@ private struct MessageRecipientDetails: View {
                 Text("From: \(message.senderEmail)")
                 Text("To: " + message.to.map { address in address.name.map { "\($0) <\(address.email)>" } ?? address.email }.joined(separator: ", "))
                 if !message.cc.isEmpty { Text("Cc: " + message.cc.map(\.email).joined(separator: ", ")) }
+                if !message.bcc.isEmpty { Text("Bcc: " + message.bcc.map(\.email).joined(separator: ", ")) }
+                if !message.replyTo.isEmpty { Text("Reply to: " + message.replyTo.map(\.email).joined(separator: ", ")) }
+                if let account { Text("Account: \(account.displayName) <\(account.email)>") }
                 Text(message.receivedAt, format: .dateTime.day().month().year().hour().minute())
             }.textSelection(.enabled)
-        } label: { Text(summary).lineLimit(2) }
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(Color(mailHex: account?.colourHex ?? "007AFF")).frame(width: 7, height: 7).accessibilityHidden(true)
+                Text(summary).lineLimit(2)
+            }
+        }
         .font(.caption).foregroundStyle(.secondary)
     }
 }
