@@ -46,6 +46,9 @@ struct InboxView: View {
     @AppStorage("previewLines") private var previewLines = 2
     @State private var organisationNow = Date()
     private var organisation: [String: MailLocalOrganisation] { MailLocalOrganisation.values(metadata) }
+    private var nextSnoozeDeadline: Date? {
+        organisation.values.compactMap(\.snoozedUntil).filter { $0 > organisationNow }.min()
+    }
     private var openTaskCount: Int {
         metadata.filter { $0.key.hasPrefix("mail-task:") }.compactMap { try? MailTask.decode($0) }
             .filter { !$0.isCompleted && ($0.isStandalone || accountFilter == nil || $0.accountID == accountFilter) }.count
@@ -115,11 +118,11 @@ struct InboxView: View {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
         .navigationTitle(mailboxTitle)
-        .task {
-            while !Task.isCancelled {
-                organisationNow = Date()
-                do { try await Task.sleep(for: .seconds(30)) } catch { return }
-            }
+        .task(id: nextSnoozeDeadline) {
+            guard let deadline = nextSnoozeDeadline else { return }
+            do { try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow))) } catch { return }
+            guard !Task.isCancelled else { return }
+            organisationNow = Date()
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

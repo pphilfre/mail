@@ -81,7 +81,8 @@ struct MessageActionsSheet: View {
     }
     private func select(_ action: MessageSheetAction) { feedback.select(); choose(action) }
     private func row(_ title: String, _ symbol: String, _ action: MessageSheetAction, destructive: Bool = false) -> some View {
-        Button(role: destructive ? .destructive : nil) { select(action) } label: { Label(title, systemImage: symbol) }.frame(minHeight: 32)
+        Button(role: destructive ? .destructive : nil) { select(action) } label: { Label(title, systemImage: symbol) }
+            .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.primary).frame(minHeight: 32)
     }
     private func quick(_ title: String, _ symbol: String, _ action: MessageSheetAction) -> some View {
         Button { select(action) } label: {
