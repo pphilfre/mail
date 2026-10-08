@@ -56,7 +56,7 @@ struct GmailMessageView: View {
     }
     private var conversationContent: some View {
       let files = Dictionary(grouping: attachments, by: \.messageID)
-      ScrollViewReader { proxy in
+      return ScrollViewReader { proxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)

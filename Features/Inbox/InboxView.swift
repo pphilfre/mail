@@ -73,8 +73,8 @@ struct InboxView: View {
     private var conversations: [MailConversation] {
         let saved = organisation
         return MailConversation.rows(filtered, grouped: conversationRows).filter {
-            let snoozed = saved[MailLocalOrganisation.key($0.latest)]?.isSnoozed(at: organisationNow) == true
-            let visible = mailbox == "Snoozed" ? snoozed : mailbox == "Inbox" && labelFilter == nil ? !snoozed : true
+            let value = saved[MailLocalOrganisation.key($0.latest)] ?? MailLocalOrganisation()
+            let visible = value.isVisible(mailbox: mailbox, hasLabelFilter: labelFilter != nil, at: organisationNow)
             return visible && (quickFilter == .all || (quickFilter == .unread ? !$0.isRead : $0.isStarred))
         }.sorted {
             let lhs = saved[MailLocalOrganisation.key($0.latest)]?.pinned == true
@@ -224,7 +224,7 @@ struct InboxView: View {
             refreshing = true
             defer { refreshing = false }
             await runtime.gmail?.syncAll()
-            if !accounts.isEmpty && mailbox != "Snoozed" { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+            if !accounts.isEmpty && (mailbox != "Snoozed" || labelFilter != nil) { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
         }
     }
     private var mailList: some View {
@@ -350,7 +350,7 @@ struct InboxView: View {
                         }
                     }
                 }
-                ForEach(selectedAccounts.filter { mailbox != "Snoozed" && runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
+                ForEach(selectedAccounts.filter { (mailbox != "Snoozed" || labelFilter != nil) && runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
                     Button(selectedAccounts.count == 1 ? "Load older messages" : "Load older · \(account.email)") {
                         Task { await runtime.gmail?.loadOlder(account.id, mailbox: mailbox, labelID: labelFilter) }
                     }
@@ -438,7 +438,7 @@ struct InboxView: View {
         selecting = false; selectedIDs.removeAll()
         // The unified drafts section owns its initial load and provider-link refresh.
         guard mailbox != "Drafts" || labelFilter != nil else { return }
-        guard mailbox != "Snoozed" else { return }
+        guard mailbox != "Snoozed" || labelFilter != nil else { return }
         Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 
@@ -450,8 +450,8 @@ struct InboxView: View {
     private func cachedUnread(accountID: UUID?, mailbox: String, labelID: String? = nil) -> Int {
         let saved = organisation
         return messages.filter {
-            let snoozed = saved[MailLocalOrganisation.key($0)]?.isSnoozed(at: organisationNow) == true
-            let visible = mailbox == "Snoozed" ? snoozed : mailbox == "Inbox" && labelID == nil ? !snoozed : true
+            let value = saved[MailLocalOrganisation.key($0)] ?? MailLocalOrganisation()
+            let visible = value.isVisible(mailbox: mailbox, hasLabelFilter: labelID != nil, at: organisationNow)
             return visible && (accountID == nil || $0.accountID == accountID) && !$0.isRead && MailboxScope.contains($0, mailbox: mailbox, labelID: labelID)
         }.count
     }

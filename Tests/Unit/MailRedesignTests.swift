@@ -68,6 +68,18 @@ import SwiftData
         XCTAssertTrue(row.isInbox); XCTAssertFalse(row.folderIDs.contains("Label_new"))
         XCTAssertTrue(row.folderIDs.contains("Label_old")); XCTAssertFalse(row.isRead)
     }
+    func testSnoozeVisibilityNeverHidesExplicitLabelResultsAndExpiresAtTheDeadline() {
+        let now = Date()
+        let until = now.addingTimeInterval(60)
+        let value = MailLocalOrganisation(pinned: false, snoozedUntil: until)
+        XCTAssertFalse(value.isVisible(mailbox: "Inbox", hasLabelFilter: false, at: now))
+        XCTAssertTrue(value.isVisible(mailbox: "Snoozed", hasLabelFilter: false, at: now))
+        XCTAssertTrue(value.isVisible(mailbox: "All Mail", hasLabelFilter: false, at: now))
+        XCTAssertTrue(value.isVisible(mailbox: "Snoozed", hasLabelFilter: true, at: now))
+        XCTAssertTrue(MailLocalOrganisation().isVisible(mailbox: "Snoozed", hasLabelFilter: true, at: now))
+        XCTAssertTrue(value.isVisible(mailbox: "Inbox", hasLabelFilter: false, at: until))
+        XCTAssertFalse(value.isVisible(mailbox: "Snoozed", hasLabelFilter: false, at: until))
+    }
     func testOriginalMessageUsesRawGmailEndpointAndPreservesBytes() async throws {
         let data = Data("From: alex@example.com\r\nSubject: Plans\r\n\r\nOriginal body".utf8)
         let reply = try JSONSerialization.data(withJSONObject: ["raw": Base64URL.encode(data)])

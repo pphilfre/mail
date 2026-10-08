@@ -6,6 +6,12 @@ struct MailLocalOrganisation: Codable, Equatable, Sendable {
     var pinned = false
     var snoozedUntil: Date?
     func isSnoozed(at date: Date) -> Bool { snoozedUntil.map { $0 > date } ?? false }
+    func isVisible(mailbox: String, hasLabelFilter: Bool, at date: Date) -> Bool {
+        if hasLabelFilter { return true }
+        if mailbox == "Snoozed" { return isSnoozed(at: date) }
+        if mailbox == "Inbox" { return !isSnoozed(at: date) }
+        return true
+    }
     @MainActor static func key(_ message: MailMessage) -> String {
         let target = message.remoteThreadID.isEmpty ? "message:\(message.remoteID)" : "thread:\(message.remoteThreadID)"
         return "mail-organisation:\(message.accountID.uuidString):\(target)"
