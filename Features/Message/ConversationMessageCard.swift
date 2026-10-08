@@ -10,14 +10,19 @@ struct ConversationMessageCard: View {
     let onReplyAll: () -> Void
     let onForward: () -> Void
     let onSender: () -> Void
+    let account: MailAccount?
+    let onSecurity: () -> Void
+    let onLoadImages: () -> Void
     @State private var expanded: Bool
 
     init(message: MailMessage, initiallyExpanded: Bool, attachments: [MailAttachment], remoteImages: Bool,
          onReply: @escaping () -> Void, onReplyAll: @escaping () -> Void, onForward: @escaping () -> Void,
-         onSender: @escaping () -> Void) {
+         onSender: @escaping () -> Void, account: MailAccount? = nil, onSecurity: @escaping () -> Void = {}, onLoadImages: @escaping () -> Void = {}) {
         self.message = message; self.attachments = attachments; self.remoteImages = remoteImages
         self.onReply = onReply; self.onReplyAll = onReplyAll; self.onForward = onForward
         self.onSender = onSender
+        self.account = account; self.onSecurity = onSecurity
+        self.onLoadImages = onLoadImages
         _expanded = State(initialValue: initiallyExpanded)
     }
     private var bodyText: String {
@@ -25,6 +30,7 @@ struct ConversationMessageCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+          HStack(alignment: .top, spacing: 6) {
             Button {
                 feedback.select()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }
@@ -47,13 +53,28 @@ struct ConversationMessageCard: View {
             .accessibilityLabel("Message from \(message.sender.displayName), \(message.receivedAt.formatted())")
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityHint(expanded ? "Collapse message" : "Expand message")
+            Button { feedback.select(); onSecurity() } label: {
+                Image(systemName: MailSecurityObservations.statusSymbol).font(.title3).frame(width: 44, height: 44)
+            }.buttonStyle(.plain).foregroundStyle(.secondary)
+                .accessibilityLabel("Security Inspector, not analysed").accessibilityIdentifier("securityInspector-\(message.remoteID)")
+          }
             if expanded {
+                HStack(spacing: 8) {
+                    Circle().fill(Color(mailHex: account?.colourHex ?? "007AFF")).frame(width: 7, height: 7)
+                    Text(account?.email ?? "Account unavailable").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer()
+                }
                 MessageRecipientDetails(message: message)
                 if MailMIME.valid(message.senderEmail) {
                     Button("Sender profile", systemImage: "person.crop.rectangle") { onSender() }
                         .font(.subheadline).accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
                 }
                 Divider().padding(.vertical, 2)
+                if !remoteImages, let html = message.cachedHTML.flatMap({ String(data: $0, encoding: .utf8) }), MailMIME.hasRemoteImages(html) {
+                    Button("Load External Images", systemImage: "photo") { feedback.select(); onLoadImages() }
+                        .font(.subheadline).frame(maxWidth: .infinity, minHeight: 44)
+                        .background(MailStyle.tile, in: .rect(cornerRadius: 12))
+                }
                 MailBodyView(html: message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText, remoteImages: remoteImages)
                     .accessibilityIdentifier("conversationBody-\(message.remoteID)")
                 ForEach(attachments) { AttachmentRow(attachment: $0) }
@@ -65,9 +86,8 @@ struct ConversationMessageCard: View {
                 }
             }
         }
-        .padding(18)
-        .background(MailStyle.paper, in: .rect(cornerRadius: 22))
-        .overlay { RoundedRectangle(cornerRadius: 22).stroke(.primary.opacity(0.04), lineWidth: 1) }
+        .padding(.vertical, 18)
+        .background(MailStyle.paper)
     }
     private var replyButton: some View {
         Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); onReply() }

@@ -56,7 +56,7 @@ struct MailboxSheet: View {
                         shortcut("Subscriptions", symbol: "newspaper", action: openSubscriptions)
                     }
                     DisclosureGroup("More mailboxes", isExpanded: $moreMailboxes) {
-                        ForEach(["All Mail", "Drafts", "Archive", "Spam", "Trash"], id: \.self) { name in
+                        ForEach(["All Mail", "Drafts", "Archive", "Snoozed", "Spam", "Trash"], id: \.self) { name in
                             mailboxButton(name)
                         }
                     }.font(.subheadline).padding(.horizontal, 14)

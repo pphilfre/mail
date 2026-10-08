@@ -42,6 +42,12 @@ actor AttachmentCache {
         let file = try url(relativePath)
         return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
+    func sha256(_ relativePath: String?) throws -> String? {
+        guard let file = try existing(relativePath) else { return nil }
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= Self.maximumBytes else { throw AttachmentError.tooLarge }
+        return MailSecurityObservations.sha256(try Data(contentsOf: file))
+    }
     func store(_ data: Data, accountID: UUID, attachmentID: UUID, filename: String) throws -> String {
         guard data.count <= Self.maximumBytes else { throw AttachmentError.tooLarge }
         let path = "\(accountID.uuidString)/\(attachmentID.uuidString)/\(Self.safeFilename(filename))"

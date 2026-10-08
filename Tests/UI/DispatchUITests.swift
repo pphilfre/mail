@@ -4,6 +4,32 @@ import XCTest
 final class DispatchUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testRedesignedReaderActionsAndHonestSecurityInspector() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launch()
+        let row = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
+        XCTAssertTrue(app.buttons["readerMoreButton"].waitForExistence(timeout: 5))
+        attachScreenshot("Redesigned reader", app: app)
+        app.buttons["securityInspector-latest"].tap()
+        XCTAssertTrue(app.navigationBars["Security Inspector"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Not analysed"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["Safe"].exists)
+        attachScreenshot("Security Inspector unknown verdict", app: app)
+        app.buttons["Close"].tap()
+        app.buttons["readerMoreButton"].tap()
+        XCTAssertTrue(app.navigationBars["Message actions"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Reply All"].exists)
+        XCTAssertTrue(app.buttons["Pin"].exists)
+        attachScreenshot("Grouped message actions", app: app)
+        app.buttons["Pin"].tap()
+        XCTAssertTrue(app.buttons["readerMoreButton"].waitForExistence(timeout: 5))
+        app.buttons["readerMoreButton"].tap()
+        XCTAssertTrue(app.buttons["Unpin"].waitForExistence(timeout: 5))
+    }
+
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name

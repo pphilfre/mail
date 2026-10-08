@@ -27,13 +27,14 @@ struct MailConversation: Identifiable {
 }
 
 enum MailboxScope {
-    static let names = ["Inbox", "All Mail", "Unread", "Starred", "Sent", "Drafts", "Archive", "Spam", "Trash"]
+    static let names = ["Inbox", "All Mail", "Unread", "Starred", "Sent", "Drafts", "Archive", "Snoozed", "Spam", "Trash"]
     @MainActor static func contains(_ row: MailMessage, mailbox: String, labelID: String? = nil) -> Bool {
         if let labelID { return row.folderIDs.contains(labelID) }
         switch mailbox {
         case "Trash": return row.isTrash
         case "Spam": return row.isSpam && !row.isTrash
         case "All Mail": return !row.isTrash && !row.isSpam
+        case "Snoozed": return !row.isTrash && !row.isSpam && !row.isDraft
         case "Unread": return !row.isRead && !row.isTrash && !row.isSpam
         case "Starred": return row.isStarred && !row.isTrash && !row.isSpam
         case "Sent": return row.isSent && !row.isTrash && !row.isSpam

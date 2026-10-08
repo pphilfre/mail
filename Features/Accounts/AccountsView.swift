@@ -71,7 +71,13 @@ struct AccountsView: View {
                 .accessibilityIdentifier("connectGmailButton")
                 if let error = runtime.gmail?.error { Text(error).foregroundStyle(.red) }
             } footer: {
-                Text("Google handles sign-in. Dispatch keeps credentials in Keychain and cached mail on this device. Zoho is planned for a later stage.")
+                Text("Google handles sign-in. Dispatch keeps credentials in Keychain and cached mail on this device.")
+            }
+            Section("More providers") {
+                LabeledContent { Text("Awaiting provider setup").foregroundStyle(.secondary) } label: { Label("Zoho Mail", systemImage: "envelope") }
+                LabeledContent { Text("Coming soon").foregroundStyle(.secondary) } label: { Label("Outlook", systemImage: "envelope") }
+            } footer: {
+                Text("Zoho and Outlook account linking are not available yet.")
             }
         }
         .scrollContentBackground(.hidden)

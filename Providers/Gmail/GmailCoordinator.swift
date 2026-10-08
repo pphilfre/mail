@@ -208,6 +208,10 @@ final class GmailCoordinator {
     func action(_ kind: String, message: MailMessage) {
         action(kind, messages: [message])
     }
+    func originalMessage(_ message: MailMessage) async throws -> Data {
+        let api = try client(message.accountID)
+        return try await api.originalMessage(message.remoteID)
+    }
     func action(_ kind: String, messages: [MailMessage]) {
         do {
             try repository.enqueueBatch(kind, messages: messages)
@@ -291,6 +295,8 @@ final class GmailCoordinator {
                         try await api.modify(operation.targetRemoteID, add: [String(operation.kindRaw.dropFirst(9))])
                     } else if operation.kindRaw.hasPrefix("labelRemove:") {
                         try await api.modify(operation.targetRemoteID, remove: [String(operation.kindRaw.dropFirst(12))])
+                    } else if operation.kindRaw.hasPrefix("move:") {
+                        try await api.modify(operation.targetRemoteID, add: [String(operation.kindRaw.dropFirst(5))], remove: ["INBOX"])
                     } else { throw GmailError.invalidResponse }
                 }
                 repository.context.delete(operation); try repository.context.save()

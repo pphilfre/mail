@@ -41,6 +41,7 @@ targets:
         "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": App/Simulator.entitlements
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
+        INFOPLIST_KEY_NSContactsUsageDescription: Save a sender to Contacts when you choose Add Contact.
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

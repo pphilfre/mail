@@ -102,7 +102,8 @@ final class MailRepository: DraftPersistence {
             for metadata in try context.fetch(FetchDescriptor<StoreMetadata>())
                 where metadata.key.hasPrefix(GmailMailbox.pagePrefix(id)) || metadata.key.hasPrefix(DraftLinks.prefix(id)) ||
                     metadata.key.hasPrefix(MailTask.prefix(id)) || metadata.key.hasPrefix(ReceiptOverride.prefix(id)) ||
-                    metadata.key.hasPrefix(SubscriptionRule.prefix(id)) { context.delete(metadata) }
+                    metadata.key.hasPrefix(SubscriptionRule.prefix(id)) ||
+                    metadata.key.hasPrefix("mail-organisation:\(id.uuidString):") { context.delete(metadata) }
             try context.delete(model: MailAttachment.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: PendingMailOperation.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: OutgoingMessage.self, where: #Predicate { $0.accountID == id })

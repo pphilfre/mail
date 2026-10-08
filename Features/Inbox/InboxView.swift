@@ -44,6 +44,8 @@ struct InboxView: View {
     @AppStorage("fullSwipe") private var fullSwipe = false
     @AppStorage("compactInbox") private var compactInbox = false
     @AppStorage("previewLines") private var previewLines = 2
+    @State private var organisationNow = Date()
+    private var organisation: [String: MailLocalOrganisation] { MailLocalOrganisation.values(metadata) }
     private var openTaskCount: Int {
         metadata.filter { $0.key.hasPrefix("mail-task:") }.compactMap { try? MailTask.decode($0) }
             .filter { !$0.isCompleted && ($0.isStandalone || accountFilter == nil || $0.accountID == accountFilter) }.count
@@ -66,8 +68,17 @@ struct InboxView: View {
         }
     }
     private var conversations: [MailConversation] {
-        MailConversation.rows(filtered, grouped: conversationRows).filter {
-            quickFilter == .all || (quickFilter == .unread ? !$0.isRead : $0.isStarred)
+        let saved = organisation
+        return MailConversation.rows(filtered, grouped: conversationRows).filter {
+            let snoozed = saved[MailLocalOrganisation.key($0.latest)]?.isSnoozed(at: organisationNow) == true
+            let visible = mailbox == "Snoozed" ? snoozed : mailbox == "Inbox" && labelFilter == nil ? !snoozed : true
+            return visible && (quickFilter == .all || (quickFilter == .unread ? !$0.isRead : $0.isStarred))
+        }.sorted {
+            let lhs = saved[MailLocalOrganisation.key($0.latest)]?.pinned == true
+            let rhs = saved[MailLocalOrganisation.key($1.latest)]?.pinned == true
+            if lhs != rhs { return lhs }
+            if $0.latest.receivedAt != $1.latest.receivedAt { return $0.latest.receivedAt > $1.latest.receivedAt }
+            return $0.id < $1.id
         }
     }
     private var selectedMessages: [MailMessage] { conversations.filter { selectedIDs.contains($0.id) }.flatMap(\.messages) }
@@ -104,6 +115,12 @@ struct InboxView: View {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
         .navigationTitle(mailboxTitle)
+        .task {
+            while !Task.isCancelled {
+                organisationNow = Date()
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -204,11 +221,14 @@ struct InboxView: View {
             refreshing = true
             defer { refreshing = false }
             await runtime.gmail?.syncAll()
-            if !accounts.isEmpty { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+            if !accounts.isEmpty && mailbox != "Snoozed" { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
         }
     }
     private var mailList: some View {
-        List(selection: $selectedIDs) {
+        let saved = organisation
+        let files = attachmentMessageIDs
+        let accountByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+        return List(selection: $selectedIDs) {
             inboxHeader
                 .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
                 .listRowSeparator(.hidden)
@@ -265,9 +285,9 @@ struct InboxView: View {
                 Section {
                     ForEach(conversations) { conversation in
                         if selecting {
-                            conversationRow(conversation).tag(conversation.id)
+                            conversationRow(conversation, saved: saved, files: files, accounts: accountByID).tag(conversation.id)
                         } else {
-                            NavigationLink { GmailMessageView(message: conversation.latest) } label: { conversationRow(conversation) }
+                            NavigationLink { GmailMessageView(message: conversation.latest) } label: { conversationRow(conversation, saved: saved, files: files, accounts: accountByID) }
                                 .accessibilityIdentifier("cachedMessage-\(conversation.latest.remoteID)")
                                 .swipeActions(edge: .leading, allowsFullSwipe: fullSwipe) {
                                     conversationSwipe(leadingSwipe, conversation: conversation)
@@ -277,6 +297,9 @@ struct InboxView: View {
                                 }
                                 .contextMenu {
                                     Button(conversation.isRead ? "Mark unread" : "Mark read") { triage(conversation.isRead ? "unread" : "read", conversation.messages) }
+                                    Button(conversation.isStarred ? "Unflag" : "Flag", systemImage: "flag") { triage(conversation.isStarred ? "unstar" : "star", conversation.messages) }
+                                    Button("Archive", systemImage: "archivebox") { triage("archive", conversation.messages) }
+                                    Button("Delete", systemImage: "trash", role: .destructive) { triage("trash", conversation.messages) }
                                     Button(conversation.latest.isSpam ? "Not spam" : "Move to Spam") { triage(conversation.latest.isSpam ? "notSpam" : "spam", conversation.messages) }
                                 }
                         }
@@ -292,7 +315,7 @@ struct InboxView: View {
                         }
                     }
                 }
-                ForEach(selectedAccounts.filter { runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
+                ForEach(selectedAccounts.filter { mailbox != "Snoozed" && runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
                     Button(selectedAccounts.count == 1 ? "Load older messages" : "Load older · \(account.email)") {
                         Task { await runtime.gmail?.loadOlder(account.id, mailbox: mailbox, labelID: labelFilter) }
                     }
@@ -406,6 +429,7 @@ struct InboxView: View {
         selecting = false; selectedIDs.removeAll()
         // The unified drafts section owns its initial load and provider-link refresh.
         guard mailbox != "Drafts" || labelFilter != nil else { return }
+        guard mailbox != "Snoozed" else { return }
         Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 
@@ -415,7 +439,12 @@ struct InboxView: View {
         return local + messages.filter { $0.isDraft && !$0.isTrash && (accountFilter == nil || $0.accountID == accountFilter) && !hidden.contains($0.identity) }.count
     }
     private func cachedUnread(accountID: UUID?, mailbox: String, labelID: String? = nil) -> Int {
-        messages.filter { (accountID == nil || $0.accountID == accountID) && !$0.isRead && MailboxScope.contains($0, mailbox: mailbox, labelID: labelID) }.count
+        let saved = organisation
+        return messages.filter {
+            let snoozed = saved[MailLocalOrganisation.key($0)]?.isSnoozed(at: organisationNow) == true
+            let visible = mailbox == "Snoozed" ? snoozed : mailbox == "Inbox" && labelID == nil ? !snoozed : true
+            return visible && (accountID == nil || $0.accountID == accountID) && !$0.isRead && MailboxScope.contains($0, mailbox: mailbox, labelID: labelID)
+        }.count
     }
     private var accountUnreadCounts: [UUID: Int] {
         messages.reduce(into: [:]) { counts, row in
@@ -429,11 +458,12 @@ struct InboxView: View {
             }
         }
     }
-    private func conversationRow(_ conversation: MailConversation) -> some View {
+    private func conversationRow(_ conversation: MailConversation, saved: [String: MailLocalOrganisation], files: Set<UUID>, accounts: [UUID: MailAccount]) -> some View {
         CachedMessageRow(message: conversation.latest, messageCount: conversation.messages.count,
             unread: !conversation.isRead, starred: conversation.isStarred,
-            hasAttachments: conversation.messages.contains { attachmentMessageIDs.contains($0.id) },
-            account: accountFilter == nil && accounts.count > 1 ? accounts.first { $0.id == conversation.latest.accountID } : nil)
+            hasAttachments: conversation.messages.contains { files.contains($0.id) },
+            account: accounts[conversation.latest.accountID],
+            pinned: saved[MailLocalOrganisation.key(conversation.latest)]?.pinned == true)
     }
     @ViewBuilder private func conversationSwipe(_ raw: String, conversation: MailConversation) -> some View {
         if let action = MailSwipeAction(rawValue: raw), action != .none {
@@ -494,6 +524,7 @@ struct CachedMessageRow: View {
     var starred: Bool? = nil
     var hasAttachments = false
     var account: MailAccount? = nil
+    var pinned = false
     private var isRead: Bool { !(unread ?? !message.isRead) }
     @AppStorage("previewLines") private var previewLines = 2
     @AppStorage("compactInbox") private var compactInbox = false
@@ -525,7 +556,16 @@ struct CachedMessageRow: View {
                     }.font(.caption2).foregroundStyle(.secondary)
                 }
             }
-        }.padding(.vertical, compactInbox ? 3 : 6).accessibilityElement(children: .combine).accessibilityValue(isRead ? "Read" : "Unread")
+        }.padding(.vertical, compactInbox ? 3 : 8)
+        .padding(.leading, 10)
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2).fill(Color(mailHex: account?.colourHex ?? "007AFF"))
+                .frame(width: 3).padding(.vertical, 4).accessibilityHidden(true)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if pinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary).accessibilityLabel("Pinned on this device") }
+        }
+        .accessibilityElement(children: .combine).accessibilityValue(isRead ? "Read" : "Unread")
     }
 }
 

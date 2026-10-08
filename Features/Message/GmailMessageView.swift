@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Translation
 
 struct GmailMessageView: View {
     let message: MailMessage
@@ -11,6 +12,7 @@ struct GmailMessageView: View {
     @Query private var attachments: [MailAttachment]
     @Query private var accounts: [MailAccount]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
+    @Query private var metadata: [StoreMetadata]
     init(message: MailMessage) {
         self.message = message
         let accountID = message.accountID
@@ -38,6 +40,15 @@ struct GmailMessageView: View {
     @State private var editingReceipt: ReceiptEditContext?
     @State private var senderProfile: SenderProfileRequest?
     @State private var addingToCollection = false
+    @State private var showingActions = false
+    @State private var pendingAction: MessageSheetAction?
+    @State private var securityMessage: MailMessage?
+    @State private var showingMove = false
+    @State private var showingContact = false
+    @State private var showingCalendar = false
+    @State private var showingTranslation = false
+    @State private var export: MessageExport?
+    private var organisation: MailLocalOrganisation { MailLocalOrganisation.values(metadata)[MailLocalOrganisation.key(message)] ?? MailLocalOrganisation() }
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.isEmpty ? [message] : allMessages }
     private func bodyText(_ row: MailMessage) -> String {
@@ -58,20 +69,12 @@ struct GmailMessageView: View {
                         Button("Retry") { Task { await refreshThread(syncFirst: true) } }.disabled(loadingThread)
                     }
                 }
-                if !remoteImages && !loadImagesOnce && thread.contains(where: { row in
-                    row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.hasRemoteImages) == true
-                }) {
-                    HStack {
-                        Label("Remote images are off", systemImage: "photo").font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Load images") { feedback.select(); loadImagesOnce = true }.font(.caption.bold())
-                    }.padding(14).background(MailStyle.paper, in: .rect(cornerRadius: 16))
-                }
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
                         attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
                         onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) },
-                        onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) })
+                        onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) },
+                        account: accounts.first { $0.id == row.accountID }, onSecurity: { securityMessage = row }, onLoadImages: { loadImagesOnce = true })
                         .id(row.id)
                 }
                 if message.isDraft {
@@ -97,51 +100,37 @@ struct GmailMessageView: View {
             focusedMessage = true
         }
       }
-        .background(MailStyle.canvas)
+        .background(MailStyle.paper)
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Back", systemImage: "chevron.left") { feedback.select(); dismiss() }
+                    .labelStyle(.iconOnly).accessibilityLabel("Back to inbox")
+            }
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(message.isStarred ? "Unstar" : "Star", systemImage: message.isStarred ? "star.fill" : "star") {
-                    triage(message.isStarred ? "unstar" : "star")
-                }
-                Menu("More", systemImage: "ellipsis.circle") {
-                    if !message.isDraft {
-                        Button("Add to collection", systemImage: "folder.badge.plus") { addingToCollection = true }
-                            .accessibilityIdentifier("addToCollectionButton")
-                        Button("Make task", systemImage: "checklist") {
-                            do { editingTask = try runtime.repository?.task(for: message) }
-                            catch { localError = error.localizedDescription }
-                        }.accessibilityIdentifier("makeMailTaskButton")
-                        Button("Save receipt", systemImage: "receipt") {
-                            do {
-                                let source = ReceiptSource(message)
-                                let key = ReceiptOverride.prefix(message.accountID) + message.remoteID
-                                let value = try runtime.repository?.metadata(key).map(ReceiptOverride.decode)
-                                editingReceipt = ReceiptEditContext(source: source, detected: ReceiptDetector.detect(source), correction: value)
-                            } catch { localError = error.localizedDescription }
-                        }.accessibilityIdentifier("makeReceiptButton")
-                        Divider()
-                    }
-                    Button(message.isRead ? "Mark unread" : "Mark read", systemImage: message.isRead ? "envelope.badge" : "envelope.open") { triage(message.isRead ? "unread" : "read") }
-                        .accessibilityIdentifier("readerReadButton")
-                    Button("Archive", systemImage: "archivebox") { triage("archive"); dismiss() }
-                    Button(message.isSpam ? "Not spam" : "Move to Spam", systemImage: "exclamationmark.shield") {
-                        triage(message.isSpam ? "notSpam" : "spam"); dismiss()
-                    }
-                    Button(message.isTrash ? "Restore" : "Move to Trash", systemImage: "trash") {
-                        triage(message.isTrash ? "restore" : "trash"); dismiss()
-                    }
-                    Menu("Labels") {
-                        ForEach(folders.filter { $0.accountID == message.accountID && $0.kindRaw == "user" }) { folder in
-                            Button {
-                                triage((message.folderIDs.contains(folder.remoteID) ? "labelRemove:" : "labelAdd:") + folder.remoteID)
-                            } label: {
-                                Label(folder.name, systemImage: message.folderIDs.contains(folder.remoteID) ? "checkmark" : "tag")
-                            }
-                        }
-                    }
+                ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
+                    .accessibilityLabel("Share message")
+                if !message.isDraft {
+                    Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(message) }.labelStyle(.iconOnly)
+                    Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(message, all: false) }.labelStyle(.iconOnly)
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 10) {
+                    HStack(spacing: 0) {
+                        dockButton("Mark unread", "envelope.badge") { triage("unread") }
+                        dockButton("Move", "folder") { showingMove = true }
+                        dockButton("Delete", "trash", tint: .red) { triage("trash"); dismiss() }
+                        dockButton("Archive", "archivebox") { triage("archive"); dismiss() }
+                    }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
+                    Spacer(minLength: 0)
+                    MailGlassButton(title: "More", symbol: "ellipsis") { showingActions = true }
+                        .accessibilityIdentifier("readerMoreButton")
+                }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 600)
+            }.frame(maxWidth: .infinity)
         }
         .task {
             await Task.yield()
@@ -149,6 +138,30 @@ struct GmailMessageView: View {
             await refreshThread()
         }
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
+        .sheet(isPresented: $showingActions, onDismiss: performPendingAction) {
+            NavigationStack {
+                MessageActionsSheet(message: message, folders: folders, organisation: organisation) {
+                    pendingAction = $0; showingActions = false
+                }
+            }
+        }
+        .sheet(isPresented: $showingMove, onDismiss: performPendingAction) {
+            NavigationStack {
+                List {
+                    Button("Inbox") { pendingAction = .triage("labelAdd:INBOX"); showingMove = false }
+                    Button("Archive") { pendingAction = .triage("archive"); showingMove = false }
+                    ForEach(folders.filter { $0.kindRaw == "user" }) { folder in
+                        Button(folder.name) { pendingAction = .triage("move:" + folder.remoteID); showingMove = false }
+                    }
+                }.navigationTitle("Move message").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { showingMove = false } } }
+            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
+        .sheet(item: $securityMessage) { row in NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row)) } }
+        .sheet(isPresented: $showingContact) { SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea() }
+        .sheet(isPresented: $showingCalendar) { MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea() }
+        .sheet(item: $export, onDismiss: cleanExport) { MessageShareSheet(url: $0.url) }
+        .translationPresentation(isPresented: $showingTranslation, text: bodyText(message))
         .sheet(item: $editingTask) { task in NavigationStack { MailTaskEditor(task: task) } }
         .sheet(item: $editingReceipt) { context in NavigationStack { ReceiptEditor(context: context) } }
         .sheet(isPresented: $addingToCollection) { NavigationStack { AddToCollectionView(message: message) } }
@@ -182,7 +195,71 @@ struct GmailMessageView: View {
     }
     private func triage(_ kind: String) {
         feedback.triageKind = kind
-        runtime.gmail?.action(kind, message: message)
+        if let gmail = runtime.gmail { gmail.action(kind, message: message) }
+        else {
+            do { try runtime.repository?.enqueueBatch(kind, messages: [message]) }
+            catch { localError = error.localizedDescription }
+        }
+    }
+    private func filesFor(_ row: MailMessage) -> [MailAttachment] { attachments.filter { $0.messageID == row.id } }
+    private func dockButton(_ title: String, _ symbol: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
+        Button { feedback.select(); action() } label: {
+            Image(systemName: symbol).font(.system(size: 20)).frame(width: 48, height: 48)
+        }.buttonStyle(.plain).foregroundStyle(tint).accessibilityLabel(title)
+    }
+    private func cleanExport() {
+        // Share sheet owns the file until dismissal. Old temporary exports are pruned on the next export.
+        export = nil
+    }
+    private func performPendingAction() {
+        guard let action = pendingAction else { return }
+        pendingAction = nil
+        do {
+            switch action {
+            case .reply: reply(message, all: false)
+            case .replyAll: reply(message, all: true)
+            case .forward: forward(message)
+            case .triage(let kind):
+                triage(kind)
+                if ["archive", "trash", "spam"].contains(kind) || kind.hasPrefix("move:") { dismiss() }
+            case .sender: senderProfile = SenderProfileRequest(email: message.senderEmail, name: message.sender.displayName, accountID: message.accountID)
+            case .contact: showingContact = true
+            case .task: editingTask = try runtime.repository?.task(for: message)
+            case .receipt:
+                let source = ReceiptSource(message)
+                let key = ReceiptOverride.prefix(message.accountID) + message.remoteID
+                let value = try runtime.repository?.metadata(key).map(ReceiptOverride.decode)
+                editingReceipt = ReceiptEditContext(source: source, detected: ReceiptDetector.detect(source), correction: value)
+            case .collection: addingToCollection = true
+            case .security: securityMessage = message
+            case .translate: showingTranslation = true
+            case .printMessage:
+                if !MessageUtilities.printMessage(message) { localError = "The print sheet could not open. Try again." }
+            case .savePDF: export = try MessageUtilities.pdf(message)
+            case .calendar: showingCalendar = true
+            case .forwardAttachment: forwardOriginal()
+            case .pin(let pinned):
+                try runtime.repository?.organise(message, pinned: pinned)
+                feedback.show(pinned ? "Pinned on this device" : "Unpinned", symbol: "pin")
+            case .snooze(let until):
+                try runtime.repository?.organise(message, snoozedUntil: until)
+                feedback.show("Snoozed on this device", detail: until.formatted(), symbol: "clock"); dismiss()
+            case .unsnooze: try runtime.repository?.organise(message, clearSnooze: true)
+            }
+        } catch { localError = error.localizedDescription }
+    }
+    private func forwardOriginal() {
+        guard let gmail = runtime.gmail else { localError = "Connect this Gmail account to download the original message."; return }
+        preparingForward = true
+        Task { @MainActor in
+            defer { preparingForward = false }
+            do {
+                let data = try await gmail.originalMessage(message)
+                var draft = LocalDraft(subject: "Fwd: " + message.subject, accountID: message.accountID)
+                let file = try await runtime.draftAttachments.store(data, filename: "Forwarded message.eml", mimeType: "message/rfc822", draftID: draft.id, existing: [])
+                draft.attachments = [file]; try session.save(draft); composing = draft
+            } catch { localError = error.localizedDescription }
+        }
     }
     private func refreshThread(syncFirst: Bool = false) async {
         guard !loadingThread, let gmail = runtime.gmail else { return }

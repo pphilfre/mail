@@ -22,6 +22,7 @@ enum MailStyle {
         case "Sent": "paperplane"
         case "Drafts": "square.and.pencil"
         case "Archive": "archivebox"
+        case "Snoozed": "clock"
         case "Spam": "exclamationmark.shield"
         default: "trash"
         }
