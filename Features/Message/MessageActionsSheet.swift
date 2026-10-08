@@ -30,7 +30,7 @@ struct MessageActionsSheet: View {
                     }.listRowBackground(Color.clear)
                 }
             }
-            Section("Organisation") {
+            Section {
                 row(message.isStarred ? "Unflag" : "Flag", "flag", .triage(message.isStarred ? "unstar" : "star"))
                 NavigationLink { folderPicker(move: false) } label: { Label("Tag", systemImage: "tag") }
                     .disabled(folders.filter { $0.kindRaw == "user" }.isEmpty)
@@ -45,7 +45,8 @@ struct MessageActionsSheet: View {
                 }
                 row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"))
                     .accessibilityIdentifier("readerReadButton")
-            } footer: { Text("Pins and snoozes are saved on this device. Flag uses the account’s starred label.") }
+            } header: { Text("Organisation") }
+              footer: { Text("Pins and snoozes are saved on this device. Flag uses the account’s starred label.") }
             Section("Management") {
                 NavigationLink { folderPicker(move: true) } label: { Label("Move", systemImage: "folder") }
                 row("Archive", "archivebox", .triage("archive"))
@@ -58,7 +59,7 @@ struct MessageActionsSheet: View {
                 unavailable("Block Sender", "person.crop.circle.badge.xmark")
                 row(message.isSpam ? "Not Spam" : "Spam", "exclamationmark.shield", .triage(message.isSpam ? "notSpam" : "spam"), destructive: !message.isSpam)
             }
-            Section("Tools") {
+            Section {
                 row("Translate", "character.bubble", .translate)
                 row("Print", "printer", .printMessage)
                 row("Save PDF", "doc.richtext", .savePDF)
@@ -69,7 +70,8 @@ struct MessageActionsSheet: View {
                     row("Add to collection", "folder.badge.plus", .collection).accessibilityIdentifier("addToCollectionButton")
                     row("Save receipt", "receipt", .receipt).accessibilityIdentifier("makeReceiptButton")
                 }
-            } footer: { Text("Reminders use Dispatch tasks. Print and PDF use a readable text copy. Forward as attachment includes the original message file.") }
+            } header: { Text("Tools") }
+              footer: { Text("Reminders use Dispatch tasks. Print and PDF use a readable text copy. Forward as attachment includes the original message file.") }
             Section("Security") { row("Open Security Inspector", "checkmark.shield", .security) }
         }
         .listStyle(.insetGrouped)

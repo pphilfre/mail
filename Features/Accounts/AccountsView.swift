@@ -73,10 +73,11 @@ struct AccountsView: View {
             } footer: {
                 Text("Google handles sign-in. Dispatch keeps credentials in Keychain and cached mail on this device.")
             }
-            Section("More providers") {
+            Section {
                 LabeledContent { Text("Awaiting provider setup").foregroundStyle(.secondary) } label: { Label("Zoho Mail", systemImage: "envelope") }
                 LabeledContent { Text("Coming soon").foregroundStyle(.secondary) } label: { Label("Outlook", systemImage: "envelope") }
-            } footer: {
+            } header: { Text("More providers") }
+              footer: {
                 Text("Zoho and Outlook account linking are not available yet.")
             }
         }
