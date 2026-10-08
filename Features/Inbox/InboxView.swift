@@ -225,9 +225,6 @@ struct InboxView: View {
         }
     }
     private var mailList: some View {
-        let saved = organisation
-        let files = attachmentMessageIDs
-        let accountByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
         return List(selection: $selectedIDs) {
             inboxHeader
                 .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
@@ -282,6 +279,41 @@ struct InboxView: View {
             if mailbox == "Drafts" && labelFilter == nil {
                 DraftSections(accountID: accountFilter, onEdit: { editingDraft = $0 })
             } else if !accounts.isEmpty {
+                cachedMailSection
+            } else if showSamples {
+                Section {
+                    ForEach(filteredSamples) { message in
+                        NavigationLink {
+                            MessageView(message: message)
+                        } label: { MessageRow(message: message) }
+                    }
+                    if filteredSamples.isEmpty {
+                        ContentUnavailableView("No sample messages here", systemImage: "tray",
+                            description: Text("Explore Inbox, All Mail, or Unread to see sample mail."))
+                            .listRowBackground(Color.clear)
+                    }
+                } footer: {
+                    Text("These messages are examples. Turn them off in Settings.")
+                }
+            } else {
+                Section {
+                    ContentUnavailableView {
+                        Label("Your inbox starts here", systemImage: "tray")
+                    } description: {
+                        Text("Connect Gmail in Accounts, or explore sample mail in Settings.")
+                    }
+                    .accessibilityIdentifier("emptyInbox")
+                    .listRowBackground(Color.clear)
+                }
+            }
+        }
+    }
+    private var cachedMailSection: some View {
+        let saved = organisation
+        let files = attachmentMessageIDs
+        let accountByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+        return Group {
+
                 Section {
                     ForEach(conversations) { conversation in
                         if selecting {
@@ -324,32 +356,6 @@ struct InboxView: View {
                 if !filtered.isEmpty && selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
                     HStack { ProgressView(); Text("Updating mail…").foregroundStyle(.secondary) }.font(.caption)
                 }
-            } else if showSamples {
-                Section {
-                    ForEach(filteredSamples) { message in
-                        NavigationLink {
-                            MessageView(message: message)
-                        } label: { MessageRow(message: message) }
-                    }
-                    if filteredSamples.isEmpty {
-                        ContentUnavailableView("No sample messages here", systemImage: "tray",
-                            description: Text("Explore Inbox, All Mail, or Unread to see sample mail."))
-                            .listRowBackground(Color.clear)
-                    }
-                } footer: {
-                    Text("These messages are examples. Turn them off in Settings.")
-                }
-            } else {
-                Section {
-                    ContentUnavailableView {
-                        Label("Your inbox starts here", systemImage: "tray")
-                    } description: {
-                        Text("Connect Gmail in Accounts, or explore sample mail in Settings.")
-                    }
-                    .accessibilityIdentifier("emptyInbox")
-                    .listRowBackground(Color.clear)
-                }
-            }
         }
     }
     private var inboxHeader: some View {
