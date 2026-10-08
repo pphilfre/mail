@@ -40,7 +40,7 @@ struct ComposeView: View {
         _draft = State(initialValue: draft)
     }
 
-    var body: some View {
+    private var composeFields: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 recipientField("To", text: $draft.to).padding(.vertical, 14)
@@ -100,6 +100,9 @@ struct ComposeView: View {
                 }
             }.padding(.horizontal, 20).padding(.bottom, 16).frame(maxWidth: 760).frame(maxWidth: .infinity)
         }
+    }
+    private var composeChrome: some View {
+        composeFields
         .scrollDismissesKeyboard(.interactively)
         .background(MailStyle.paper)
         .safeAreaInset(edge: .bottom) { composerDock }
@@ -159,6 +162,9 @@ struct ComposeView: View {
                 }
             }
         }
+    }
+    var body: some View {
+        composeChrome
         .interactiveDismissDisabled(!draft.isEmpty || importingAttachments)
         .onAppear {
             if editor == nil {

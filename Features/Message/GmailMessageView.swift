@@ -54,7 +54,7 @@ struct GmailMessageView: View {
     private func bodyText(_ row: MailMessage) -> String {
         row.plainTextBody ?? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? row.snippet
     }
-    var body: some View {
+    private var conversationContent: some View {
       let files = Dictionary(grouping: attachments, by: \.messageID)
       ScrollViewReader { proxy in
         ScrollView {
@@ -100,6 +100,9 @@ struct GmailMessageView: View {
             focusedMessage = true
         }
       }
+    }
+    private var readerChrome: some View {
+        conversationContent
         .background(MailStyle.paper)
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
@@ -137,6 +140,9 @@ struct GmailMessageView: View {
             if !message.isRead { runtime.gmail?.action("read", message: message) }
             await refreshThread()
         }
+    }
+    private var readerWithActions: some View {
+        readerChrome
         .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
         .sheet(isPresented: $showingActions, onDismiss: performPendingAction) {
             NavigationStack {
@@ -159,6 +165,9 @@ struct GmailMessageView: View {
         }
         .sheet(item: $securityMessage) { row in NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadImagesOnce) } }
         .sheet(isPresented: $showingContact) { SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea() }
+    }
+    var body: some View {
+        readerWithActions
         .sheet(isPresented: $showingCalendar) { MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea() }
         .sheet(item: $export, onDismiss: cleanExport) { MessageShareSheet(url: $0.url) }
         .translationPresentation(isPresented: $showingTranslation, text: bodyText(message))

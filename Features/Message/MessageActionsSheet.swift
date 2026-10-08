@@ -85,7 +85,7 @@ struct MessageActionsSheet: View {
         Button { select(action) } label: {
             VStack(spacing: 8) { Image(systemName: symbol).font(.title2); Text(title).font(.subheadline) }
                 .frame(maxWidth: .infinity, minHeight: 78)
-        }.buttonStyle(.glass)
+        }.buttonStyle(.glass).accessibilityLabel(title)
     }
     private func unavailable(_ title: String, _ symbol: String) -> some View {
         HStack { Label(title, systemImage: symbol); Spacer(); Text("Coming soon").font(.caption) }.foregroundStyle(.secondary)
