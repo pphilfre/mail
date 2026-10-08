@@ -3,6 +3,7 @@ import SwiftUI
 struct SecurityInspectorView: View {
     let message: MailMessage
     let attachments: [MailAttachment]
+    var imagesAllowed = false
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRuntime.self) private var runtime
     @AppStorage("remoteImages") private var remoteImages = false
@@ -50,7 +51,7 @@ struct SecurityInspectorView: View {
             }
             Section("Tracking & privacy") {
                 LabeledContent("External images", value: observations.hasRemoteImages ? "Found in cached HTML" : "None detected")
-                LabeledContent("Image loading", value: remoteImages ? "Allowed by settings" : "Blocked by default")
+                LabeledContent("Image loading", value: imagesAllowed || remoteImages ? "Allowed for this reader" : "Blocked")
                 LabeledContent("Possible tracking pixels", value: "\(observations.possibleTrackingPixels)")
                 Text("Pixel detection checks small image dimensions only and may miss trackers. Loading external images can reveal that you opened a message.").font(.footnote).foregroundStyle(.secondary)
             }

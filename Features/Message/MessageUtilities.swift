@@ -73,7 +73,7 @@ struct SenderContactEditor: UIViewControllerRepresentable {
         return UINavigationController(rootViewController: editor)
     }
     func updateUIViewController(_ controller: UINavigationController, context: Context) {}
-    @MainActor final class Coordinator: NSObject, CNContactViewControllerDelegate {
+    @MainActor final class Coordinator: NSObject, @MainActor CNContactViewControllerDelegate {
         let done: () -> Void
         init(done: @escaping () -> Void) { self.done = done }
         func contactViewController(_ viewController: CNContactViewController, didCompleteWith contact: CNContact?) { done() }
@@ -96,7 +96,7 @@ struct MessageCalendarEditor: UIViewControllerRepresentable {
         return editor
     }
     func updateUIViewController(_ controller: EKEventEditViewController, context: Context) {}
-    @MainActor final class Coordinator: NSObject, EKEventEditViewDelegate {
+    @MainActor final class Coordinator: NSObject, @MainActor EKEventEditViewDelegate {
         let store = EKEventStore()
         let done: () -> Void
         init(done: @escaping () -> Void) { self.done = done }

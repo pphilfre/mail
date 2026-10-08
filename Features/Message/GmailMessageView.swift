@@ -96,7 +96,7 @@ struct GmailMessageView: View {
         .task(id: thread.map(\.id)) {
             guard !focusedMessage, thread.contains(where: { $0.id == message.id }) else { return }
             await Task.yield()
-            proxy.scrollTo(message.id, anchor: .top)
+            if thread.count > 3 { proxy.scrollTo(message.id, anchor: .top) }
             focusedMessage = true
         }
       }
@@ -157,7 +157,7 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { showingMove = false } } }
             }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         }
-        .sheet(item: $securityMessage) { row in NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row)) } }
+        .sheet(item: $securityMessage) { row in NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadImagesOnce) } }
         .sheet(isPresented: $showingContact) { SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea() }
         .sheet(isPresented: $showingCalendar) { MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea() }
         .sheet(item: $export, onDismiss: cleanExport) { MessageShareSheet(url: $0.url) }

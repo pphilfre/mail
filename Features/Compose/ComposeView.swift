@@ -126,6 +126,7 @@ struct ComposeView: View {
                     }
                         .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                         .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.circle)
                         .disabled(draft.accountID == nil || !validRecipients || working || sendUnconfirmed)
                         .accessibilityIdentifier("sendButton")
                 }

@@ -168,7 +168,7 @@ actor GmailAPI {
     }
     func originalMessage(_ id: String) async throws -> Data {
         struct RawReply: Decodable { let raw: String }
-        let data = try await request("messages/" + id, query: ["format": "raw"])
+        let data = try await request("messages/" + component(id), query: ["format": "raw"])
         let reply = try JSONDecoder().decode(RawReply.self, from: data)
         guard let decoded = Base64URL.decode(reply.raw) else { throw GmailError.invalidResponse }
         guard decoded.count <= DraftAttachmentStore.maximumBytes else { throw ComposeAttachmentError.tooLarge }
