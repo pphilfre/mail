@@ -158,8 +158,12 @@ struct GmailMessageView: View {
                     HStack(spacing: 0) {
                         dockButton("Mark unread", "envelope.badge") { triage("unread") }
                         dockButton("Move", "folder") { readerPresentation = .move }
-                        dockButton("Delete", "trash", tint: .red) { triage("trash"); dismiss() }
+                            .disabled(message.isTrash || message.isSpam || message.isDraft)
+                        dockButton(message.isTrash ? "Restore" : "Delete", message.isTrash ? "arrow.uturn.backward" : "trash", tint: message.isTrash ? .primary : .red) {
+                            triage(message.isTrash ? "restore" : "trash"); dismiss()
+                        }.disabled(message.isDraft)
                         dockButton("Archive", "archivebox") { triage("archive"); dismiss() }
+                            .disabled(!message.isInbox || message.isDraft)
                     }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
                     Spacer(minLength: 0)
                     MailGlassButton(title: "More", symbol: "ellipsis") { readerPresentation = .actions }
@@ -245,7 +249,7 @@ struct GmailMessageView: View {
     }
     private func dockButton(_ title: String, _ symbol: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
         Button { feedback.select(); action() } label: {
-            Image(systemName: symbol).font(.system(size: 20)).frame(width: 48, height: 48)
+            Image(systemName: symbol).font(.system(size: 20)).frame(width: 48, height: 48).contentShape(.rect)
         }.buttonStyle(.plain).foregroundStyle(tint).accessibilityLabel(title)
     }
     private func performPendingAction() {

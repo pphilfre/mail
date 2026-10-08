@@ -52,9 +52,10 @@ struct MessageActionsSheet: View {
               footer: { Text("Pins and snoozes are saved on this device. Flag uses the account’s starred label.") }
             Section("Management") {
                 NavigationLink { folderPicker(move: true) } label: { Label("Move", systemImage: "folder") }
-                row("Archive", "archivebox", .triage("archive"))
+                    .disabled(message.isTrash || message.isSpam || message.isDraft)
+                row("Archive", "archivebox", .triage("archive")).disabled(!message.isInbox || message.isDraft)
                 if message.isTrash { row("Restore", "arrow.uturn.backward", .triage("restore")) }
-                else { row("Delete", "trash", .triage("trash"), destructive: true) }
+                else { row("Delete", "trash", .triage("trash"), destructive: true).disabled(message.isDraft) }
             }
             Section("Sender") {
                 row("Add Contact", "person.crop.circle.badge.plus", .contact)

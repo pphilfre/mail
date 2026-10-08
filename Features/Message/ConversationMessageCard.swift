@@ -32,7 +32,7 @@ struct ConversationMessageCard: View {
         VStack(alignment: .leading, spacing: 16) {
           HStack(alignment: .top, spacing: 6) {
             Button { feedback.select(); onSender() } label: {
-                SenderAvatar(email: message.senderEmail, name: message.sender.displayName).frame(width: 44, height: 44)
+                SenderAvatar(email: message.senderEmail, name: message.sender.displayName).frame(width: 44, height: 44).contentShape(.circle)
             }.buttonStyle(.plain).disabled(!MailMIME.valid(message.senderEmail))
                 .accessibilityLabel("Show \(message.sender.displayName)’s contact sheet")
                 .accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
@@ -59,7 +59,7 @@ struct ConversationMessageCard: View {
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityHint(expanded ? "Collapse message" : "Expand message")
             Button { feedback.select(); onSecurity() } label: {
-                Image(systemName: MailSecurityObservations.statusSymbol).font(.title3).frame(width: 44, height: 44)
+                Image(systemName: MailSecurityObservations.statusSymbol).font(.title3).frame(width: 44, height: 44).contentShape(.rect)
             }.buttonStyle(.plain).foregroundStyle(.secondary)
                 .accessibilityLabel("Security Inspector, not analysed").accessibilityIdentifier("securityInspector-\(message.remoteID)")
           }
@@ -97,7 +97,7 @@ struct ConversationMessageCard: View {
         Menu("More reply options", systemImage: "ellipsis") {
             Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); onReplyAll() }
             Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
-        }.accessibilityLabel("More reply options").frame(minWidth: 44, minHeight: 44)
+        }.labelStyle(.iconOnly).accessibilityLabel("More reply options").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
     }
 }
 

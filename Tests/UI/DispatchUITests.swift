@@ -12,6 +12,7 @@ final class DispatchUITests: XCTestCase {
         let row = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
         XCTAssertTrue(app.buttons["readerMoreButton"].waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(app.buttons["readerMoreButton"].frame.height, 44)
         attachScreenshot("Redesigned reader", app: app)
         app.buttons["securityInspector-latest"].tap()
         XCTAssertTrue(app.navigationBars["Security Inspector"].waitForExistence(timeout: 5))

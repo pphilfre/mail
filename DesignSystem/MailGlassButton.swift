@@ -10,11 +10,10 @@ struct MailGlassButton: View {
     var body: some View {
         Button { feedback.select(); action() } label: {
             Image(systemName: symbol).font(.system(size: 19, weight: .medium))
-                .frame(width: 48, height: 48)
+                .frame(width: 44, height: 44).contentShape(.circle)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass).buttonBorderShape(.circle)
         .foregroundStyle(tint ?? .primary)
-        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(title)
     }
 }

@@ -43,7 +43,7 @@ struct MailCloseButton: View {
         Button { feedback.select(); action() } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 14, weight: .semibold))
-                .frame(width: 44, height: 44)
+                .frame(width: 44, height: 44).contentShape(.circle)
         }
         .labelStyle(.iconOnly)
         .accessibilityLabel(title)
