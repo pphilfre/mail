@@ -2,6 +2,27 @@ import SwiftUI
 import SwiftData
 import Translation
 
+private enum ReaderPresentation: Identifiable {
+    case actions, move, contact, calendar, collection
+    case security(MailMessage), compose(LocalDraft), task(MailTask), receipt(ReceiptEditContext)
+    case sender(SenderProfileRequest), pdf(MessageExport)
+    var id: String {
+        switch self {
+        case .actions: "actions"
+        case .move: "move"
+        case .contact: "contact"
+        case .calendar: "calendar"
+        case .collection: "collection"
+        case .security(let row): "security-\(row.id)"
+        case .compose(let draft): "compose-\(draft.id)"
+        case .task(let task): "task-\(task.id)"
+        case .receipt: "receipt"
+        case .sender(let person): "sender-\(person.email)"
+        case .pdf(let file): "pdf-\(file.id)"
+        }
+    }
+}
+
 struct GmailMessageView: View {
     let message: MailMessage
     @Environment(AppRuntime.self) private var runtime
@@ -29,25 +50,41 @@ struct GmailMessageView: View {
     }
     @AppStorage("remoteImages") private var remoteImages = false
     @State private var loadImagesOnce = false
-    @State private var composing: LocalDraft?
+    private var composing: LocalDraft? {
+        get { guard case .compose(let draft)? = readerPresentation else { return nil }; return draft }
+        nonmutating set { readerPresentation = newValue.map(ReaderPresentation.compose) }
+    }
     @State private var localError: String?
     @State private var confirmingDraftDeletion = false
     @State private var loadingThread = false
     @State private var focusedMessage = false
     @State private var forwardingMessage: MailMessage?
     @State private var preparingForward = false
-    @State private var editingTask: MailTask?
-    @State private var editingReceipt: ReceiptEditContext?
-    @State private var senderProfile: SenderProfileRequest?
-    @State private var addingToCollection = false
-    @State private var showingActions = false
+    private var editingTask: MailTask? {
+        get { guard case .task(let task)? = readerPresentation else { return nil }; return task }
+        nonmutating set { readerPresentation = newValue.map(ReaderPresentation.task) }
+    }
+    private var editingReceipt: ReceiptEditContext? {
+        get { guard case .receipt(let context)? = readerPresentation else { return nil }; return context }
+        nonmutating set { readerPresentation = newValue.map(ReaderPresentation.receipt) }
+    }
+    private var senderProfile: SenderProfileRequest? {
+        get { guard case .sender(let person)? = readerPresentation else { return nil }; return person }
+        nonmutating set { readerPresentation = newValue.map(ReaderPresentation.sender) }
+    }
+
+
     @State private var pendingAction: MessageSheetAction?
-    @State private var securityMessage: MailMessage?
-    @State private var showingMove = false
-    @State private var showingContact = false
-    @State private var showingCalendar = false
+    @State private var readerPresentation: ReaderPresentation?
+
+
+
+
     @State private var showingTranslation = false
-    @State private var export: MessageExport?
+    private var export: MessageExport? {
+        get { guard case .pdf(let file)? = readerPresentation else { return nil }; return file }
+        nonmutating set { readerPresentation = newValue.map(ReaderPresentation.pdf) }
+    }
     private var organisation: MailLocalOrganisation { MailLocalOrganisation.values(metadata)[MailLocalOrganisation.key(message)] ?? MailLocalOrganisation() }
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.isEmpty ? [message] : allMessages }
@@ -74,7 +111,7 @@ struct GmailMessageView: View {
                         attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
                         onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) },
                         onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) },
-                        account: accounts.first { $0.id == row.accountID }, onSecurity: { securityMessage = row }, onLoadImages: { loadImagesOnce = true })
+                        account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) }, onLoadImages: { loadImagesOnce = true })
                         .id(row.id)
                 }
                 if message.isDraft {
@@ -120,12 +157,12 @@ struct GmailMessageView: View {
                 HStack(spacing: 10) {
                     HStack(spacing: 0) {
                         dockButton("Mark unread", "envelope.badge") { triage("unread") }
-                        dockButton("Move", "folder") { showingMove = true }
+                        dockButton("Move", "folder") { readerPresentation = .move }
                         dockButton("Delete", "trash", tint: .red) { triage("trash"); dismiss() }
                         dockButton("Archive", "archivebox") { triage("archive"); dismiss() }
                     }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
                     Spacer(minLength: 0)
-                    MailGlassButton(title: "More", symbol: "ellipsis") { showingActions = true }
+                    MailGlassButton(title: "More", symbol: "ellipsis") { readerPresentation = .actions }
                         .accessibilityIdentifier("readerMoreButton")
                 }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 600)
             }.frame(maxWidth: .infinity)
@@ -136,45 +173,10 @@ struct GmailMessageView: View {
             await refreshThread()
         }
     }
-    private var readerWithActions: some View {
-        readerChrome
-        .sheet(item: $composing) { draft in NavigationStack { ComposeView(draft: draft) } }
-        .sheet(isPresented: $showingActions, onDismiss: performPendingAction) {
-            NavigationStack {
-                MessageActionsSheet(message: message, folders: folders, organisation: organisation) {
-                    pendingAction = $0; showingActions = false
-                }
-            }
-        }
-        .sheet(isPresented: $showingMove, onDismiss: performPendingAction) {
-            NavigationStack {
-                List {
-                    Button("Inbox") { pendingAction = .triage("labelAdd:INBOX"); showingMove = false }
-                    Button("Archive") { pendingAction = .triage("archive"); showingMove = false }
-                    ForEach(folders.filter { $0.kindRaw == "user" }) { folder in
-                        Button(folder.name) { pendingAction = .triage("move:" + folder.remoteID); showingMove = false }
-                    }
-                }.navigationTitle("Move message").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { showingMove = false } } }
-            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
-        }
-        .sheet(item: $securityMessage) { row in NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadImagesOnce) } }
-        .sheet(isPresented: $showingContact) { SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea() }
-    }
     var body: some View {
-        readerWithActions
-        .sheet(isPresented: $showingCalendar) { MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea() }
-        .sheet(item: $export, onDismiss: cleanExport) { MessageShareSheet(url: $0.url) }
+        readerChrome
+        .sheet(item: $readerPresentation, onDismiss: performPendingAction) { route in presentationContent(route) }
         .translationPresentation(isPresented: $showingTranslation, text: bodyText(message))
-        .sheet(item: $editingTask) { task in NavigationStack { MailTaskEditor(task: task) } }
-        .sheet(item: $editingReceipt) { context in NavigationStack { ReceiptEditor(context: context) } }
-        .sheet(isPresented: $addingToCollection) { NavigationStack { AddToCollectionView(message: message) } }
-        .sheet(item: $senderProfile) { person in
-            NavigationStack {
-                SenderProfileView(email: person.email, name: person.name, initialAccountID: person.accountID)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { senderProfile = nil } } }
-            }
-        }
         .disabled(preparingForward)
         .confirmationDialog("Include attachments?", isPresented: Binding(
             get: { forwardingMessage != nil }, set: { if !$0 { forwardingMessage = nil } }
@@ -206,14 +208,45 @@ struct GmailMessageView: View {
         }
     }
     private func filesFor(_ row: MailMessage) -> [MailAttachment] { attachments.filter { $0.messageID == row.id } }
+    @ViewBuilder private func presentationContent(_ route: ReaderPresentation) -> some View {
+        switch route {
+        case .actions:
+            NavigationStack {
+                MessageActionsSheet(message: message, folders: folders, organisation: organisation) {
+                    pendingAction = $0; readerPresentation = nil
+                }
+            }
+        case .move:
+            NavigationStack {
+                List {
+                    Button("Inbox") { pendingAction = .triage("labelAdd:INBOX"); readerPresentation = nil }
+                    Button("Archive") { pendingAction = .triage("archive"); readerPresentation = nil }
+                    ForEach(folders.filter { $0.kindRaw == "user" }) { folder in
+                        Button(folder.name) { pendingAction = .triage("move:" + folder.remoteID); readerPresentation = nil }
+                    }
+                }.navigationTitle("Move message").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { readerPresentation = nil } } }
+            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        case .security(let row):
+            NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadImagesOnce) }
+        case .compose(let draft): NavigationStack { ComposeView(draft: draft) }
+        case .task(let task): NavigationStack { MailTaskEditor(task: task) }
+        case .receipt(let context): NavigationStack { ReceiptEditor(context: context) }
+        case .sender(let person):
+            NavigationStack {
+                SenderProfileView(email: person.email, name: person.name, initialAccountID: person.accountID)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { readerPresentation = nil } } }
+            }
+        case .collection: NavigationStack { AddToCollectionView(message: message) }
+        case .contact: SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea()
+        case .calendar: MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea()
+        case .pdf(let file): MessageShareSheet(url: file.url)
+        }
+    }
     private func dockButton(_ title: String, _ symbol: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
         Button { feedback.select(); action() } label: {
             Image(systemName: symbol).font(.system(size: 20)).frame(width: 48, height: 48)
         }.buttonStyle(.plain).foregroundStyle(tint).accessibilityLabel(title)
-    }
-    private func cleanExport() {
-        // Share sheet owns the file until dismissal. Old temporary exports are pruned on the next export.
-        export = nil
     }
     private func performPendingAction() {
         guard let action = pendingAction else { return }
@@ -227,20 +260,20 @@ struct GmailMessageView: View {
                 triage(kind)
                 if ["archive", "trash", "spam"].contains(kind) || kind.hasPrefix("move:") { dismiss() }
             case .sender: senderProfile = SenderProfileRequest(email: message.senderEmail, name: message.sender.displayName, accountID: message.accountID)
-            case .contact: showingContact = true
+            case .contact: readerPresentation = .contact
             case .task: editingTask = try runtime.repository?.task(for: message)
             case .receipt:
                 let source = ReceiptSource(message)
                 let key = ReceiptOverride.prefix(message.accountID) + message.remoteID
                 let value = try runtime.repository?.metadata(key).map(ReceiptOverride.decode)
                 editingReceipt = ReceiptEditContext(source: source, detected: ReceiptDetector.detect(source), correction: value)
-            case .collection: addingToCollection = true
-            case .security: securityMessage = message
+            case .collection: readerPresentation = .collection
+            case .security: readerPresentation = .security(message)
             case .translate: showingTranslation = true
             case .printMessage:
                 if !MessageUtilities.printMessage(message) { localError = "The print sheet could not open. Try again." }
             case .savePDF: export = try MessageUtilities.pdf(message)
-            case .calendar: showingCalendar = true
+            case .calendar: readerPresentation = .calendar
             case .forwardAttachment: forwardOriginal()
             case .pin(let pinned):
                 try runtime.repository?.organise(message, pinned: pinned)

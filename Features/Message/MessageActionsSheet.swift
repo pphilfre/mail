@@ -39,7 +39,7 @@ struct MessageActionsSheet: View {
                 NavigationLink { folderPicker(move: false) } label: { Label("Tag", systemImage: "tag") }
                     .disabled(folders.filter { $0.kindRaw == "user" }.isEmpty)
                 row(organisation.pinned ? "Unpin" : "Pin", "pin", .pin(!organisation.pinned))
-                if organisation.isSnoozed(at: Date()) { row("Return to inbox", "clock.arrow.circlepath", .unsnooze) }
+                if organisation.isSnoozed(at: Date()) { row(message.isInbox ? "Return to inbox" : "Stop snoozing", "clock.arrow.circlepath", .unsnooze) }
                 else {
                     Menu {
                         Button("In one hour") { select(.snooze(Date().addingTimeInterval(3600))) }
