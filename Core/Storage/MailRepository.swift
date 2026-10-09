@@ -104,6 +104,9 @@ final class MailRepository: DraftPersistence {
                     metadata.key.hasPrefix(MailTask.prefix(id)) || metadata.key.hasPrefix(ReceiptOverride.prefix(id)) ||
                     metadata.key.hasPrefix(SubscriptionRule.prefix(id)) ||
                     metadata.key.hasPrefix("mail-organisation:\(id.uuidString):") { context.delete(metadata) }
+            for message in try context.fetch(FetchDescriptor<MailMessage>(predicate: #Predicate { $0.accountID == id })) {
+                try setMetadata("security-headers:\(message.id)", value: nil)
+            }
             try context.delete(model: MailAttachment.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: PendingMailOperation.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: OutgoingMessage.self, where: #Predicate { $0.accountID == id })

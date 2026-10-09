@@ -16,7 +16,7 @@ final class DispatchUITests: XCTestCase {
         attachScreenshot("Redesigned reader", app: app)
         app.buttons["securityInspector-latest"].tap()
         XCTAssertTrue(app.navigationBars["Security Inspector"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Not analysed"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["Incomplete analysis"].firstMatch.exists || app.staticTexts["Concerns found"].firstMatch.exists)
         XCTAssertFalse(app.staticTexts["Safe"].exists)
         attachScreenshot("Security Inspector unknown verdict", app: app)
         app.buttons["Close"].tap()

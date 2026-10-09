@@ -56,8 +56,10 @@ actor DraftAttachmentStore {
             mimeType: mimeType, byteCount: data.count, sha256: Self.digest(data))
         try Self.validate(existing + [item])
         let file = try url(draftID: draftID, attachment: item)
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try LocalMailProtection.protectDirectory(root)
+        try LocalMailProtection.protectDirectory(file.deletingLastPathComponent())
         try data.write(to: file, options: [.atomic, .completeFileProtection])
+        try LocalMailProtection.protect(file)
         return item
     }
     func importFile(_ source: URL, draftID: UUID, existing: [DraftAttachment]) throws -> DraftAttachment {
@@ -92,6 +94,16 @@ actor DraftAttachmentStore {
             return MailMIME.OutgoingAttachment(filename: attachment.filename, mimeType: attachment.mimeType, data: data)
         }
         return try MailMIME.raw(draft, from: from, requireRecipient: requireRecipient, attachments: files)
+    }
+    func securePreview(_ attachment: DraftAttachment, draftID: UUID) throws -> URL {
+        let file = try preview(attachment, draftID: draftID)
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= Self.maximumBytes else { throw ComposeAttachmentError.tooLarge }
+        let data = try Data(contentsOf: file)
+        guard data.count == attachment.byteCount, Self.digest(data) == attachment.sha256 else { throw ComposeAttachmentError.unavailable }
+        let inspection = try AttachmentSecurity.inspect(data, filename: attachment.filename, declaredMIME: attachment.mimeType)
+        guard inspection.previewAllowed else { throw AttachmentPreviewError.blocked(inspection.type.explanation) }
+        return try AttachmentPreviewStore.write(data, filename: attachment.filename)
     }
     func prune(keeping draftIDs: Set<UUID>, now: Date = Date()) throws {
         guard FileManager.default.fileExists(atPath: root.path) else { return }

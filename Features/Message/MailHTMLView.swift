@@ -9,6 +9,7 @@ struct MailHTMLView: UIViewRepresentable {
 
     static func document(_ html: String, remoteImages: Bool) -> String {
         let images = remoteImages ? "https: data:" : "data:"
+        let html = removingTrackingPixels(html)
         return """
         <!doctype html><html><head>
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,6 +25,18 @@ struct MailHTMLView: UIViewRepresentable {
         """
     }
     func makeCoordinator() -> Coordinator { Coordinator(height: $height) }
+    static func removingTrackingPixels(_ html: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"(?is)<img\b[^>]*>"#) else { return html }
+        var output = html
+        for match in regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).reversed() {
+            guard let range = Range(match.range, in: html) else { continue }
+            let tag = String(html[range])
+            if tag.range(of: #"(?i)(?:width|height)\s*=\s*["']?1(?:["'\s>]|px)|(?:width|height)\s*:\s*1px"#, options: .regularExpression) != nil {
+                output.replaceSubrange(range, with: "")
+            }
+        }
+        return output
+    }
     static func configuration() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()

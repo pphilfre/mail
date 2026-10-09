@@ -1,0 +1,38 @@
+# Security Inspector and LiveContainer
+
+The Inspector separates observed evidence from verification. A check means the named check completed with the stated result; it never certifies that an email or attachment is safe. A question mark means missing, unverified, stale or incomplete evidence. A cross means a specific concern was observed. The reader icon reflects the latest in-memory analysis and returns to unknown when cached contents or attachment metadata change.
+
+## Implemented
+
+- Account-scoped earlier local sender history (latest 2,000 cached messages), exact-address spam history, display-name/address conflicts, differing Reply-To domains, limited Unicode homograph skeleton and one-edit lookalike comparison with previously seen domains. These heuristics are not identity verification or exhaustive brand detection.
+- Passive HTTP/credential/shortener/internationalised-link observations. No redirects are followed. Vision QR decoding of up to 12 embedded PNG/JPEG/GIF/WebP data images and downloaded raster attachments, first frame only, at most 20 megapixels each. QR URLs enter the same observations and optional reputation flow. PDF pages, archives, CID-only bodies and remote images are not scanned.
+- SHA-256 of downloaded bytes, recognised signatures for PDF, common raster images, ZIP and common executables; extension/MIME/signature comparison. Unknown signatures and Office/EPUB ZIP containers remain unknown. No antivirus engine or archive unpacker is bundled.
+- Optional VirusTotal API v3 GET-only URL and SHA-256 file report retrieval. User enters an API key held in memory, then confirms each exact target. Complete URLs can disclose private query/path tokens; hashes can identify private files. IP and API key also reach VirusTotal. No file bytes, mail bodies, automatic lookups, uploads or scan/rescan submissions. Ephemeral URLSession, no cookies/cache, no redirects, 15-second request spacing. HTTP errors and absent/empty reports stay unknown. Reports older than seven days without detections stay unknown; flagged old reports retain their concerns. Zero engine detections is not a safety guarantee.
+- Existing CSP-based blocking of remote content by default, with scripts, connections, frames, forms, objects and remote fonts always blocked. Explicit one-pixel images are removed even after the user enables remote images. Other pixel encodings, CSS trackers and ordinary-size tracking images are not exhaustively detected; enabling remote images remains a privacy tradeoff.
+- Complete iOS Data Protection on the SwiftData directory, existing database/external blobs and SQLite sidecars, incoming attachments, draft attachments and preview copies. Directories inherit protection for newly created files. These stores are excluded from backup. Existing stores are protected before opening; protection errors stop opening rather than reset data or use an unprotected fallback. Legacy draft JSON is protected before import. This uses iOS filesystem encryption, not an independent encrypted database or app-specific AES key.
+- Preview/sharing accepts recognised PDF, raster images and UTF-8 `.txt` files after checks; active files, inconsistent types, archives and unidentified formats are blocked. Preview files are protected copies, removed when the view leaves and expired after an hour on next launch. Originals are retained for mail/draft workflows. Quick Look is not an antivirus verdict. Original filenames are sanitised; cache paths reject traversal and symlink escapes. File-picker security scopes remain balanced.
+- Risk score is the sum of documented observed concern weights, capped at 100: sender 25, spam history 15, links 20, attachment type 30 per file, QR link concern 15 per image, VirusTotal flag 50 per item. This is a transparent heuristic, not a calibrated probability. Unknown checks are shown separately and never subtract risk. Even score zero with unknown checks yields `?`.
+
+## Authentication limitation
+
+Gmail REST returns raw RFC headers but does not expose an independently typed, verified SPF/DKIM/DMARC verdict. Selected Authentication-Results, Received-SPF and DKIM-Signature headers are now preserved in existing StoreMetadata (no schema version change) and removed with messages/accounts. SPF/DKIM/DMARC reported values are parsed and displayed as **unverified**, including conflicting headers. Header authserv-id alone is not trusted: imported messages and attackers can forge headers.
+
+Real independent SPF verification needs the receiving IP and SMTP envelope sender, DKIM needs unmodified signed bytes and DNS public keys, and DMARC needs those verified results and domain alignment. The cached MIME bodies cannot reconstruct these inputs. No independent DNS/authentication verifier is implemented; no forged header can earn a green check. A future provider adapter must establish provenance separately before offering verified results. [RFC 8601 trust boundary](https://www.rfc-editor.org/rfc/rfc8601.html) and [Gmail message resource](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages).
+
+Zoho remains the repository's existing deferred provider boundary; this change does not add or alter Zoho login/sync. Gmail APIs, OAuth and sending are retained.
+
+## LiveContainer checks
+
+[LiveContainer's documented isolation model](https://github.com/LiveContainer/LiveContainer) uses host sandboxing and allocated Keychain groups. The guest cannot assume ordinary app entitlements, access-group names or separation from host/other guest code. No new device entitlement, app group, Secure Enclave dependency or guest-specific Keychain group is added. OAuth continues to use device-only nonsynchronising Keychain with no plaintext fallback. Inspector's explicit Keychain probe verifies write/read/delete with a random disposable item; it does not prove persistent or cross-container isolation. File protection reports check attributes, not hardware guarantees.
+
+Device validation required on the actual signed LiveContainer host:
+
+1. Keychain probe, Gmail OAuth, relaunch token persistence, account rotation/deletion; verify containers do not see each other's tokens with host Keychain separation enabled. Host reinstall/update or separation reset can lose credentials.
+2. Download/reopen a message and attachment, reboot/lock device, confirm Complete-protected stores cannot be read while locked; do not infer lock behaviour from simulator tests.
+3. Import files from Files providers with security-scoped access; preview valid PDF/image/text, reject renamed executable/HTML/unknown types; verify share sheet/Quick Look on that host.
+4. Verify blocked HTML with a controlled tracking server; test explicit image opt-in and one-pixel removal.
+5. Optional VirusTotal lookup with a test key/public URL and hash: check consent, 404, expired report, API denial/rate limits, connectivity loss, no redirects and no upload requests.
+
+These runtime/device checks are not completed by a simulator or unsigned IPA build. No automatic attachment deletion, content upload or data-reset recovery is provided.
+
+References: [VirusTotal URL reports](https://docs.virustotal.com/reference/url-info), [file hash reports](https://docs.virustotal.com/reference/file-info), [Apple Complete File Protection](https://developer.apple.com/documentation/foundation/nsdata/writingoptions/completefileprotection).

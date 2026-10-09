@@ -12,6 +12,7 @@ extension MailRepository {
                 if let row = try message(accountID: accountID, remoteID: remoteID) {
                     let id = row.id
                     try context.delete(model: MailAttachment.self, where: #Predicate { $0.messageID == id })
+                    try setMetadata("security-headers:\(id)", value: nil)
                     context.delete(row)
                 }
             }
@@ -28,6 +29,7 @@ extension MailRepository {
                 row.to = MailMIME.addresses(payload?.header("To") ?? ""); row.cc = MailMIME.addresses(payload?.header("Cc") ?? "")
                 row.bcc = MailMIME.addresses(payload?.header("Bcc") ?? ""); row.replyTo = MailMIME.addresses(payload?.header("Reply-To") ?? "")
                 row.internetMessageID = payload?.header("Message-ID"); row.referencesHeader = payload?.header("References")
+                try saveSecurityHeaders(payload?.headers ?? [], messageID: row.id)
                 row.folderIDs = dto.labelIds ?? []
                 for operation in pending where operation.targetRemoteID == dto.id { Self.overlay(operation.kindRaw, on: row) }
                 Self.flags(row)

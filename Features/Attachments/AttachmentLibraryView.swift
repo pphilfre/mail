@@ -136,8 +136,9 @@ private struct DraftLibraryFileRow: View {
         .padding(12).background(.quaternary, in: .rect(cornerRadius: 12))
         .buttonStyle(.borderless)
         .quickLookPreview($previewURL)
+        .onDisappear { AttachmentPreviewStore.remove(fileURL); fileURL = nil; previewURL = nil }
         .task(id: attachment.id) {
-            do { fileURL = try await runtime.draftAttachments.preview(attachment, draftID: draftID) }
+            do { fileURL = try await runtime.draftAttachments.securePreview(attachment, draftID: draftID) }
             catch { errorMessage = error.localizedDescription }
         }
     }

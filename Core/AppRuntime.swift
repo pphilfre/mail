@@ -7,6 +7,8 @@ import SwiftData
 final class AppRuntime {
     let connectivity = NetworkConnectivity()
     let draftAttachments = DraftAttachmentStore()
+    let reputation = VirusTotalReputation()
+    var securityReports: [UUID: (fingerprint: String, report: SecurityReport)] = [:]
     var container: ModelContainer?
     var session: AppSession?
     var storageFailed = false
@@ -41,6 +43,11 @@ final class AppRuntime {
             #else
             let readerFixture = false
             #endif
+            if !readerFixture {
+                try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Mail/Attachments"))
+                try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Dispatch/DraftAttachments"))
+                try AttachmentPreviewStore.cleanExpired()
+            }
             let container = try MailStorage.open(inMemory: readerFixture)
             let repository = MailRepository(context: container.mainContext)
             #if DEBUG

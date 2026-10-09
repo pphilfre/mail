@@ -12,7 +12,10 @@ struct SavedOutgoingAttachmentsView: View {
             ForEach(files) { file in
                 Button {
                     Task {
-                        do { previewURL = try await runtime.draftAttachments.preview(file, draftID: outgoingID) }
+                        do {
+                            let url = try await runtime.draftAttachments.securePreview(file, draftID: outgoingID)
+                            AttachmentPreviewStore.remove(previewURL); previewURL = url
+                        }
                         catch { errorMessage = error.localizedDescription }
                     }
                 } label: { Label("\(file.filename) · \(file.sizeDescription)", systemImage: "paperclip") }
@@ -20,6 +23,7 @@ struct SavedOutgoingAttachmentsView: View {
             if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(.secondary) }
         }
         .quickLookPreview($previewURL)
+        .onDisappear { AttachmentPreviewStore.remove(previewURL); previewURL = nil }
         .task(id: outgoingID) {
             do {
                 if let repository = runtime.repository, let row = try repository.outgoing(outgoingID) {
