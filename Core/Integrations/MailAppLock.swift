@@ -5,12 +5,19 @@ import Observation
 @MainActor
 @Observable
 final class MailAppLock {
-    private(set) var unlocked = !UserDefaults.standard.bool(forKey: "mailAppLock")
+    private(set) var unlocked: Bool
     private(set) var authenticating = false
     var error: String?
     @ObservationIgnored private var context: LAContext?
     @ObservationIgnored private var shield: UIWindow?
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let evaluator: (@MainActor () async throws -> Bool)?
+
+    init(defaults: UserDefaults = .standard, evaluator: (@MainActor () async throws -> Bool)? = nil) {
+        self.defaults = defaults; self.evaluator = evaluator
+        unlocked = !defaults.bool(forKey: "mailAppLock")
+    }
 
     func authenticate() async -> Bool {
         guard !authenticating else { return false }
@@ -20,8 +27,9 @@ final class MailAppLock {
         defer { authenticating = false; self.context = nil }
         do {
             // Face ID first, with the device passcode for biometric lockout/recovery.
-            let approved = try await context.evaluatePolicy(.deviceOwnerAuthentication,
-                localizedReason: "Unlock your mail in Dispatch")
+            let approved: Bool
+            if let evaluator { approved = try await evaluator() }
+            else { approved = try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock your mail in Dispatch") }
             guard token == generation, approved else { return false }
             unlocked = true; return true
         } catch {
@@ -32,7 +40,7 @@ final class MailAppLock {
 
     func setEnabled(_ enabled: Bool) async {
         guard await authenticate() else { return }
-        UserDefaults.standard.set(enabled, forKey: "mailAppLock")
+        defaults.set(enabled, forKey: "mailAppLock")
     }
 
     func phaseChanged(_ phase: ScenePhase) {
@@ -47,7 +55,7 @@ final class MailAppLock {
         }
         if phase == .background {
             generation += 1; context?.invalidate()
-            if UserDefaults.standard.bool(forKey: "mailAppLock") { unlocked = false }
+            if defaults.bool(forKey: "mailAppLock") { unlocked = false }
         }
         if phase == .active { shield?.isHidden = true; shield = nil }
     }
