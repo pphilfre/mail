@@ -128,6 +128,7 @@ struct SettingsView: View {
                 Text("A little tap and a quick celebration when things are done. Animations follow your device’s Reduce Motion setting.")
             }
             Section("Sample mail") {
+                NavigationLink("Privacy & intelligence") { MailIntegrationSettings() }
                 Toggle("Show sample inbox", isOn: $showSamples).accessibilityIdentifier("sampleInboxToggle")
             }
             Section("About") {

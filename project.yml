@@ -12,10 +12,24 @@ settings:
     MARKETING_VERSION: "0.7.0"
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  MLXLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    exactVersion: 2.29.1
+  MLX:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.29.1
 targets:
   Dispatch:
     type: application
     platform: iOS
+    dependencies:
+      - package: MLXLM
+        product: MLXLLM
+      - package: MLXLM
+        product: MLXLMCommon
+      - package: MLX
+        product: MLX
     sources:
       - path: App
         excludes: [Simulator.entitlements, GeneratedInfo.plist]
@@ -30,6 +44,13 @@ targets:
     info:
       path: App/GeneratedInfo.plist
       properties:
+        NSFaceIDUsageDescription: Unlock your mail with Face ID when app lock is enabled.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Files to email
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.data, public.content]
+        LSSupportsOpeningDocumentsInPlace: YES
         CFBundleURLTypes:
           - CFBundleURLName: Google OAuth
             CFBundleURLSchemes:
@@ -69,11 +90,25 @@ targets:
 schemes:
   Dispatch:
     build:
-      targets:
+      packages:
+  MLXLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    exactVersion: 2.29.1
+  MLX:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.29.1
+targets:
         Dispatch: all
     test:
       debugEnabled: false
-      targets:
+      packages:
+  MLXLM:
+    url: https://github.com/ml-explore/mlx-swift-lm
+    exactVersion: 2.29.1
+  MLX:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.29.1
+targets:
         - DispatchTests
         - DispatchUITests
       gatherCoverageData: true

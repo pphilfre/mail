@@ -15,6 +15,7 @@ struct MailSearchDocument: Equatable, Sendable {
     var isRead = true
     var isStarred = false
     var hasAttachments = false
+    var semanticText = ""
 }
 
 /// A disposable substring index over cached metadata. No schema migration or provider calls.
@@ -39,10 +40,10 @@ struct MailSearchIndex: Sendable {
     }
 
     /// Terms may match different fields. Preserve source order (newest mail first).
-    func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters()) -> [UUID] {
+    func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters(), ignoringTerms: Bool = false) -> [UUID] {
         let parsed = MailSearchQuery(query)
         guard parsed.error == nil, parsed.active || filters.active else { return [] }
-        let terms = parsed.terms.map(Self.normalize)
+        let terms = ignoringTerms ? [] : parsed.terms.map(Self.normalize)
         let grams = Set(terms.flatMap { Self.trigrams($0) })
         var candidates: Set<Int>?
         // Intersect the shortest postings first, then verify real substrings to reject collisions.
