@@ -24,10 +24,13 @@ enum MailStorage {
         } else {
             let location = url ?? URL.applicationSupportDirectory
                 .appending(path: "Dispatch", directoryHint: .isDirectory).appending(path: "mail.sqlite")
-            try FileManager.default.createDirectory(at: location.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Protect existing stores and external blobs before opening, and newly created
+            // SQLite/WAL/SHM files after opening. Directories pass protection to new files.
+            try LocalMailProtection.protectTree(location.deletingLastPathComponent())
             configuration = ModelConfiguration(schema: schema, url: location, cloudKitDatabase: .none)
         }
         let container = try ModelContainer(for: schema, migrationPlan: MailMigrationPlan.self, configurations: [configuration])
+        if !inMemory { try LocalMailProtection.protectTree(configuration.url.deletingLastPathComponent()) }
         container.mainContext.autosaveEnabled = false
         return container
     }

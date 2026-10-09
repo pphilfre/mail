@@ -19,6 +19,8 @@ struct MailboxSheet: View {
     let openAttachments: () -> Void
     let openPeople: () -> Void
     let openCollections: () -> Void
+    let openSearch: () -> Void
+    @AppStorage("savedMailSearches") private var savedRaw = "[]"
     let openSubscriptions: () -> Void
 
     @State private var moreMailboxes = false
@@ -75,6 +77,15 @@ struct MailboxSheet: View {
                             }
                         }
                     }
+                    DisclosureGroup("Custom inboxes and smart folders") {
+                        ForEach(SavedMailSearch.decode(savedRaw)) { search in
+                            Button {
+                                feedback.select(); mailbox = "All Mail"; label = "smart:" + search.id.uuidString; dismiss()
+                            } label: { mailboxRow(search.name, symbol: "line.3.horizontal.decrease.circle", selected: label == "smart:" + search.id.uuidString, count: 0) }
+                        }
+                        Button("Create smart folder", systemImage: "plus", action: openSearch)
+                    }.font(.subheadline).padding(.horizontal, 14)
+                    NavigationLink("Organisation rules") { MailRulesView() }
                     Text("Counts include mail saved on this device.")
                         .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 14)
                 }.padding(16)

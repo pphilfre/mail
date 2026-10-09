@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import VisionKit
 
 struct ComposeView: View {
     @Environment(AppSession.self) private var session
@@ -29,6 +30,11 @@ struct ComposeView: View {
     @State private var choosingFiles = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var showingSignatureSettings = false
+    @State private var textLibrary: String?
+    @State private var showingTextLibrary = false
+    @State private var showingScanner = false
+    @State private var showingSchedule = false
+    @State private var scheduledDate = Date().addingTimeInterval(3600)
     private var sendingAccount: MailAccount? { accounts.first { $0.id == draft.accountID } }
     private var recipientErrors: Bool {
         [draft.to, draft.cc, draft.bcc].contains { !RecipientInput.invalid($0).isEmpty } ||
@@ -146,13 +152,72 @@ struct ComposeView: View {
                             ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
                         }
                     }
+                    Section("Reusable text") {
+                        ForEach(["Templates", "Snippets"], id: \.self) { kind in
+                            Menu(kind) {
+                                ForEach(MailTextLibrary.read(kind)) { item in
+                                    Button(item.name) {
+                                        feedback.select()
+                                        if kind == "Templates" && draft.subject.isEmpty { draft.subject = item.subject }
+                                        draft.body += (draft.body.isEmpty ? "" : "\n\n") + item.body
+                                    }
+                                }
+                                Button("Manage " + kind.lowercased()) { textLibrary = kind; showingTextLibrary = true }
+                            }
+                        }
+                    }
                     Section("Signature") {
+                        ForEach(MailTextLibrary.read("Signatures", accountID: draft.accountID)) { item in
+                            Button(item.name) {
+                                feedback.select()
+                                if let appliedSignature, let body = MailSignature.replace(appliedSignature, with: item.body, in: draft.body) { draft.body = body }
+                                else { draft.body = MailSignature.insert(item.body, in: draft.body) }
+                                appliedSignature = item.body
+                            }
+                        }
+                        Button("Manage signatures") { textLibrary = "Signatures"; showingTextLibrary = true }.disabled(sendingAccount == nil)
                         Button("Insert signature", systemImage: "signature", action: insertSignature).disabled(signatureForAccount().isEmpty)
                         Button("Edit account signature", systemImage: "pencil") { showingSignatureSettings = true }.disabled(sendingAccount == nil)
                     }
                     Section { Label("Scheduled sending · Coming soon", systemImage: "clock") }
                 }.accessibilityIdentifier("composerOptionsButton")
             }
+        }
+        .sheet(isPresented: $showingScanner) {
+            MailDocumentScanner { result in
+                showingScanner = false
+                switch result {
+                case .failure(let error): attachmentError = error.localizedDescription
+                case .success(let data):
+                    importingAttachments = true
+                    Task { @MainActor in
+                        defer { importingAttachments = false }
+                        do {
+                            let item = try await runtime.draftAttachments.store(data, filename: "Scan.pdf", mimeType: "application/pdf", draftID: draft.id, existing: draft.attachments)
+                            draft.attachments.append(item)
+                        } catch { attachmentError = error.localizedDescription }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingTextLibrary) {
+            NavigationStack {
+                MailTextLibraryView(kind: textLibrary ?? "Snippets", accountID: textLibrary == "Signatures" ? draft.accountID : nil)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showingTextLibrary = false } } }
+            }
+        }
+        .sheet(isPresented: $showingSchedule) {
+            NavigationStack {
+                Form {
+                    DatePicker("Send after", selection: $scheduledDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    Text("Saved on this device. Dispatch sends when it is open and online after this time. Keep the app open for on-time delivery.").font(.footnote).foregroundStyle(.secondary)
+                    if let saveError { Text(saveError).foregroundStyle(.red) }
+                }.navigationTitle("Schedule send")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingSchedule = false } }
+                        ToolbarItem(placement: .confirmationAction) { Button("Schedule") { queueSend(at: scheduledDate) } }
+                    }
+            }.presentationDetents([.medium])
         }
         .sheet(isPresented: $showingSignatureSettings) {
             if let sendingAccount {
@@ -220,6 +285,11 @@ struct ComposeView: View {
             } label: {
                 Image(systemName: "textformat").frame(width: 48, height: 48).contentShape(.rect)
             }.accessibilityLabel("Text tools")
+            if VNDocumentCameraViewController.isSupported {
+                Button { feedback.select(); showingScanner = true } label: {
+                    Image(systemName: "doc.viewfinder").frame(width: 48, height: 48).contentShape(.rect)
+                }.accessibilityLabel("Scan document").disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
+            }
             PhotosPicker(selection: $photos, maxSelectionCount: max(1, DraftAttachmentStore.maximumCount - draft.attachments.count), matching: .images, preferredItemEncoding: .current) {
                 Image(systemName: "photo").frame(width: 48, height: 48).contentShape(.rect)
             }.disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
@@ -245,7 +315,7 @@ struct ComposeView: View {
 
     private func signatureForAccount() -> String {
         guard let id = draft.accountID else { return "" }
-        let value = UserDefaults.standard.string(forKey: MailSignature.key(id)) ?? ""
+        let value = MailTextLibrary.read("Signatures", accountID: id).first?.body ?? ""
         return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : value
     }
     private func updateSignature() {
@@ -311,16 +381,36 @@ struct ComposeView: View {
         } catch { saveError = error.localizedDescription }
     }
 
+    private func queueSend(at date: Date) {
+        guard validRecipients, let repository = runtime.repository, let editor else { return }
+        autosaveTask?.cancel()
+        do {
+            try editor.checkpoint(draft, session: session)
+            try repository.schedule(draft, at: date)
+            finished = true
+            try? session.reloadDrafts()
+            let id = draft.id
+            feedback.show("Message queued", detail: date.timeIntervalSinceNow < 15 ? "Sending in 10 seconds" : date.formatted(),
+                          symbol: "clock", expiresAt: date, undo: {
+                do { try repository.cancelScheduled(id); try session.reloadDrafts(); feedback.show("Send cancelled", detail: "Your message is in Drafts") }
+                catch { feedback.show("Couldn’t cancel send", detail: error.localizedDescription, tone: .error) }
+            })
+            showingSchedule = false
+            dismiss()
+        } catch { saveError = error.localizedDescription }
+    }
+
     private func perform(send: Bool) {
         guard !working, !sendUnconfirmed, let gmail = runtime.gmail, let editor else { return }
         if recipientErrors || (send && !validRecipients) { saveError = "Check the recipients before contacting Gmail."; return }
+        if send { queueSend(at: Date().addingTimeInterval(10)); return }
         autosaveTask?.cancel()
         do { try editor.checkpoint(draft, session: session) } catch { saveError = error.localizedDescription; return }
         working = true; saveError = nil
         Task {
             defer { working = false }
             do {
-                if send { try await gmail.send(draft) } else { try await gmail.saveRemoteDraft(draft) }
+                if send { queueSend(at: Date().addingTimeInterval(10)); return } else { try await gmail.saveRemoteDraft(draft) }
                 // Provider success is authoritative even if refreshing the local draft list fails.
                 finished = true
                 do { try session.reloadDrafts() }

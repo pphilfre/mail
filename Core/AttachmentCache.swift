@@ -40,7 +40,10 @@ actor AttachmentCache {
     func existing(_ relativePath: String?) throws -> URL? {
         guard let relativePath else { return nil }
         let file = try url(relativePath)
-        return FileManager.default.fileExists(atPath: file.path) ? file : nil
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { throw AttachmentError.invalidPath }
+        try LocalMailProtection.protect(file)
+        return file
     }
     func sha256(_ relativePath: String?) throws -> String? {
         guard let file = try existing(relativePath) else { return nil }
@@ -48,12 +51,29 @@ actor AttachmentCache {
         guard size <= Self.maximumBytes else { throw AttachmentError.tooLarge }
         return MailSecurityObservations.sha256(try Data(contentsOf: file))
     }
+    func inspect(_ relativePath: String?, filename: String, mimeType: String) throws -> AttachmentInspection? {
+        guard let file = try existing(relativePath) else { return nil }
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= Self.maximumBytes else { throw AttachmentError.tooLarge }
+        return try AttachmentSecurity.inspect(Data(contentsOf: file), filename: filename, declaredMIME: mimeType)
+    }
+    func securePreview(_ relativePath: String?, filename: String, mimeType: String) throws -> URL {
+        guard let file = try existing(relativePath) else { throw AttachmentError.unavailable }
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= Self.maximumBytes else { throw AttachmentError.tooLarge }
+        let data = try Data(contentsOf: file)
+        let inspection = try AttachmentSecurity.inspect(data, filename: filename, declaredMIME: mimeType)
+        guard inspection.previewAllowed else { throw AttachmentPreviewError.blocked(inspection.type.explanation) }
+        return try AttachmentPreviewStore.write(data, filename: filename)
+    }
     func store(_ data: Data, accountID: UUID, attachmentID: UUID, filename: String) throws -> String {
         guard data.count <= Self.maximumBytes else { throw AttachmentError.tooLarge }
         let path = "\(accountID.uuidString)/\(attachmentID.uuidString)/\(Self.safeFilename(filename))"
         let file = try url(path)
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try LocalMailProtection.protectDirectory(root)
+        try LocalMailProtection.protectDirectory(file.deletingLastPathComponent())
         try data.write(to: file, options: [.atomic, .completeFileProtection])
+        try LocalMailProtection.protect(file)
         var directory = root
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try directory.setResourceValues(values)

@@ -15,6 +15,7 @@ struct MailSearchDocument: Equatable, Sendable {
     var isRead = true
     var isStarred = false
     var hasAttachments = false
+    var semanticText = ""
 }
 
 /// A disposable substring index over cached metadata. No schema migration or provider calls.
@@ -39,10 +40,10 @@ struct MailSearchIndex: Sendable {
     }
 
     /// Terms may match different fields. Preserve source order (newest mail first).
-    func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters()) -> [UUID] {
+    func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters(), ignoringTerms: Bool = false) -> [UUID] {
         let parsed = MailSearchQuery(query)
-        guard parsed.error == nil, parsed.active || filters.active else { return [] }
-        let terms = parsed.terms.map(Self.normalize)
+        guard parsed.error == nil, parsed.active || filters.active || accountID != nil else { return [] }
+        let terms = ignoringTerms ? [] : parsed.terms.map(Self.normalize)
         let grams = Set(terms.flatMap { Self.trigrams($0) })
         var candidates: Set<Int>?
         // Intersect the shortest postings first, then verify real substrings to reject collisions.
@@ -60,6 +61,10 @@ struct MailSearchIndex: Sendable {
                   !filters.unread || !entry.document.isRead,
                   !filters.starred || entry.document.isStarred,
                   !filters.attachments || entry.document.hasAttachments,
+                  filters.attachmentPresence == nil || filters.attachmentPresence == entry.document.hasAttachments,
+                  filters.sender.map { Self.normalize(entry.document.sender).contains(Self.normalize($0)) } ?? true,
+                  filters.after.map { entry.document.receivedAt >= $0 } ?? true,
+                  filters.before.map { entry.document.receivedAt < $0 } ?? true,
                   parsed.clauses.allSatisfy({ Self.matches($0, document: entry.document) }),
                   terms.allSatisfy({ term in entry.fields.contains { $0.contains(term) } }) else { return nil }
             return entry.document.id

@@ -9,6 +9,8 @@ struct AttachmentLibraryView: View {
     @Query private var attachments: [MailAttachment]
     @Query private var messages: [MailMessage]
     @Query private var accounts: [MailAccount]
+    @State private var recognizedText: [String: String] = [:]
+    @State private var ocrError: String?
     @State private var query = ""
     @State private var category = AttachmentCategory.all
     @State private var sort = AttachmentSort.newest
@@ -41,7 +43,8 @@ struct AttachmentLibraryView: View {
     }
     var body: some View {
         let snapshot = entries
-        let files = AttachmentCatalogEntry.filtered(snapshot, accountID: accountID, query: query, category: category,
+        let searchable = snapshot.map { file in var value = file; value.recognizedText = recognizedText[file.id] ?? ""; return value }
+        let files = AttachmentCatalogEntry.filtered(searchable, accountID: accountID, query: query, category: category,
             includeInline: includeInline, savedOnly: savedOnly, savedIDs: savedIDs, sort: sort)
         List {
             Section {
@@ -50,7 +53,9 @@ struct AttachmentLibraryView: View {
                 }.accessibilityIdentifier("attachmentCategoryPicker")
                 Toggle("Saved for offline use", isOn: $savedOnly).accessibilityIdentifier("attachmentSavedFilter")
                 Text("\(files.count) files in downloaded mail and local drafts").font(.caption).foregroundStyle(.secondary)
-                if savedOnly && checkingFiles { ProgressView("Checking saved files…") }
+                Text("Text search indexes saved images and the first 40 pages of PDFs, up to 30 MB per file, on this device.").font(.caption).foregroundStyle(.secondary)
+                if let ocrError { Text(ocrError).font(.caption).foregroundStyle(.secondary) }
+                if checkingFiles { ProgressView("Checking saved files…") }
             }
             ForEach(files) { file in
                 VStack(alignment: .leading, spacing: 10) {
@@ -81,7 +86,7 @@ struct AttachmentLibraryView: View {
         }
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
         .navigationTitle("Attachments")
-        .searchable(text: $query, prompt: "Filename, sender or subject")
+        .searchable(text: $query, prompt: "Filename, sender or document text")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu("Library options", systemImage: "line.3.horizontal.decrease") {
@@ -97,10 +102,16 @@ struct AttachmentLibraryView: View {
             let cache = runtime.gmail?.attachmentCache ?? AttachmentCache()
             for file in snapshot {
                 guard !Task.isCancelled else { return }
+                var url: URL?
                 if let id = file.draftID, let draft = session.drafts.first(where: { $0.id == id }),
                    let item = draft.attachments.first(where: { $0.id == file.attachmentID }) {
-                    if (try? await runtime.draftAttachments.preview(item, draftID: id)) != nil { available.insert(file.id) }
-                } else if (try? await cache.existing(file.cachedPath)) != nil { available.insert(file.id) }
+                    url = try? await runtime.draftAttachments.preview(item, draftID: id)
+                } else { url = try? await cache.existing(file.cachedPath) }
+                if let url {
+                    available.insert(file.id)
+                    do { recognizedText[file.id] = try await AttachmentTextIndex.shared.text(at: url, id: file.id) }
+                    catch { if !Task.isCancelled { ocrError = "Some document text could not be indexed: " + error.localizedDescription } }
+                }
             }
             guard !Task.isCancelled else { return }
             savedIDs = available; checkingFiles = false
@@ -136,8 +147,9 @@ private struct DraftLibraryFileRow: View {
         .padding(12).background(.quaternary, in: .rect(cornerRadius: 12))
         .buttonStyle(.borderless)
         .quickLookPreview($previewURL)
+        .onDisappear { AttachmentPreviewStore.remove(fileURL); fileURL = nil; previewURL = nil }
         .task(id: attachment.id) {
-            do { fileURL = try await runtime.draftAttachments.preview(attachment, draftID: draftID) }
+            do { fileURL = try await runtime.draftAttachments.securePreview(attachment, draftID: draftID) }
             catch { errorMessage = error.localizedDescription }
         }
     }

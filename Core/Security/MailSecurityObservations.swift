@@ -39,7 +39,7 @@ struct MailSecurityObservations: Sendable {
             return Link(destination: destination, host: host, concerns: concerns)
         }
     }
-    private static func matches(_ pattern: String, in value: String, group: Int = 0) -> [String] {
+    static func matches(_ pattern: String, in value: String, group: Int = 0) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         return regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).compactMap {
             Range($0.range(at: group), in: value).map { String(value[$0]) }

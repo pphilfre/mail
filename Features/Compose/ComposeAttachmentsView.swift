@@ -23,7 +23,10 @@ struct ComposeAttachmentsView: View {
                 HStack {
                     Button {
                         Task {
-                            do { previewURL = try await runtime.draftAttachments.preview(file, draftID: draftID) }
+                            do {
+                                let url = try await runtime.draftAttachments.securePreview(file, draftID: draftID)
+                                AttachmentPreviewStore.remove(previewURL); previewURL = url
+                            }
                             catch { onError(error.localizedDescription) }
                         }
                     } label: {
@@ -48,6 +51,7 @@ struct ComposeAttachmentsView: View {
             }
         }
         .quickLookPreview($previewURL)
+        .onDisappear { AttachmentPreviewStore.remove(previewURL); previewURL = nil }
         .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
             switch result {
             case .failure(let error): onError(error.localizedDescription)

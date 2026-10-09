@@ -91,6 +91,7 @@ final class GmailCoordinator {
                     do { try await incremental(id, since: history, api: api) }
                     catch GmailError.http(404) { try await full(id, api: api) }
                 } else { try await full(id, api: api) }
+                try await flush(id, api: api)
                 account.lastSyncAt = Date(); account.lastSyncError = nil
                 try repository.context.save()
             } catch {

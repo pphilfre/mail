@@ -33,6 +33,9 @@ struct GmailMessageView: View {
     @Query private var attachments: [MailAttachment]
     @Query private var accounts: [MailAccount]
     @Query(sort: \MailFolder.name) private var folders: [MailFolder]
+    @Environment(\.openURL) private var openURL
+    @State private var unsubscribe: MailUnsubscribe?
+    @State private var confirmingUnsubscribe = false
     @Query private var metadata: [StoreMetadata]
     init(message: MailMessage) {
         self.message = message
@@ -141,6 +144,25 @@ struct GmailMessageView: View {
     private var readerChrome: some View {
         conversationContent
         .background(MailStyle.paper)
+        .confirmationDialog("Unsubscribe from \(message.sender.displayName)?", isPresented: $confirmingUnsubscribe, titleVisibility: .visible) {
+            if let unsubscribe {
+                if unsubscribe.oneClick {
+                    Button("Unsubscribe") {
+                        Task {
+                            do { try await unsubscribe.perform(); feedback.show("Unsubscribe requested", symbol: "envelope.badge.minus") }
+                            catch { localError = error.localizedDescription }
+                        }
+                    }
+                } else if let web = unsubscribe.web {
+                    Button("Open unsubscribe page") { openURL(web) }
+                } else if let mail = unsubscribe.mail, let parts = URLComponents(url: mail, resolvingAgainstBaseURL: false) {
+                    Button("Compose unsubscribe request") {
+                        composing = LocalDraft(to: mail.path, subject: parts.queryItems?.first { $0.name.lowercased() == "subject" }?.value ?? "Unsubscribe",
+                            body: parts.queryItems?.first { $0.name.lowercased() == "body" }?.value ?? "", accountID: message.accountID)
+                    }
+                }
+            }
+        }
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -277,6 +299,21 @@ struct GmailMessageView: View {
             case .printMessage:
                 if !MessageUtilities.printMessage(message) { localError = "The print sheet could not open. Try again." }
             case .savePDF: export = try MessageUtilities.pdf(message)
+            case .saveEML:
+                Task { @MainActor in
+                    do {
+                        guard let gmail = runtime.gmail else { throw GmailError.reconnect }
+                        let data = try await gmail.originalMessage(message)
+                        let url = FileManager.default.temporaryDirectory.appending(path: "Message-\(UUID().uuidString).eml")
+                        try data.write(to: url, options: [.atomic, .completeFileProtection])
+                        export = MessageExport(url: url)
+                    } catch { localError = error.localizedDescription }
+                }
+            case .unsubscribe:
+                if let row = metadata.first(where: { $0.key == MailUnsubscribe.key(message) }) {
+                    unsubscribe = try JSONDecoder().decode(MailUnsubscribe.self, from: Data(row.value.utf8))
+                    confirmingUnsubscribe = true
+                }
             case .calendar: readerPresentation = .calendar
             case .forwardAttachment: forwardOriginal()
             case .pin(let pinned):

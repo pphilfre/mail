@@ -16,7 +16,7 @@ struct AppShell: View {
     var body: some View {
         Group {
             if accounts.isEmpty && !showSamples {
-                WelcomeView()
+                NavigationStack { WelcomeView() }
             } else {
                 NavigationStack {
                     InboxView()
@@ -32,6 +32,13 @@ struct AppShell: View {
             MailWebViewPool.prepare()
             if let record = undoRecord, record.expiresAt > Date() { showTriageConfirmation(record) }
             await runtime.gmail?.syncAll()
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await runtime.deliverScheduledMail()
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && runtime.gmail?.connecting != true { Task { await runtime.gmail?.syncAll() } }
@@ -89,10 +96,8 @@ struct WelcomeView: View {
                 .ignoresSafeArea()
         }
         .task { withAnimation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.12)) { arrived = true } }
-        .sheet(isPresented: $showingTasks) {
-            NavigationStack { MailTasksView(accountID: nil).toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTasks = false } }
-            } }
+        .navigationDestination(isPresented: $showingTasks) {
+            MailTasksView(accountID: nil)
         }
     }
     private var welcomeContent: some View {

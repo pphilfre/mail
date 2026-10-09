@@ -74,6 +74,9 @@ private struct SearchResultsView: View {
     @AppStorage("savedMailSearches") private var savedRaw = "[]"
     @State private var namingSearch = false
     @State private var searchName = ""
+    @State private var showingDateFilters = false
+    @State private var showingSenderFilter = false
+    @State private var senderText = ""
     private var savedSearches: [SavedMailSearch] {
         SavedMailSearch.decode(savedRaw).filter { search in
             search.accountID == nil || accounts.contains { $0.id == search.accountID }
@@ -97,21 +100,36 @@ private struct SearchResultsView: View {
                 HStack {
                     filterChip("Unread", value: $filters.unread)
                     filterChip("Starred", value: $filters.starred)
-                    filterChip("Attachments", value: $filters.attachments)
-                    if filters.active { Button("Reset") { filters = MailSearchFilters() }.font(.caption) }
+                    Menu {
+                        Button("Any sender") { filters.sender = nil }
+                        Button("Enter sender…") { senderText = filters.sender ?? ""; showingSenderFilter = true }
+                        ForEach(Array(Set(mailByID.values.map(\.senderEmail))).sorted().prefix(30), id: \.self) { email in
+                            Button(email) { filters.sender = email }
+                        }
+                    } label: { Label(filters.sender ?? "Sender", systemImage: "person").lineLimit(1).frame(minHeight: 44) }
+                    Menu {
+                        Button("Any date") { filters.after = nil; filters.before = nil }
+                        Button("Last 7 days") { filters.after = Calendar.current.date(byAdding: .day, value: -7, to: Date()); filters.before = nil }
+                        Button("Last 30 days") { filters.after = Calendar.current.date(byAdding: .day, value: -30, to: Date()); filters.before = nil }
+                        Button("Date range…") { showingDateFilters = true }
+                    } label: { Label(filters.after != nil || filters.before != nil ? "Date filtered" : "Date", systemImage: "calendar").frame(minHeight: 44) }
+                    Menu {
+                        Button("Any attachments") { filters.attachments = false; filters.attachmentPresence = nil }
+                        Button("With attachments") { filters.attachments = false; filters.attachmentPresence = true }
+                        Button("Without attachments") { filters.attachments = false; filters.attachmentPresence = false }
+                    } label: { Label(filters.attachmentPresence == true ? "With files" : filters.attachmentPresence == false ? "Without files" : "Attachments", systemImage: "paperclip").frame(minHeight: 44) }
+                    Menu {
+                        Button("All accounts") { accountID = nil }
+                        ForEach(accounts) { account in Button(account.email) { accountID = account.id } }
+                    } label: { Label(accounts.first { $0.id == accountID }?.email ?? "Account", systemImage: "person.crop.circle").frame(minHeight: 44) }
+                    if filters.active { Button("Reset") { filters = MailSearchFilters(); accountID = nil }.font(.caption) }
                 }.padding(.vertical, 4)
             }.listRowSeparator(.hidden)
-            if accounts.count > 1 {
-                Picker("Account", selection: $accountID) {
-                    Text("All accounts").tag(UUID?.none)
-                    ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
-                }
-            }
             if indexing {
                 HStack { ProgressView(); Text("Preparing search…").foregroundStyle(.secondary) }
             } else if let error = parsed.error {
                 Label(error, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
-            } else if trimmed.isEmpty && !filters.active {
+            } else if trimmed.isEmpty && !filters.active && accountID == nil {
                 ContentUnavailableView("Search your mail", systemImage: "magnifyingglass",
                     description: Text("Find people, subjects, labels, or attachment names in mail saved on this device."))
                     .listRowBackground(Color.clear)
@@ -191,7 +209,7 @@ private struct SearchResultsView: View {
                     Toggle("Include Trash and Spam", isOn: $includeTrashAndSpam)
                     Toggle("Keep recent searches", isOn: $keepHistory)
                     Button("Save this search") { searchName = ""; namingSearch = true }
-                        .disabled((!parsed.active && !filters.active) || parsed.error != nil || savedSearches.count >= 20)
+                        .disabled((!parsed.active && !filters.active && accountID == nil) || parsed.error != nil || savedSearches.count >= 20)
                     Button("Clear search") { query = ""; filters = MailSearchFilters() }
                 }
             }
@@ -200,6 +218,22 @@ private struct SearchResultsView: View {
             if let selected = accountID, !ids.contains(selected) { accountID = nil }
         }
         .onChange(of: keepHistory) { _, enabled in if !enabled { recentRaw = "[]" } }
+        .alert("Sender", isPresented: $showingSenderFilter) {
+            TextField("Name or email", text: $senderText).textInputAutocapitalization(.never)
+            Button("Apply") { filters.sender = senderText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : senderText.trimmingCharacters(in: .whitespacesAndNewlines) }
+            Button("Cancel", role: .cancel) { }
+        }
+        .sheet(isPresented: $showingDateFilters) {
+            NavigationStack {
+                Form {
+                    Toggle("From date", isOn: Binding(get: { filters.after != nil }, set: { filters.after = $0 ? Calendar.current.startOfDay(for: Date()) : nil }))
+                    if filters.after != nil { DatePicker("From (inclusive)", selection: Binding(get: { filters.after ?? Date() }, set: { filters.after = Calendar.current.startOfDay(for: $0) }), displayedComponents: .date) }
+                    Toggle("Before date", isOn: Binding(get: { filters.before != nil }, set: { filters.before = $0 ? Calendar.current.startOfDay(for: Date()) : nil }))
+                    if filters.before != nil { DatePicker("Before (exclusive)", selection: Binding(get: { filters.before ?? Date() }, set: { filters.before = Calendar.current.startOfDay(for: $0) }), displayedComponents: .date) }
+                }.navigationTitle("Date range")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingDateFilters = false } } }
+            }.presentationDetents([.medium])
+        }
         .alert("Save search", isPresented: $namingSearch) {
             TextField("Name", text: $searchName)
             Button("Save") { saveSearch() }
