@@ -41,6 +41,9 @@ actor AttachmentTextIndex {
     }
     private func recognize(_ image: CGImage) throws -> String {
         let request = VNRecognizeTextRequest()
+        #if targetEnvironment(simulator)
+        request.usesCPUOnly = true
+        #endif
         request.recognitionLevel = .accurate; request.usesLanguageCorrection = true
         try VNImageRequestHandler(cgImage: image).perform([request])
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
