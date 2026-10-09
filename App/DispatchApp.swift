@@ -4,15 +4,11 @@ import SwiftData
 @main
 struct DispatchApp: App {
     @State private var runtime = AppRuntime()
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             if let container = runtime.container, let session = runtime.session {
-                Group {
-                    if runtime.appLock.unlocked { AppShell() }
-                    else { MailLockScreen() }
-                }
+                AppShell()
                     .environment(session)
                     .environment(runtime)
                     .modelContainer(container)
@@ -26,10 +22,5 @@ struct DispatchApp: App {
                 }
             }
         }
-        .onChange(of: scenePhase) { _, phase in runtime.appLock.phaseChanged(phase) }
-        .onChange(of: runtime.appLock.unlocked) { _, unlocked in
-            if unlocked { Task { await runtime.importPendingShares() } }
-        }
-        .onOpenURL { runtime.receiveShare($0) }
     }
 }
