@@ -179,7 +179,8 @@ struct ComposeView: View {
                         Button("Insert signature", systemImage: "signature", action: insertSignature).disabled(signatureForAccount().isEmpty)
                         Button("Edit account signature", systemImage: "pencil") { showingSignatureSettings = true }.disabled(sendingAccount == nil)
                     }
-                    Section { Label("Scheduled sending · Coming soon", systemImage: "clock") }
+                    Button("Schedule send", systemImage: "clock") { showingSchedule = true }
+                        .disabled(!validRecipients || draft.accountID == nil || runtime.gmail == nil)
                 }.accessibilityIdentifier("composerOptionsButton")
             }
         }
@@ -281,7 +282,6 @@ struct ComposeView: View {
             Menu {
                 Button("Add bullet") { draft.body += "\n• " }
                 Button("Add quote") { draft.body += "\n> " }
-                Label("Rich text · Coming soon", systemImage: "textformat")
             } label: {
                 Image(systemName: "textformat").frame(width: 48, height: 48).contentShape(.rect)
             }.accessibilityLabel("Text tools")

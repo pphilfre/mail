@@ -56,7 +56,6 @@ struct MessageActionsSheet: View {
                 }
                 row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"), identifier: "readerReadButton")
             } header: { Text("Organisation") }
-              footer: { Text("Pins and snoozes are saved on this device. Flag uses the account’s starred label.") }
             Section("Management") {
                 NavigationLink { folderPicker(move: true) } label: { Label("Move", systemImage: "folder") }
                     .disabled(message.isTrash || message.isSpam || message.isDraft)

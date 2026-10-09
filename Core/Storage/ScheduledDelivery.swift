@@ -4,6 +4,7 @@ import SwiftData
 struct ScheduledDelivery: Codable, Equatable, Sendable {
     let id: UUID
     let date: Date
+    var retryAfter: Date?
     static func key(_ id: UUID) -> String { "scheduled-delivery:\(id.uuidString)" }
 }
 
@@ -27,18 +28,25 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
             try context.save()
         }
     }
+    func deferScheduled(_ id: UUID, until date: Date, error: String) throws {
+        guard let row = try outgoing(id), row.stateRaw == "scheduled", let saved = try metadata(ScheduledDelivery.key(id)) else { return }
+        var delivery = try JSONDecoder().decode(ScheduledDelivery.self, from: Data(saved.value.utf8))
+        delivery.retryAfter = date; row.lastError = error
+        try setMetadata(ScheduledDelivery.key(id), value: String(decoding: try JSONEncoder().encode(delivery), as: UTF8.self))
+        try context.save()
+    }
     func scheduledDue(at now: Date = Date()) throws -> [OutgoingMessage] {
         try context.fetch(FetchDescriptor<OutgoingMessage>()).filter { row in
             guard row.stateRaw == "scheduled", let saved = try? self.metadata(ScheduledDelivery.key(row.id)),
                   let delivery = try? JSONDecoder().decode(ScheduledDelivery.self, from: Data(saved.value.utf8)) else { return false }
-            return delivery.date <= now
+            return delivery.date <= now && (delivery.retryAfter.map { $0 <= now } ?? true)
         }
     }
 }
 
 @MainActor extension AppRuntime {
     func deliverScheduledMail() async {
-        guard connectivity.isConnected != false, let repository, let gmail else { return }
+        guard connectivity.isConnected == true, let repository, let gmail else { return }
         do {
             let due = try repository.scheduledDue()
             guard !due.isEmpty else { return }
@@ -52,11 +60,25 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
                     try repository.setMetadata(ScheduledDelivery.key(row.id), value: nil)
                     try repository.context.save()
                 } catch {
-                    if row.stateRaw == "scheduled" || (row.stateRaw == "draft" && error as? GmailError != .cancelled) { row.stateRaw = "sendFailed"; row.lastError = error.localizedDescription; try repository.context.save() }
-                    session?.storageError = error.localizedDescription
+                    if row.stateRaw == "scheduled", Self.retryablePreparation(error) {
+                        try repository.deferScheduled(row.id, until: Date().addingTimeInterval(60), error: error.localizedDescription)
+                    } else if row.stateRaw == "scheduled" || (row.stateRaw == "draft" && error as? GmailError != .cancelled) {
+                        row.stateRaw = "sendFailed"; row.lastError = error.localizedDescription; try repository.context.save()
+                    }
+                    // Sending/uncertain states are never retried automatically.
                 }
             }
             try session?.reloadDrafts()
         } catch { session?.storageError = error.localizedDescription }
+    }
+    private static func retryablePreparation(_ error: Error) -> Bool {
+        if let url = error as? URLError {
+            return [.notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .cancelled].contains(url.code)
+        }
+        if let gmail = error as? GmailError {
+            if gmail == .busy { return true }
+            if case .http(let status) = gmail { return status == 429 || (500..<600).contains(status) }
+        }
+        return false
     }
 }
