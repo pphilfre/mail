@@ -22,6 +22,28 @@ import SwiftData
         row.stateRaw = "sending"; try container.mainContext.save()
         XCTAssertThrowsError(try repository.cancelScheduled(draft.id))
     }
+    func testScheduledDeliverySurvivesDatabaseReopen() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let url = folder.appending(path: "mail.sqlite")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let draftID = UUID(), accountID = UUID(), due = Date().addingTimeInterval(60)
+        do {
+            let container = try MailStorage.open(at: url)
+            let repository = MailRepository(context: container.mainContext)
+            container.mainContext.insert(MailAccount(id: accountID, provider: .gmail, email: "me@example.com"))
+            try container.mainContext.save()
+            let draft = LocalDraft(id: draftID, to: "you@example.com", body: "Durable", accountID: accountID)
+            try repository.save([draft]); try repository.schedule(draft, at: due)
+        }
+        let reopened = try MailStorage.open(at: url)
+        let repository = MailRepository(context: reopened.mainContext)
+        XCTAssertEqual(try repository.scheduledDue(at: due).map(\.id), [draftID])
+        try repository.recoverInterruptedSends()
+        XCTAssertEqual(try repository.outgoing(draftID)?.stateRaw, "scheduled")
+        try repository.cancelScheduled(draftID)
+        XCTAssertEqual(try repository.load().first?.body, "Durable")
+    }
+
     func testRuleRunsOncePerRevisionAndAccountAndNeverTouchesSentMail() throws {
         let container = try MailStorage.open(inMemory: true)
         let repository = MailRepository(context: container.mainContext)

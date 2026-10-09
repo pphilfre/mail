@@ -86,7 +86,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["composeButton"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["dockEmailsButton"].frame.height, app.buttons["composeButton"].frame.height, accuracy: 1)
         XCTAssertFalse(app.staticTexts["inboxResultCount"].exists)
-        app.buttons["profileMenuButton"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
         XCTAssertTrue(app.buttons["mailbox-Tasks"].waitForExistence(timeout: 5))
         XCTAssertGreaterThan(app.navigationBars["Mailboxes"].frame.minY, 150)
         XCTAssertTrue(app.buttons["mailbox-Subscriptions"].isHittable)

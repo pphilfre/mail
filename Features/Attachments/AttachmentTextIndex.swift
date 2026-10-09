@@ -36,7 +36,7 @@ actor AttachmentTextIndex {
             result = try recognize(image)
         }
         result = String(result.prefix(300_000))
-        try result.write(to: cached, atomically: true, encoding: .utf8)
+        try Data(result.utf8).write(to: cached, options: [.atomic, .completeFileProtection])
         return result
     }
     private func recognize(_ image: CGImage) throws -> String {

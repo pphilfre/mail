@@ -29,7 +29,7 @@ struct MailOrganisationRule: Identifiable, Codable, Equatable, Sendable {
         let rules = try context.fetch(FetchDescriptor<StoreMetadata>()).compactMap(MailOrganisationRule.decode)
         for message in messages {
             for rule in rules where rule.matches(message) {
-                guard ["archive", "read", "star"].contains(rule.action) else { continue }
+                guard ["archive", "read", "star"].contains(rule.action) || (rule.action.hasPrefix("labelAdd:") && rule.accountID == message.accountID) else { continue }
                 let marker = "mail-rule-applied:\(message.identity):\(rule.id)"
                 guard try metadata(marker)?.value != rule.revision.uuidString else { continue }
                 context.insert(PendingMailOperation(accountID: message.accountID, targetRemoteID: message.remoteID, kind: rule.action))

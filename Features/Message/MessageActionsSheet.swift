@@ -16,6 +16,11 @@ struct MessageActionsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.dynamicTypeSize) private var typeSize
+    private var hasUnsubscribe: Bool {
+        guard let row = metadata.first(where: { $0.key == MailUnsubscribe.key(message) }),
+              let value = try? JSONDecoder().decode(MailUnsubscribe.self, from: Data(row.value.utf8)) else { return false }
+        return value.web != nil || value.mail != nil
+    }
     var body: some View {
         List {
             Section {
@@ -70,7 +75,7 @@ struct MessageActionsSheet: View {
                 row("Print", "printer", .printMessage)
                 row("Save PDF", "doc.richtext", .savePDF)
                 row("Save EML", "doc", .saveEML)
-                if metadata.contains(where: { $0.key == MailUnsubscribe.key(message) }) {
+                if hasUnsubscribe {
                     row("Unsubscribe", "envelope.badge.minus", .unsubscribe)
                 }
                 if !message.isDraft { row("Forward as Attachment", "paperclip", .forwardAttachment) }

@@ -6,7 +6,8 @@ struct MailTextLibraryView: View {
     @AppStorage private var raw: String
     @State private var editing: MailTextItem?
     private var items: [MailTextItem] {
-        MailTextLibrary.read(kind, accountID: accountID)
+        if !raw.isEmpty, let data = raw.data(using: .utf8), let items = try? JSONDecoder().decode([MailTextItem].self, from: data) { return items }
+        return MailTextLibrary.read(kind, accountID: accountID)
     }
     init(kind: String, accountID: UUID? = nil) {
         self.kind = kind; self.accountID = accountID

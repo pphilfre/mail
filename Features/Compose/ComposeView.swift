@@ -410,13 +410,12 @@ struct ComposeView: View {
         Task {
             defer { working = false }
             do {
-                if send { queueSend(at: Date().addingTimeInterval(10)); return } else { try await gmail.saveRemoteDraft(draft) }
+                try await gmail.saveRemoteDraft(draft)
                 // Provider success is authoritative even if refreshing the local draft list fails.
                 finished = true
                 do { try session.reloadDrafts() }
                 catch { session.storageError = error.localizedDescription }
-                feedback.show(send ? "Message sent" : "Draft saved to Gmail", detail: send ? "On its way" : nil,
-                              symbol: send ? "paperplane.fill" : "checkmark")
+                feedback.show("Draft saved to Gmail", symbol: "checkmark")
                 dismiss()
             } catch {
                 if error as? GmailError == .uncertainSend { sendUnconfirmed = true; try? session.reloadDrafts() }

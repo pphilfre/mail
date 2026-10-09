@@ -298,7 +298,7 @@ struct InboxView: View {
                 Section {
                     NavigationLink { OutboxView(accountID: accountFilter) } label: {
                         HStack {
-                            Label("Sending needs confirmation", systemImage: "exclamationmark.circle")
+                            Label("Outbox", systemImage: "paperplane")
                             Spacer()
                             Text(uncertainCount, format: .number).foregroundStyle(.secondary)
                         }.font(.subheadline)

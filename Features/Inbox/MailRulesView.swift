@@ -32,6 +32,7 @@ private struct MailRuleEditor: View {
     @Environment(AppRuntime.self) private var runtime
     @Environment(\.dismiss) private var dismiss
     @Query private var accounts: [MailAccount]
+    @Query private var folders: [MailFolder]
     @State var rule: MailOrganisationRule
     @State private var errorMessage: String?
     var body: some View {
@@ -42,12 +43,16 @@ private struct MailRuleEditor: View {
                 Text("All accounts").tag(UUID?.none)
                 ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
             }
+            .onChange(of: rule.accountID) { _, _ in if rule.action.hasPrefix("labelAdd:") { rule.action = "read" } }
             Section("Match all conditions") {
                 TextField("Sender contains", text: $rule.sender).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("Subject contains", text: $rule.subject)
             }
             Picker("Action", selection: $rule.action) {
                 Text("Mark read").tag("read"); Text("Star").tag("star"); Text("Archive").tag("archive")
+                ForEach(folders.filter { $0.accountID == rule.accountID && $0.kindRaw == "user" }) { folder in
+                    Text("Label: " + folder.name).tag("labelAdd:" + folder.remoteID)
+                }
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }.navigationTitle("Edit rule")

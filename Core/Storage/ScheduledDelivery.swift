@@ -40,17 +40,19 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
     func deliverScheduledMail() async {
         guard connectivity.isConnected != false, let repository, let gmail else { return }
         do {
-            for row in try repository.scheduledDue() {
-                guard row.stateRaw == "scheduled" else { continue }
+            let due = try repository.scheduledDue()
+            guard !due.isEmpty else { return }
+            for row in due {
+                guard row.stateRaw == "scheduled", !deliveringScheduled.contains(row.id) else { continue }
+                deliveringScheduled.insert(row.id)
+                defer { deliveringScheduled.remove(row.id) }
                 let draft = try repository.localDraft(row)
-                row.stateRaw = "draft"
-                try repository.context.save()
                 do {
-                    try await gmail.send(draft)
+                    try await gmail.send(draft, queued: true)
                     try repository.setMetadata(ScheduledDelivery.key(row.id), value: nil)
                     try repository.context.save()
                 } catch {
-                    if row.stateRaw == "draft" { row.stateRaw = "sendFailed"; row.lastError = error.localizedDescription; try repository.context.save() }
+                    if row.stateRaw == "scheduled" || (row.stateRaw == "draft" && error as? GmailError != .cancelled) { row.stateRaw = "sendFailed"; row.lastError = error.localizedDescription; try repository.context.save() }
                     session?.storageError = error.localizedDescription
                 }
             }
