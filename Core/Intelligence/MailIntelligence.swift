@@ -171,13 +171,13 @@ actor MailSemanticSearch {
         guard let embedding = NLEmbedding.sentenceEmbedding(for: language),
               let queryVector = embedding.vector(for: phrase) else { return nil }
         // Structured filters use the existing lexical engine so their semantics cannot drift.
-        let scope = MailSearchIndex(documents: documents)
-        let allowed = Set(scope.matches(query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam,
-                                       filters: filters, ignoringTerms: true))
+        let eligible = documents.lazy.filter {
+            MailSearchIndex.eligible($0, query: parsed, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters)
+        }
         var ranked: [(UUID, Double)] = []
         let liveIDs = Set(documents.map(\.id)); cache = cache.filter { liveIDs.contains($0.key) }
         order.removeAll { !liveIDs.contains($0) }
-        for document in documents.filter({ allowed.contains($0.id) }).prefix(Self.maximumDocuments) {
+        for document in eligible.prefix(Self.maximumDocuments) {
             try Task.checkCancellation()
             let text = String((document.subject + ". " + document.semanticText).prefix(1_000))
             let vector: [Double]

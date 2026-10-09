@@ -56,15 +56,20 @@ struct MailSearchIndex: Sendable {
         let positions = candidates?.sorted() ?? Array(entries.indices)
         return positions.compactMap { position in
             let entry = entries[position]
-            guard accountID == nil || entry.document.accountID == accountID,
-                  includeTrashAndSpam || (!entry.document.isTrash && !entry.document.isSpam),
-                  !filters.unread || !entry.document.isRead,
-                  !filters.starred || entry.document.isStarred,
-                  !filters.attachments || entry.document.hasAttachments,
-                  parsed.clauses.allSatisfy({ Self.matches($0, document: entry.document) }),
+            guard Self.eligible(entry.document, query: parsed, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters),
                   terms.allSatisfy({ term in entry.fields.contains { $0.contains(term) } }) else { return nil }
             return entry.document.id
         }
+    }
+
+    static func eligible(_ document: MailSearchDocument, query: MailSearchQuery, accountID: UUID?,
+                         includeTrashAndSpam: Bool, filters: MailSearchFilters) -> Bool {
+        (accountID == nil || document.accountID == accountID)
+        && (includeTrashAndSpam || (!document.isTrash && !document.isSpam))
+        && (!filters.unread || !document.isRead)
+        && (!filters.starred || document.isStarred)
+        && (!filters.attachments || document.hasAttachments)
+        && query.clauses.allSatisfy { matches($0, document: document) }
     }
 
     private static func matches(_ clause: MailSearchQuery.Clause, document: MailSearchDocument) -> Bool {

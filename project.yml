@@ -15,7 +15,7 @@ settings:
 packages:
   MLXLM:
     url: https://github.com/ml-explore/mlx-swift-lm
-    exactVersion: 2.29.1
+    exactVersion: 2.29.3
   MLX:
     url: https://github.com/ml-explore/mlx-swift
     exactVersion: 0.29.1

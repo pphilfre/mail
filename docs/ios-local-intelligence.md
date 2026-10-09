@@ -53,9 +53,9 @@ device. This lock protects the app UI, not the host from reading guest storage.
   action words, so it may miss mail the user considers important.
 - Reader Local insights selects original sentences from up to 30 cached messages
   in the thread, plus dates and possible deadlines. Missing bodies use previews.
-  Summaries are extractive rather than generative by default. Dates initially
-  require an explicit year to avoid presenting relative dates resolved against
-  today's clock as dates belonging to an old email. Suggestions never create
+  Summaries are extractive rather than generative by default. Dates require an
+  explicit year, or today/tomorrow anchored to the received date. Other ambiguous
+  dates are omitted rather than resolved against today's clock. Suggestions never create
   calendar events/tasks automatically.
 - Analysis runs on utility tasks over Sendable snapshots, stops on cancellation
   and never fetches remote email bodies for AI. There is no background polling or
@@ -66,7 +66,7 @@ device. This lock protects the app UI, not the host from reading guest storage.
 
 Settings → Privacy & intelligence provides explicit Wi-Fi download, cancel and
 delete controls for Qwen3 0.6B (4-bit, Apache-2.0), using pinned
-[MLX Swift LM 2.29.1](https://github.com/ml-explore/mlx-swift-lm/tree/2.29.1)
+[MLX Swift LM 2.29.3](https://github.com/ml-explore/mlx-swift-lm/tree/2.29.3)
 and MLX Swift 0.29.1. MLX is used for generation because these weights have a
 maintained iOS decoder/tokenizer runtime; a general Core ML model alone would not
 provide that runtime. This does not use Foundation Models, Apple Intelligence,
