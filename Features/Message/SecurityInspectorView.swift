@@ -14,10 +14,16 @@ struct SecurityInspectorView: View {
     @State private var embeddedQR: [String] = []
     @State private var qrFinding = SecurityFinding(id: "embedded-qr", title: "Embedded QR codes", verdict: .unknown, explanation: "Not inspected yet. Remote images are never fetched for analysis.")
     @State private var keychain: SecurityFinding?
+    @State private var storageChecks: [SecurityFinding] = []
     @State private var reputations: [String: SecurityFinding] = [:]
     @State private var apiKey = ""
     @State private var pendingLookup: ReputationTarget?
     @State private var busy = false
+    @State private var verifiedAuthentication: [SecurityFinding]?
+    @State private var confirmAuthentication = false
+    @State private var authenticationBusy = false
+    @State private var authenticationTask: Task<Void, Never>?
+    private var authenticationFindings: [SecurityFinding] { verifiedAuthentication ?? MailAuthentication.findings(headers: headers) }
     private var html: String { message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
     private var observations: MailSecurityObservations { MailSecurityObservations(html: html, text: message.plainTextBody ?? message.snippet) }
     private var links: [MailSecurityObservations.Link] {
@@ -33,7 +39,7 @@ struct SecurityInspectorView: View {
             explanation: concerns.isEmpty ? "\(links.count) web links found in cached content. Destinations and redirects have not been visited or verified." : Array(Set(concerns)).sorted().joined(separator: " "), points: concerns.isEmpty ? 0 : 20)
     }
     private var report: SecurityReport {
-        var findings = MailAuthentication.findings(headers: headers) + identityFindings + [linkFinding, qrFinding]
+        var findings = authenticationFindings + identityFindings + [linkFinding, qrFinding]
         for file in attachments {
             if let inspection = inspections[file.id] { findings += [inspection.type, inspection.qr] }
             else { findings.append(SecurityFinding(id: file.id.uuidString, title: file.filename, verdict: .unknown, explanation: "Attachment contents unavailable.")) }
@@ -47,11 +53,14 @@ struct SecurityInspectorView: View {
             Section {
                 Label(report.verdict == .concern ? "Concerns found" : "Incomplete analysis", systemImage: report.verdict.symbol).font(.title3.weight(.semibold))
                 LabeledContent("Observed risk", value: "\(report.score)/100")
-                Text("\(report.unknownCount) checks remain unknown. Zero means no scored evidence was found, never that this email is safe. Points: sender 25, spam history 15, links 20, type 30/file, QR concerns 15/image, VirusTotal flags 50/item; capped at 100.").font(.footnote).foregroundStyle(.secondary)
+                Text("\(report.unknownCount) checks remain unknown. Zero means no scored evidence was found, never that this email is safe. Points: sender 25, spam history 15, links 20, failed DKIM 20, type 30/file, QR concerns 15/image, VirusTotal flags 50/item; capped at 100.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Authentication & identity") {
                 LabeledContent("Sender", value: message.senderEmail).textSelection(.enabled)
-                ForEach(MailAuthentication.findings(headers: headers)) { finding($0) }
+                ForEach(authenticationFindings) { finding($0) }
+                Button(authenticationBusy ? "Verifying original message…" : "Verify original Gmail signature…") { confirmAuthentication = true }
+                    .disabled(authenticationBusy || runtime.gmail == nil)
+                Text("Optional: downloads the original message from Gmail (up to 20 MB) and verifies full-body RSA/Ed25519 DKIM locally. Google Public DNS receives signing selectors/domains, the From domain and your IP. Sender-controlled DNS may observe queries or tracking identifiers in selectors. No email body or attachment bytes go to DNS. SPF and unsupported alignment remain unknown.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Phishing & impersonation") { ForEach(identityFindings) { finding($0) } }
             Section("Links & redirects") {
@@ -98,7 +107,7 @@ struct SecurityInspectorView: View {
                 Text("Each lookup requires your confirmation. URL lookups share the complete URL, including private query tokens. File lookups share only SHA-256 hashes, which may identify private files. VirusTotal receives your IP and API key. No attachment bytes or email bodies are uploaded. Only existing reports are retrieved; no scan is submitted. The key stays in memory while this sheet is open; report summaries stay in memory for this app session.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("Storage & LiveContainer") {
-                finding(LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch")))
+                ForEach(storageChecks) { finding($0) }
                 if let keychain { finding(keychain) }
                 Button("Check Keychain compatibility") { keychain = LocalMailProtection.keychainProbe() }
                 Text("LiveContainer supplies the host sandbox and entitlements. No custom Keychain group or Secure Enclave entitlement is requested. Successful checks cannot prove isolation from the host or other guest code. Device lock, relaunch, file-picker access and Quick Look require testing on your signed host.").font(.footnote).foregroundStyle(.secondary)
@@ -111,8 +120,14 @@ struct SecurityInspectorView: View {
             if let target = pendingLookup { Button("Send lookup") { pendingLookup = nil; Task { await lookup(target) } } }
             Button("Cancel", role: .cancel) { pendingLookup = nil }
         } message: { Text("VirusTotal receives this exact URL or hash, your IP and API key. URLs may contain private tokens. No file contents are sent.\n\n" + (pendingLookup?.sharedValue ?? "")) }
-        .task(id: attachments.map { "\($0.id):\($0.cachedRelativePath ?? ""):\($0.mimeType)" }) { await inspect() }
-        .onDisappear { apiKey = "" }
+        .confirmationDialog("Verify original message?", isPresented: $confirmAuthentication, titleVisibility: .visible) {
+            Button("Download and verify with DNS") { authenticationTask = Task { await verifyAuthentication() } }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Downloads the original message from your Gmail account and queries Google Public DNS for signing selectors/domains and the From domain. Google sees your IP; sender-controlled DNS may observe selector queries containing tracking identifiers. No body or attachment bytes go to DNS or VirusTotal. Checks use current DNS keys/policies, not historical delivery-time data.")
+        }
+        .task(id: MailSecurityContent.fingerprint(message, attachments: attachments)) { await inspect() }
+        .onDisappear { apiKey = ""; authenticationTask?.cancel(); authenticationTask = nil }
         .onChange(of: report, initial: true) { _, value in
             runtime.securityReports[message.id] = (MailSecurityContent.fingerprint(message, attachments: attachments), value)
         }
@@ -137,6 +152,11 @@ struct SecurityInspectorView: View {
         catch { reputations[target.sharedValue] = SecurityFinding(id: target.sharedValue, title: "VirusTotal reputation", verdict: .unknown, explanation: error.localizedDescription) }
     }
     private func inspect() async {
+        authenticationTask?.cancel(); verifiedAuthentication = nil
+        storageChecks = await Task.detached(priority: .utility) {
+            [LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch"), title: "Email and draft file protection"),
+             LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Mail/Attachments"), title: "Received attachment file protection")]
+        }.value
         headers = (try? runtime.repository?.securityHeaders(message.id)) ?? []
         history = (try? runtime.repository?.senderSecurityHistory(for: message)) ?? []
         inspections = [:]; inspectionErrors = [:]
@@ -158,6 +178,24 @@ struct SecurityInspectorView: View {
         if result.1 == 0 || result.2 > 0 {
             qrFinding = SecurityFinding(id: "embedded-qr", title: "Embedded QR codes", verdict: .unknown,
                 explanation: result.1 == 0 ? "No supported embedded data images found. Remote and CID images have not been fetched or inspected." : "\(result.2) embedded images could not be inspected. \(result.0.count) QR payloads decoded; coverage is incomplete.")
+        }
+    }
+    private func verifyAuthentication() async {
+        authenticationBusy = true; defer { authenticationBusy = false }
+        let accountID = message.accountID, remoteID = message.remoteID, sender = message.senderEmail
+        let fingerprint = MailSecurityContent.fingerprint(message, attachments: attachments)
+        do {
+            guard let gmail = runtime.gmail, let repository = runtime.repository,
+                  let account = try repository.account(id: accountID), account.providerRaw == MailProviderKind.gmail.rawValue else {
+                throw AuthenticationError.unavailable("Original-message verification requires a connected Gmail account.")
+            }
+            let raw = try await gmail.client(accountID).originalMessage(remoteID)
+            let findings = await MailAuthenticator().analyse(raw: raw, expectedSender: sender)
+            guard !Task.isCancelled, fingerprint == MailSecurityContent.fingerprint(message, attachments: attachments) else { return }
+            verifiedAuthentication = findings
+        } catch {
+            guard !Task.isCancelled else { return }
+            verifiedAuthentication = ["spf", "dkim", "dmarc"].map { SecurityFinding(id: $0, title: $0.uppercased(), verdict: .unknown, explanation: error.localizedDescription) }
         }
     }
 }

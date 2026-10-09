@@ -74,7 +74,9 @@ import SwiftData
         let filter = try XCTUnwrap(CIFilter(name: "CIQRCodeGenerator"))
         filter.setValue(Data(payload.utf8), forKey: "inputMessage")
         let image = try XCTUnwrap(filter.outputImage).transformed(by: CGAffineTransform(scaleX: 8, y: 8))
-        let cgImage = try XCTUnwrap(CIContext().createCGImage(image, from: image.extent))
+        let background = CIImage(color: CIColor.white).cropped(to: image.extent.insetBy(dx: -32, dy: -32))
+        let padded = image.composited(over: background)
+        let cgImage = try XCTUnwrap(CIContext().createCGImage(padded, from: padded.extent))
         let data = try XCTUnwrap(UIImage(cgImage: cgImage).pngData())
         let results = try QRCodeSecurity.payloads(data)
         XCTAssertTrue(results.contains(payload))
@@ -112,6 +114,8 @@ import SwiftData
         XCTAssertEqual(try VirusTotalReputation.parse(report(date: now.timeIntervalSince1970 - 86400 * 30, malicious: 0), now: now).verdict, .unknown)
         XCTAssertEqual(try VirusTotalReputation.parse(report(date: now.timeIntervalSince1970 - 30, malicious: 2), now: now).verdict, .concern)
         XCTAssertThrowsError(try VirusTotalReputation.parse(Data("{\"data\":{\"attributes\":{}}}".utf8), now: now))
+        let timeouts = Data("{\"data\":{\"attributes\":{\"last_analysis_date\":1800000000,\"last_analysis_stats\":{\"malicious\":0,\"suspicious\":0,\"timeout\":70}}}}".utf8)
+        XCTAssertThrowsError(try VirusTotalReputation.parse(timeouts, now: now))
     }
     func testProtectedPreviewIsCopyBlockedForMismatchAndCleaned() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -121,7 +125,16 @@ import SwiftData
         let preview = try await cache.securePreview(path, filename: "report.pdf", mimeType: "application/pdf")
         let original = try await cache.existing(path)
         XCTAssertNotEqual(preview, original)
+        #if targetEnvironment(simulator)
+        XCTAssertEqual(LocalMailProtection.finding(for: root).verdict, .unknown)
+        #else
         XCTAssertEqual(LocalMailProtection.finding(for: root).verdict, .checked)
+        #endif
+        let outside = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: root.appending(path: "escape"), withDestinationURL: outside)
+        XCTAssertEqual(LocalMailProtection.finding(for: root).verdict, .unknown)
         do { _ = try await cache.securePreview(path, filename: "photo.jpg", mimeType: "image/jpeg"); XCTFail("Previewed mismatch") }
         catch { XCTAssertTrue(error is AttachmentPreviewError) }
         AttachmentPreviewStore.remove(preview)

@@ -14,35 +14,54 @@ enum LocalMailProtection {
     }
     static func protect(_ file: URL) throws {
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: file.path)
+        #if !targetEnvironment(simulator)
+        // Directory attributes request inheritance; encryption guarantees apply to files.
+        guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { return }
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
         guard isComplete(attributes[.protectionKey]) else {
             throw CocoaError(.fileWriteNoPermission)
         }
+        #endif
     }
     private static func isComplete(_ value: Any?) -> Bool {
         (value as? FileProtectionType) == .complete || (value as? String) == FileProtectionType.complete.rawValue
     }
     static func protectTree(_ directory: URL) throws {
         try protectDirectory(directory)
+        for file in try entries(directory) { try protect(file) }
+    }
+    private static func entries(_ directory: URL) throws -> [URL] {
         let root = directory.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-        if let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isSymbolicLinkKey]) {
-            for case let file as URL in enumerator {
-                guard try file.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true,
-                      file.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) else { throw CocoaError(.fileWriteNoPermission) }
-                try protect(file)
+        var pending = [directory], result: [URL] = []
+        while let current = pending.popLast() {
+            for file in try FileManager.default.contentsOfDirectory(at: current, includingPropertiesForKeys: [.isSymbolicLinkKey, .isDirectoryKey]) {
+                let values = try file.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
+                guard values.isSymbolicLink != true, file.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root) else { throw CocoaError(.fileReadNoPermission) }
+                result.append(file)
+                if values.isDirectory == true { pending.append(file) }
             }
         }
+        return result
     }
-    static func finding(for directory: URL) -> SecurityFinding {
+    static func finding(for directory: URL, title: String = "Local file protection") -> SecurityFinding {
+        #if targetEnvironment(simulator)
+        return SecurityFinding(id: directory.path, title: title, verdict: .unknown,
+            explanation: "The simulator does not expose device Data Protection guarantees. File workflows can be tested here, but encryption and lock behaviour require the signed LiveContainer device.")
+        #else
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
             guard isComplete(attributes[.protectionKey]) else { throw CocoaError(.fileReadNoPermission) }
-            return SecurityFinding(id: "storage", title: "Local file protection", verdict: .checked,
-                explanation: "Complete iOS Data Protection is set on the mail directory. Email database, sidecars and cached attachments are protected and excluded from backup. This checks file attributes, not LiveContainer isolation or hardware encryption; the host controls the sandbox.")
+            let files = try entries(directory)
+            for file in files {
+                guard isComplete(try FileManager.default.attributesOfItem(atPath: file.path)[.protectionKey]) else { throw CocoaError(.fileReadNoPermission) }
+            }
+            return SecurityFinding(id: directory.path, title: title, verdict: .checked,
+                explanation: "Complete iOS Data Protection attributes confirmed on this directory and \(files.count) existing entries at inspection time. This checks file attributes, not LiveContainer isolation or hardware encryption. The host controls the sandbox; future files and device lock behaviour require runtime testing.")
         } catch {
-            return SecurityFinding(id: "storage", title: "Local file protection", verdict: .unknown,
-                explanation: "File protection could not be confirmed in this runtime. LiveContainer host signing, shared sandbox and device lock behaviour require device testing.")
+            return SecurityFinding(id: directory.path, title: title, verdict: .unknown,
+                explanation: "Complete protection could not be confirmed for every existing entry. LiveContainer host signing, shared sandbox, file creation and device lock behaviour require device testing.")
         }
+        #endif
     }
     static func keychainProbe() -> SecurityFinding {
         let service = "dev.freddiephilpot.dispatch.security-probe.\(UUID())"
