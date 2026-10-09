@@ -3,7 +3,7 @@ import SwiftData
 
 struct OutboxView: View {
     @Environment(AppRuntime.self) private var runtime
-    @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" || $0.stateRaw == "scheduled" || $0.stateRaw == "sendFailed" }, sort: \OutgoingMessage.updatedAt, order: .reverse)
+    @Query(sort: \OutgoingMessage.updatedAt, order: .reverse)
     private var outgoing: [OutgoingMessage]
     @Query private var accounts: [MailAccount]
     @Query private var metadata: [StoreMetadata]
@@ -11,7 +11,7 @@ struct OutboxView: View {
     @State private var checking: Set<UUID> = []
     @State private var errors: [UUID: String] = [:]
     let accountID: UUID?
-    private var pending: [OutgoingMessage] { outgoing.filter { accountID == nil || $0.accountID == accountID } }
+    private var pending: [OutgoingMessage] { outgoing.filter { ["scheduled", "sendFailed", "sendUnconfirmed"].contains($0.stateRaw) && (accountID == nil || $0.accountID == accountID) } }
 
     var body: some View {
         List {

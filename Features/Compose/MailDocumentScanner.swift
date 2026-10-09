@@ -8,7 +8,7 @@ struct MailDocumentScanner: UIViewControllerRepresentable {
         let controller = VNDocumentCameraViewController(); controller.delegate = context.coordinator; return controller
     }
     func updateUIViewController(_ controller: VNDocumentCameraViewController, context: Context) {}
-    @MainActor final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+    @MainActor final class Coordinator: NSObject, @MainActor VNDocumentCameraViewControllerDelegate {
         let finish: (Result<Data, Error>) -> Void
         init(finish: @escaping (Result<Data, Error>) -> Void) { self.finish = finish }
         func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) { controller.dismiss(animated: true) }

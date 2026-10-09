@@ -13,7 +13,6 @@ struct InboxView: View {
     @Query private var metadata: [StoreMetadata]
     @Query private var outgoing: [OutgoingMessage]
     @Query private var operations: [PendingMailOperation]
-    @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" || $0.stateRaw == "scheduled" || $0.stateRaw == "sendFailed" }) private var uncertain: [OutgoingMessage]
     @AppStorage("selectedMailAccount") private var accountFilterRaw = ""
     @AppStorage("selectedMailbox") private var mailbox = "Inbox"
     private var accountFilter: UUID? { UUID(uuidString: accountFilterRaw) }
@@ -56,7 +55,7 @@ struct InboxView: View {
     private let mailboxes = MailboxScope.names
     private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
     private var waitingUntil: Date? { selectedAccounts.compactMap { runtime.gmail?.waitingUntil[$0.id] }.filter { $0 > Date() }.max() }
-    private var uncertainCount: Int { uncertain.filter { accountFilter == nil || $0.accountID == accountFilter }.count }
+    private var uncertainCount: Int { outgoing.filter { ["scheduled", "sendFailed", "sendUnconfirmed"].contains($0.stateRaw) && (accountFilter == nil || $0.accountID == accountFilter) }.count }
     private var inboxError: String? {
         if let error = session.storageError { return error }
         if !accounts.isEmpty && runtime.connectivity.isConnected == false {

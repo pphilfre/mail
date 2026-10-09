@@ -111,10 +111,6 @@ struct MessageActionsSheet: View {
                 .frame(maxWidth: .infinity, minHeight: 52)
         }.buttonStyle(.glass).accessibilityLabel(title)
     }
-    private func unavailable(_ title: String, _ symbol: String) -> some View {
-        HStack { Label(title, systemImage: symbol); Spacer(); Text("Coming soon").font(.caption) }.foregroundStyle(.secondary)
-            .accessibilityElement(children: .combine)
-    }
     private func folderPicker(move: Bool) -> some View {
         List {
             if move {
