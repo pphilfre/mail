@@ -78,7 +78,7 @@ actor VirusTotalReputation {
               let stats = report.data.attributes.last_analysis_stats,
               let malicious = stats["malicious"], let suspicious = stats["suspicious"],
               malicious >= 0, suspicious >= 0, stats.values.allSatisfy({ $0 >= 0 && $0 <= 1_000_000 }), stats.count <= 32,
-              stats.values.reduce(0, +) > 0 else { throw ReputationError.invalidResponse }
+              ["harmless", "undetected", "malicious", "suspicious"].reduce(0, { $0 + (stats[$1] ?? 0) }) > 0 else { throw ReputationError.invalidResponse }
         let timestamp = report.data.attributes.last_analysis_date
         let date = timestamp.map { Date(timeIntervalSince1970: $0) }
         let fresh = date.map { now.timeIntervalSince($0) >= 0 && now.timeIntervalSince($0) < 7 * 86400 } ?? false
