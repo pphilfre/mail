@@ -55,7 +55,7 @@ struct MailInsightsView: View {
     var body: some View {
         List {
             Section {
-                Text("Selected sentences from cached mail. Missing bodies use previews; this may omit context. Dates with an explicit year are shown for review.").font(.caption).foregroundStyle(.secondary)
+                Text("Selected sentences from cached mail. Missing bodies use previews; this may omit context. Explicit dates and today/tomorrow relative to the email’s received date are shown for review.").font(.caption).foregroundStyle(.secondary)
                 Button("Generate a thread summary", systemImage: "text.bubble") { writing = true }
             }
             ForEach(mails.suffix(30)) { mail in
@@ -83,7 +83,7 @@ struct MailInsightsView: View {
                 for mail in snapshot {
                     if Task.isCancelled { break }
                     summaries[mail.id] = LocalMailAnalysis.summary(mail.text, subject: mail.subject)
-                    dates[mail.id] = LocalMailAnalysis.dates(mail.text); categories[mail.id] = LocalMailAnalysis.category(mail)
+                    dates[mail.id] = LocalMailAnalysis.dates(mail.text, referenceDate: mail.receivedAt); categories[mail.id] = LocalMailAnalysis.category(mail)
                 }
                 return (summaries, dates, categories)
             }

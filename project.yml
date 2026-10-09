@@ -90,25 +90,11 @@ targets:
 schemes:
   Dispatch:
     build:
-      packages:
-  MLXLM:
-    url: https://github.com/ml-explore/mlx-swift-lm
-    exactVersion: 2.29.1
-  MLX:
-    url: https://github.com/ml-explore/mlx-swift
-    exactVersion: 0.29.1
-targets:
+      targets:
         Dispatch: all
     test:
       debugEnabled: false
-      packages:
-  MLXLM:
-    url: https://github.com/ml-explore/mlx-swift-lm
-    exactVersion: 2.29.1
-  MLX:
-    url: https://github.com/ml-explore/mlx-swift
-    exactVersion: 0.29.1
-targets:
+      targets:
         - DispatchTests
         - DispatchUITests
       gatherCoverageData: true

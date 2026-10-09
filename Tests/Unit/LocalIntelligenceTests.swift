@@ -57,6 +57,16 @@ final class LocalIntelligenceTests: XCTestCase {
         XCTAssertEqual(malformed, [])
     }
 
+    func testRelativeDeadlineUsesMessageDateRatherThanTodaysClock() {
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let received = calendar.date(from: DateComponents(year: 2024, month: 2, day: 28, hour: 14))!
+        let dates = LocalMailAnalysis.dates("Please submit tomorrow.", referenceDate: received, calendar: calendar)
+        XCTAssertEqual(dates.count, 1)
+        XCTAssertEqual(calendar.component(.day, from: dates[0].date), 29)
+        XCTAssertEqual(calendar.component(.year, from: dates[0].date), 2024)
+        XCTAssertTrue(dates[0].isDeadline)
+    }
+
     func testIncomingSharesNeverTreatOAuthOrExecutableSchemesAsDrafts() {
         XCTAssertNil(IncomingMailShare.parse(URL(string: "com.googleusercontent.apps.example:/oauth?code=abc")!))
         XCTAssertNil(IncomingMailShare.parse(URL(string: "javascript:alert(1)")!))

@@ -102,7 +102,7 @@ enum LocalMailAnalysis {
 
     /// NSDataDetector's relative dates are wall-clock dependent. Keep only explicit year-bearing dates;
     /// relative/ambiguous phrases remain in the source summary for the person to interpret.
-    static func dates(_ text: String) -> [ExtractedMailDate] {
+    static func dates(_ text: String, referenceDate: Date? = nil, calendar: Calendar = .current) -> [ExtractedMailDate] {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return [] }
         let bounded = String(text.prefix(12_000)); let ns = bounded as NSString
         let lines = sentences(bounded)
@@ -117,6 +117,20 @@ enum LocalMailAnalysis {
             let value = ExtractedMailDate(phrase: phrase, date: date, context: String(context.prefix(600)), isDeadline: deadline)
             if !found.contains(where: { $0.id == value.id }) { found.append(value) }
             if found.count == 12 { break }
+        }
+        if let referenceDate {
+            // Relative dates belong to the email's received date, never the current wall clock.
+            let relative = try? NSRegularExpression(pattern: #"\b(today|tomorrow)\b"#, options: .caseInsensitive)
+            for match in relative?.matches(in: bounded, range: NSRange(location: 0, length: ns.length)) ?? [] {
+                let phrase = ns.substring(with: match.range)
+                let offset = phrase.lowercased() == "tomorrow" ? 1 : 0
+                guard let date = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: referenceDate)) else { continue }
+                let context = lines.first { $0.localizedCaseInsensitiveContains(phrase) } ?? phrase
+                let deadline = !Set(words(context)).intersection(Set(deadlineWords)).isEmpty
+                let label = phrase + " (" + date.formatted(date: .abbreviated, time: .omitted) + ")"
+                found.append(ExtractedMailDate(phrase: label, date: date, context: String(context.prefix(600)), isDeadline: deadline))
+                if found.count >= 12 { break }
+            }
         }
         return found
     }
