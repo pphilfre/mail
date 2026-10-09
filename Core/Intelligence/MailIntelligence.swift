@@ -14,11 +14,12 @@ struct IntelligenceMail: Sendable, Equatable, Identifiable {
     let starred: Bool
     let labels: [String]
 
-    @MainActor init(_ message: MailMessage) {
+    @MainActor init(_ message: MailMessage, includeBody: Bool = true) {
         id = message.id; accountID = message.accountID; threadID = message.remoteThreadID
         subject = message.subject; sender = message.sender.displayName
         // Only cached plain text; do not fetch bodies or parse HTML on the UI actor.
-        text = String((message.plainTextBody ?? message.snippet).prefix(12_000))
+        let body = includeBody ? message.cachedText.map { String(decoding: $0.prefix(48_000), as: UTF8.self) } : nil
+        text = String((body ?? message.snippet).prefix(12_000))
         receivedAt = message.receivedAt; unread = !message.isRead; starred = message.isStarred
         labels = message.folderIDs
     }

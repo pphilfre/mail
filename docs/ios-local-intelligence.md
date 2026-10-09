@@ -44,13 +44,16 @@ device. This lock protects the app UI, not the host from reading guest storage.
   structured query restrictions apply before ranking. It examines at most
   1,000 eligible cached messages, ranks at most 50 matches, debounces keystrokes
   and maintains a disposable 1,000-vector LRU. Text is bounded to 1,000 characters
-  per message; this is not full-body search over all remote mail.
+  per message, using subjects and cached previews to avoid faulting every external
+  body blob into memory; this is not full-body search over all remote mail.
 - Inbox links show automatic category suggestions and important unread catch-up.
   Categories combine provider category labels with NLTokenizer word hints. They
   are heuristics, not a trained classifier, and never move mail on the server.
   Catch-up considers the latest 300 cached incoming messages and at most 20
-  account-qualified threads. Importance uses stars, provider importance and
-  action words, so it may miss mail the user considers important.
+  account-qualified threads, summarising cached previews without loading bodies.
+  Importance uses stars, provider importance and
+  action words, so it may miss mail the user considers important. Open a thread
+  for its cached-body insights.
 - Reader Local insights selects original sentences from up to 30 cached messages
   in the thread, plus dates and possible deadlines. Missing bodies use previews.
   Summaries are extractive rather than generative by default. Dates require an

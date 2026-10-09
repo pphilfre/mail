@@ -145,7 +145,7 @@ struct GmailMessageView: View {
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }
+                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }.labelStyle(.iconOnly)
                 ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Share message")
                 if !message.isDraft {

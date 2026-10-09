@@ -105,13 +105,13 @@ struct LocalMailOverview: View {
     @State private var preparing = true
     private var snapshots: [IntelligenceMail] {
         messages.lazy.filter { !$0.isSpam && !$0.isTrash && !$0.isDraft && !$0.isSent && (accountID == nil || $0.accountID == accountID) }
-            .prefix(catchUp ? 300 : 1_000).map { IntelligenceMail($0) }
+            .prefix(catchUp ? 300 : 1_000).map { IntelligenceMail($0, includeBody: false) }
     }
     var body: some View {
         let snapshot = snapshots
         List {
             Section {
-                Text(catchUp ? "Important unread threads ranked by stars, provider importance and local action-word hints. Selected sentences use cached bodies or previews." : "Local suggestions based on provider labels and text hints. Provider folders are unchanged.").font(.caption).foregroundStyle(.secondary)
+                Text(catchUp ? "Important unread threads ranked by stars, provider importance and local action-word hints. Summaries use cached previews; open a thread for body insights." : "Local suggestions based on provider labels and preview text hints. Provider folders are unchanged.").font(.caption).foregroundStyle(.secondary)
                 if !catchUp {
                     Picker("Category", selection: $category) {
                         Text("All").tag(LocalMailCategory?.none)

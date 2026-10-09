@@ -29,7 +29,7 @@ struct LocalSearchView: View {
                 recipients: (message.to + message.cc + message.bcc).flatMap { [$0.displayName, $0.email] },
                 subject: message.subject, labels: labelNames + message.folderIDs, receivedAt: message.receivedAt,
                 isRead: message.isRead, isStarred: message.isStarred, hasAttachments: !filenames.isEmpty,
-                semanticText: String((message.plainTextBody ?? message.snippet).prefix(1_000)))
+                semanticText: String(message.snippet.prefix(1_000)))
         } + samples.map {
             MailSearchDocument(id: $0.id, accountID: nil, fields: [$0.sender, $0.address, $0.subject, $0.snippet],
                 sender: "\($0.sender) \($0.address)", subject: $0.subject, receivedAt: $0.date, isRead: $0.isRead)
