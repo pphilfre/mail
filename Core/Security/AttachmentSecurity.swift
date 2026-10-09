@@ -35,9 +35,9 @@ enum AttachmentSecurity {
         let active = activeExtensions.contains(ext) || ["application/x-dosexec", "application/x-executable", "application/x-mach-binary"].contains(detected ?? "")
         // ZIP signatures alone cannot identify OOXML contents. Keep these unknown, not mismatches.
         let zipContainer = detected == "application/zip" && ["docx", "xlsx", "pptx", "epub"].contains(ext)
-        let mismatch = !zipContainer && ((detected != nil && declared != "application/octet-stream" && detected != declared) ||
-            (detected != nil && expected != nil && detected != expected) ||
-            (expected != nil && declared != "application/octet-stream" && expected != declared))
+        let mismatch = (expected != nil && declared != "application/octet-stream" && expected != declared) ||
+            (!zipContainer && ((detected != nil && declared != "application/octet-stream" && detected != declared) ||
+            (detected != nil && expected != nil && detected != expected)))
         let isText = ext == "txt" && declared == "text/plain" && String(data: data, encoding: .utf8) != nil && !data.contains(0) && detected == nil
         let consistent = !zipContainer && (detected != nil || isText) && !mismatch && !active
         let type = SecurityFinding(id: "type", title: "Attachment type", verdict: mismatch || active ? .concern : (consistent ? .checked : .unknown),

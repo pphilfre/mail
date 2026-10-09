@@ -66,6 +66,7 @@ import SwiftData
         XCTAssertFalse(try AttachmentSecurity.inspect(Data("<script>evil()</script>".utf8), filename: "body.html", declaredMIME: "text/html").previewAllowed)
         let text = try AttachmentSecurity.inspect(Data("hello".utf8), filename: "notes.txt", declaredMIME: "text/plain")
         XCTAssertTrue(text.previewAllowed)
+        XCTAssertEqual(try AttachmentSecurity.inspect(Data([0x50, 0x4b, 0x03, 0x04]), filename: "report.docx", declaredMIME: "image/jpeg").type.verdict, .concern)
         XCTAssertEqual(text.hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
     }
     func testVisionDecodesQRWithoutOpeningDestination() throws {
@@ -95,6 +96,14 @@ import SwiftData
         let target = ReputationTarget.url("https://example.com/a?private=token")
         XCTAssertEqual(String(data: try XCTUnwrap(Base64URL.decode(String(target.path.dropFirst(5)))), encoding: .utf8), target.sharedValue)
         XCTAssertTrue(ReputationTarget.fileHash(String(repeating: "a", count: 64)).path.hasPrefix("files/"))
+        let request = try VirusTotalReputation.request(target, apiKey: "test-key")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertNil(request.httpBody)
+        XCTAssertEqual(request.url?.host, "www.virustotal.com")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-apikey"), "test-key")
+        XCTAssertThrowsError(try VirusTotalReputation.request(.url("file:///private/mail"), apiKey: "test-key"))
+        XCTAssertThrowsError(try VirusTotalReputation.request(.fileHash("../../private"), apiKey: "test-key"))
+        XCTAssertThrowsError(try VirusTotalReputation.request(target, apiKey: ""))
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         func report(date: Double, malicious: Int) -> Data {
             Data("{\"data\":{\"attributes\":{\"last_analysis_date\":\(date),\"last_analysis_stats\":{\"malicious\":\(malicious),\"suspicious\":0,\"undetected\":70}}}}".utf8)

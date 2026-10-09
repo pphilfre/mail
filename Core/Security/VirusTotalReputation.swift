@@ -39,6 +39,16 @@ actor VirusTotalReputation {
         session = URLSession(configuration: configuration, delegate: NoReputationRedirects(), delegateQueue: nil)
     }
     func lookup(_ target: ReputationTarget, apiKey: String) async throws -> SecurityFinding {
+        let request = try Self.request(target, apiKey: apiKey)
+        let now = Date()
+        if let lastRequest, now.timeIntervalSince(lastRequest) < 15 { throw ReputationError.wait }
+        lastRequest = now
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse else { throw ReputationError.invalidResponse }
+        guard response.statusCode == 200 else { throw ReputationError.http(response.statusCode) }
+        return try Self.parse(data, now: now)
+    }
+    nonisolated static func request(_ target: ReputationTarget, apiKey: String) throws -> URLRequest {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, !key.contains(where: { $0.isNewline }) else { throw ReputationError.missingKey }
         switch target {
@@ -48,16 +58,10 @@ actor VirusTotalReputation {
         case .fileHash(let value):
             guard value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { throw ReputationError.invalidTarget }
         }
-        let now = Date()
-        if let lastRequest, now.timeIntervalSince(lastRequest) < 15 { throw ReputationError.wait }
-        lastRequest = now
         let url = URL(string: "https://www.virustotal.com/api/v3/" + target.path)!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"; request.setValue(key, forHTTPHeaderField: "x-apikey")
-        let (data, response) = try await session.data(for: request)
-        guard let response = response as? HTTPURLResponse else { throw ReputationError.invalidResponse }
-        guard response.statusCode == 200 else { throw ReputationError.http(response.statusCode) }
-        return try Self.parse(data, now: now)
+        return request
     }
     nonisolated static func parse(_ data: Data, now: Date) throws -> SecurityFinding {
         struct Report: Decodable {
@@ -73,7 +77,7 @@ actor VirusTotalReputation {
         guard let report = try? JSONDecoder().decode(Report.self, from: data),
               let stats = report.data.attributes.last_analysis_stats,
               let malicious = stats["malicious"], let suspicious = stats["suspicious"],
-              malicious >= 0, suspicious >= 0, stats.values.allSatisfy({ $0 >= 0 }),
+              malicious >= 0, suspicious >= 0, stats.values.allSatisfy({ $0 >= 0 && $0 <= 1_000_000 }), stats.count <= 32,
               stats.values.reduce(0, +) > 0 else { throw ReputationError.invalidResponse }
         let timestamp = report.data.attributes.last_analysis_date
         let date = timestamp.map { Date(timeIntervalSince1970: $0) }
