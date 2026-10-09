@@ -93,16 +93,22 @@ enum LocalMailAnalysis {
         guard limit > 0 else { return [] }
         let lines = sentences(text)
         let hints = Set(words(subject))
-        let ranked = lines.enumerated().map { offset, line in
+        var ranked: [(offset: Int, score: Int)] = []
+        for (offset, line) in lines.enumerated() {
             let tokens = Set(words(line))
             let action = !tokens.intersection(["please", "due", "deadline", "confirm", "review", "reply"]).isEmpty
-            return (offset, hints.intersection(tokens).count * 2 + (action ? 3 : 0) + (offset == 0 ? 1 : 0))
-        }.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1 }
-        return ranked.prefix(limit).map(\.0).sorted().map { String(lines[$0].prefix(600)) }
+            var score = hints.intersection(tokens).count * 2
+            if action { score += 3 }
+            if offset == 0 { score += 1 }
+            ranked.append((offset: offset, score: score))
+        }
+        ranked.sort { $0.score == $1.score ? $0.offset < $1.offset : $0.score > $1.score }
+        let offsets: [Int] = ranked.prefix(limit).map { $0.offset }.sorted()
+        return offsets.map { String(lines[$0].prefix(600)) }
     }
 
-    /// NSDataDetector's relative dates are wall-clock dependent. Keep only explicit year-bearing dates;
-    /// relative/ambiguous phrases remain in the source summary for the person to interpret.
+    /// NSDataDetector's relative dates are wall-clock dependent. Keep explicit year-bearing dates
+    /// and resolve today/tomorrow separately against the received date when supplied.
     static func dates(_ text: String, referenceDate: Date? = nil, calendar: Calendar = .current) -> [ExtractedMailDate] {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return [] }
         let bounded = String(text.prefix(12_000)); let ns = bounded as NSString
