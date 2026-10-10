@@ -71,6 +71,9 @@ enum QRCodeSecurity {
               width.doubleValue > 0, height.doubleValue > 0,
               width.doubleValue * height.doubleValue <= 20_000_000 else { throw AttachmentError.unavailable }
         let request = VNDetectBarcodesRequest()
+        #if targetEnvironment(simulator)
+        request.usesCPUOnly = true
+        #endif
         request.symbologies = [.qr]
         try VNImageRequestHandler(data: data, options: [:]).perform([request])
         return (request.results ?? []).compactMap(\.payloadStringValue)

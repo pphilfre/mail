@@ -102,7 +102,9 @@ enum DKIMVerifier {
         guard let regex = try? NSRegularExpression(pattern: pattern), regex.numberOfMatches(in: header.value, range: NSRange(header.value.startIndex..., in: header.value)) == 1 else { throw AuthenticationError.unavailable("Ambiguous DKIM signature value.") }
         let stripped = regex.stringByReplacingMatches(in: header.value, range: NSRange(header.value.startIndex..., in: header.value), withTemplate: "$1$2")
         let final = canonicalHeader(Header(name: header.name, value: stripped), mode: signature.headerMode)
-        canonical += String(final.dropLast(2))
+        // CRLF is a single Swift Character. Remove its two UTF-8 bytes, not two
+        // Characters (which would also remove the final byte of the b= tag).
+        canonical += String(decoding: final.utf8.dropLast(2), as: UTF8.self)
         guard let data = canonical.data(using: .isoLatin1) else { throw AuthenticationError.unavailable("Unsupported signed header bytes.") }
         return data
     }
