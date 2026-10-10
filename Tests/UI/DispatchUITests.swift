@@ -478,19 +478,23 @@ final class DispatchUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launch()
-        app.buttons["inboxFilterMenu"].tap(); app.buttons["inboxFilter-Unread"].tap()
-        XCTAssertTrue(app.staticTexts["A quieter inbox"].exists)
-        XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
+        app.buttons["inboxFilterMenu"].tap()
+        let unreadOption = app.buttons["inboxFilter-Unread"]
+        XCTAssertTrue(unreadOption.waitForExistence(timeout: 5)); unreadOption.tap()
+        XCTAssertTrue(app.navigationBars["Unread"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].waitForNonExistence(timeout: 5))
         app.staticTexts["A quieter inbox"].tap()
         XCTAssertTrue(app.staticTexts["Sample message"].waitForExistence(timeout: 5))
         let bodyText = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hi Freddie,")).firstMatch
         XCTAssertTrue(bodyText.waitForExistence(timeout: 15), "The sample message body must finish rendering before capture")
         attachScreenshot("Reader redesign", app: app)
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertFalse(app.staticTexts["A quieter inbox"].exists)
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForNonExistence(timeout: 5))
         app.buttons["inboxFilterMenu"].tap(); app.buttons["inboxFilter-All"].tap()
-        XCTAssertTrue(app.staticTexts["A quieter inbox"].exists)
-        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].exists)
+        XCTAssertTrue(app.navigationBars["Inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].waitForExistence(timeout: 5))
     }
 
     func testSavingDraftShowsConfirmationAndStillOpensSavedDraft() {
