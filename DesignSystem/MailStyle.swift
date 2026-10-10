@@ -5,6 +5,7 @@ enum MailStyle {
     static let success = Color(red: 0.16, green: 0.62, blue: 0.43)
     static let canvas = Color(uiColor: .systemGroupedBackground)
     static let paper = Color(uiColor: .secondarySystemGroupedBackground)
+    static let tile = Color(uiColor: .tertiarySystemFill)
     static let rowSpacing: CGFloat = 5
     static let contentPadding: CGFloat = 20
 
@@ -21,6 +22,7 @@ enum MailStyle {
         case "Sent": "paperplane"
         case "Drafts": "square.and.pencil"
         case "Archive": "archivebox"
+        case "Snoozed": "clock"
         case "Spam": "exclamationmark.shield"
         default: "trash"
         }
@@ -41,7 +43,7 @@ struct MailCloseButton: View {
         Button { feedback.select(); action() } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 14, weight: .semibold))
-                .frame(width: 44, height: 44)
+                .frame(width: 44, height: 44).contentShape(.circle)
         }
         .labelStyle(.iconOnly)
         .accessibilityLabel(title)

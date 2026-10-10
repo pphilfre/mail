@@ -21,12 +21,16 @@ struct ReceiptSource: Identifiable, Hashable, Sendable {
     let text: String?
     let html: String?
     let receivedAt: Date
-    var bodyText: String { String((text ?? html.map(MailMIME.readableHTML) ?? snippet).prefix(65_536)) }
+    var bodyText: String {
+        let plain = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rich = html.map(MailMIME.readableHTML) ?? ""
+        return String((plain.isEmpty ? (rich.isEmpty ? snippet : rich) : plain + "\n" + rich).prefix(65_536))
+    }
     @MainActor init(_ message: MailMessage) {
         id = message.id; accountID = message.accountID; remoteID = message.remoteID
         senderName = message.senderName; senderEmail = message.senderEmail; subject = message.subject
         snippet = message.snippet; text = message.plainTextBody
-        html = text == nil ? message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } : nil
+        html = message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }
         receivedAt = message.receivedAt
     }
 }
@@ -50,11 +54,14 @@ enum ReceiptDetector {
         let negative = #"\b(special offer|discount code|sale ends|abandoned cart|order cancel(?:led|ed)|payment (?:failed|declined)|unsubscribe confirmation)\b"#
         guard subject.range(of: negative, options: .regularExpression) == nil else { return nil }
         let body = source.bodyText
-        let positive = #"\b(receipt|invoice|order confirmation|purchase confirmation|payment (?:received|confirmation)|your order|thank you for your (?:order|purchase)|refund (?:confirmation|processed))\b"#
+        let positive = #"\b(receipt|invoice|order (?:confirmation|confirmed)|purchase confirmation|payment (?:received|confirmation|successful)|your order|thank(?:s| you) for your (?:order|purchase)|refund (?:confirmation|processed)|you paid|payment to)\b"#
         let subjectMatches = subject.range(of: positive, options: .regularExpression) != nil
         let bodyMatches = body.prefix(4000).lowercased().range(of: positive, options: .regularExpression) != nil
-        let money = amount(in: body) ?? amount(in: source.subject)
-        guard subjectMatches || (bodyMatches && money != nil) else { return nil }
+        let money = amount(in: source.text ?? "") ?? source.html.flatMap { amount(in: MailMIME.readableHTML($0)) }
+            ?? amount(in: body) ?? amount(in: source.subject)
+        let transaction = #"\b(order (?:number|id|#)|transaction (?:id|number)|paid on|payment method|billing address)\b"#
+        let hasTransaction = body.lowercased().range(of: transaction, options: .regularExpression) != nil
+        guard subjectMatches || (money != nil && (bodyMatches || hasTransaction)) else { return nil }
         let kind = subject.contains("refund") ? "Refund" : subject.contains("invoice") ? "Invoice" : "Receipt"
         return ReceiptSummary(id: source.id, accountID: source.accountID, remoteID: source.remoteID,
             merchant: merchant(source), kind: kind, money: money, subject: source.subject,

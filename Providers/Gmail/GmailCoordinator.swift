@@ -22,6 +22,7 @@ final class GmailCoordinator {
     @ObservationIgnored private var managers: [UUID: GmailAPI] = [:]
     @ObservationIgnored private var refreshAgain: Set<UUID> = []
     @ObservationIgnored private var mailboxRequests: [UUID: MailboxRequest] = [:]
+    @ObservationIgnored private var threadRefreshes: [String: Date] = [:]
     private struct MailboxRequest { let name: String; let label: String? }
     private static let uncertainDraftMarker = "remote-draft-create-unconfirmed"
     init(repository: MailRepository, vault: CredentialVault = CredentialVault(), transport: any MailHTTPTransport = URLSessionMailTransport(), attachmentCache: AttachmentCache = AttachmentCache(), draftAttachments: DraftAttachmentStore = DraftAttachmentStore(),
@@ -171,7 +172,9 @@ final class GmailCoordinator {
             self.error = error.localizedDescription
         }
     }
-    func loadThread(_ message: MailMessage) async throws {
+    func loadThread(_ message: MailMessage, force: Bool = false) async throws {
+        let cacheKey = message.accountID.uuidString + ":" + message.remoteThreadID
+        if !force, let date = threadRefreshes[cacheKey], Date().timeIntervalSince(date) < 30 { return }
         do {
             let api = try client(message.accountID)
             let thread = try await api.thread(message.remoteThreadID)
@@ -198,10 +201,16 @@ final class GmailCoordinator {
                     try repository.context.save()
                 }
             }
+            if threadRefreshes.count >= 256 { threadRefreshes.removeAll(keepingCapacity: true) }
+            threadRefreshes[cacheKey] = Date()
         } catch { throw error }
     }
     func action(_ kind: String, message: MailMessage) {
         action(kind, messages: [message])
+    }
+    func originalMessage(_ message: MailMessage) async throws -> Data {
+        let api = try client(message.accountID)
+        return try await api.originalMessage(message.remoteID)
     }
     func action(_ kind: String, messages: [MailMessage]) {
         do {
@@ -286,6 +295,8 @@ final class GmailCoordinator {
                         try await api.modify(operation.targetRemoteID, add: [String(operation.kindRaw.dropFirst(9))])
                     } else if operation.kindRaw.hasPrefix("labelRemove:") {
                         try await api.modify(operation.targetRemoteID, remove: [String(operation.kindRaw.dropFirst(12))])
+                    } else if operation.kindRaw.hasPrefix("move:") {
+                        try await api.modify(operation.targetRemoteID, add: [String(operation.kindRaw.dropFirst(5))], remove: ["INBOX"])
                     } else { throw GmailError.invalidResponse }
                 }
                 repository.context.delete(operation); try repository.context.save()

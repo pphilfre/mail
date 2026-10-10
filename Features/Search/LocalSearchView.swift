@@ -28,7 +28,8 @@ struct LocalSearchView: View {
                 sender: "\(message.sender.displayName) \(message.senderEmail)",
                 recipients: (message.to + message.cc + message.bcc).flatMap { [$0.displayName, $0.email] },
                 subject: message.subject, labels: labelNames + message.folderIDs, receivedAt: message.receivedAt,
-                isRead: message.isRead, isStarred: message.isStarred, hasAttachments: !filenames.isEmpty)
+                isRead: message.isRead, isStarred: message.isStarred, hasAttachments: !filenames.isEmpty,
+                semanticText: String(message.snippet.prefix(1_000)))
         } + samples.map {
             MailSearchDocument(id: $0.id, accountID: nil, fields: [$0.sender, $0.address, $0.subject, $0.snippet],
                 sender: "\($0.sender) \($0.address)", subject: $0.subject, receivedAt: $0.date, isRead: $0.isRead)
@@ -40,7 +41,7 @@ struct LocalSearchView: View {
         SearchResultsView(index: index, indexing: indexing,
                           mailByID: Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) }),
                           accounts: accounts, samplesByID: Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) }),
-                          initialAccountID: initialAccountID)
+                          initialAccountID: initialAccountID, documents: snapshot)
             .task(id: snapshot) {
                 indexing = true
                 let work = Task.detached(priority: .userInitiated) { MailSearchIndex(documents: snapshot) }
@@ -57,6 +58,14 @@ struct LocalSearchView: View {
 }
 
 private struct SearchResultsView: View {
+    private struct SemanticRequest: Equatable {
+        let query: String
+        let accountID: UUID?
+        let includeTrashAndSpam: Bool
+        let filters: MailSearchFilters
+        let documents: [MailSearchDocument]
+        let enabled: Bool
+    }
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.dismiss) private var dismiss
     let index: MailSearchIndex
@@ -64,6 +73,11 @@ private struct SearchResultsView: View {
     let mailByID: [UUID: MailMessage]
     let accounts: [MailAccount]
     let samplesByID: [UUID: SampleMessage]
+    let documents: [MailSearchDocument]
+    @State private var semanticEngine = MailSemanticSearch()
+    @State private var semanticIDs: [UUID]?
+    @State private var completedRequest: SemanticRequest?
+    @AppStorage("semanticMailSearch") private var meaning = false
     @State private var query = ""
     @State private var searchPresented = true
     @State private var accountID: UUID?
@@ -82,17 +96,30 @@ private struct SearchResultsView: View {
     private var recent: [String] { (try? JSONDecoder().decode([String].self, from: Data(recentRaw.utf8))) ?? [] }
 
     init(index: MailSearchIndex, indexing: Bool, mailByID: [UUID: MailMessage], accounts: [MailAccount],
-         samplesByID: [UUID: SampleMessage], initialAccountID: UUID?) {
+         samplesByID: [UUID: SampleMessage], initialAccountID: UUID?, documents: [MailSearchDocument]) {
         self.index = index; self.indexing = indexing; self.mailByID = mailByID
         self.accounts = accounts; self.samplesByID = samplesByID
         _accountID = State(initialValue: initialAccountID)
+        self.documents = documents
     }
 
     var body: some View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed = MailSearchQuery(query)
-        let ids = index.matches(query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters)
+        let request = SemanticRequest(query: query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam,
+                                      filters: filters, documents: documents, enabled: meaning)
+        let ready = completedRequest == request
+        let lexicalIDs = index.matches(query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters)
+        let ids = meaning && !ready ? [] : meaning ? semanticIDs ?? lexicalIDs : lexicalIDs
         List {
+            Picker("Search method", selection: $meaning) {
+                Text("Keywords").tag(false); Text("Meaning").tag(true)
+            }.pickerStyle(.segmented)
+            if meaning {
+                Text("Semantic search ranks up to 50 matches from the latest 1,000 cached emails in your scope. Uses Apple sentence embeddings when available for the query’s language.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if ready && semanticIDs == nil && !trimmed.isEmpty { Text("Sentence embeddings unavailable for this query; showing keyword matches.").font(.caption).foregroundStyle(.secondary) }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     filterChip("Unread", value: $filters.unread)
@@ -107,7 +134,7 @@ private struct SearchResultsView: View {
                     ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
                 }
             }
-            if indexing {
+            if indexing || (meaning && !ready) {
                 HStack { ProgressView(); Text("Preparing search…").foregroundStyle(.secondary) }
             } else if let error = parsed.error {
                 Label(error, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
@@ -180,6 +207,16 @@ private struct SearchResultsView: View {
         .accessibilityIdentifier("searchResultsList")
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: request) {
+            guard meaning else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+                let matches = try await semanticEngine.search(query, documents: documents, accountID: accountID,
+                    includeTrashAndSpam: includeTrashAndSpam, filters: filters)
+                try Task.checkCancellation()
+                semanticIDs = matches; completedRequest = request
+            } catch { }
+        }
         .searchable(text: $query, isPresented: $searchPresented,
                     placement: .navigationBarDrawer(displayMode: .always), prompt: "Search cached mail")
         .onSubmit(of: .search) { rememberQuery() }

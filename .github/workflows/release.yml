@@ -3,6 +3,13 @@ name: Release IPA
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'IPA version (vMAJOR.MINOR.PATCH). Manual builds are saved as artifacts.'
+        required: true
+        default: 'v0.7.0'
+        type: string
 
 permissions:
   contents: read
@@ -27,9 +34,19 @@ jobs:
         run: bash scripts/prepare-macos.sh
       - name: Build device app and package unsigned IPA
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
         run: bash scripts/package-ipa.sh "$RELEASE_TAG"
+      - name: Save IPA and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dispatch-IPA-${{ github.run_id }}
+          path: |
+            build/Dispatch-*.ipa
+            build/Dispatch-*.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
       - name: Publish release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}

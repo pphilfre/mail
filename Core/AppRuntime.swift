@@ -7,20 +7,32 @@ import SwiftData
 final class AppRuntime {
     let connectivity = NetworkConnectivity()
     let draftAttachments = DraftAttachmentStore()
+    let appLock = MailAppLock()
+    let localModel = LocalMailModel()
+    var sharedDraft: LocalDraft?
+    var shareError: String?
+    @ObservationIgnored private var pendingShares: [URL] = []
+    @ObservationIgnored private var importingShare = false
     var container: ModelContainer?
     var session: AppSession?
     var storageFailed = false
     var gmail: GmailCoordinator?
     @ObservationIgnored var repository: MailRepository?
+    #if DEBUG
+    private static var seededUITestPreferences = false
+    #endif
 
     init() {
         #if DEBUG
         // Seed the normal preferences domain so UI tests can change it after launch.
-        if let sampleInbox = ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_SAMPLE_INBOX"] {
+        if !Self.seededUITestPreferences, let sampleInbox = ProcessInfo.processInfo.environment["DISPATCH_UI_TEST_SAMPLE_INBOX"] {
+            Self.seededUITestPreferences = true
             UserDefaults.standard.set(sampleInbox == "YES", forKey: "showSampleInbox")
             UserDefaults.standard.set("Inbox", forKey: "selectedMailbox")
             UserDefaults.standard.set("", forKey: "selectedMailAccount")
             UserDefaults.standard.set(true, forKey: "conversationRows")
+            UserDefaults.standard.set(false, forKey: "compactInbox")
+            UserDefaults.standard.set(2, forKey: "previewLines")
             UserDefaults.standard.set("", forKey: "defaultSendingAccount")
             UserDefaults.standard.set("[]", forKey: "recentMailSearches")
         }
@@ -71,6 +83,33 @@ final class AppRuntime {
         } catch {
             // No destructive reset, in-memory replacement or network fetch on storage failure.
             container = nil; repository = nil; session = nil; gmail = nil; storageFailed = true
+        }
+    }
+    func receiveShare(_ url: URL) {
+        guard IncomingMailShare.parse(url) != nil, pendingShares.count < 20 else { return }
+        pendingShares.append(url)
+        Task { await importPendingShares() }
+    }
+
+    func importPendingShares() async {
+        guard appLock.unlocked, !importingShare, sharedDraft == nil, let session else { return }
+        importingShare = true
+        defer { importingShare = false }
+        while appLock.unlocked, !pendingShares.isEmpty {
+            let url = pendingShares.removeFirst()
+            guard let incoming = IncomingMailShare.parse(url) else { continue }
+            do {
+                var draft = LocalDraft()
+                switch incoming {
+                case .file(let source):
+                    draft.attachments = [try await draftAttachments.importFile(source, draftID: draft.id, existing: [])]
+                case .link(let link): draft.body = link.absoluteString
+                case .compose(let to, let subject, let body): draft.to = to; draft.subject = subject; draft.body = body
+                }
+                try session.save(draft)
+                if appLock.unlocked { sharedDraft = draft }
+                return
+            } catch { shareError = error.localizedDescription }
         }
     }
 }

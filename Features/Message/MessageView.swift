@@ -20,16 +20,22 @@ struct MessageView: View {
                     }
                     Divider()
                     MailBodyView(html: nil, text: message.body, remoteImages: false)
-                }.padding(20).background(MailStyle.paper, in: .rect(cornerRadius: 22))
+                }.padding(.vertical, 16)
                 Label("Sample message", systemImage: "info.circle")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             .padding(MailStyle.contentPadding)
             .frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
         }
-        .background(MailStyle.canvas)
+        .background(MailStyle.paper)
         .navigationTitle("Message")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                ShareLink(item: message.subject + "\n\n" + message.body) { Image(systemName: "square.and.arrow.up") }
+                    .accessibilityLabel("Share sample message")
+            }
+        }
         .onAppear { session.markSampleRead(message.id) }
     }
 }

@@ -19,17 +19,16 @@ struct AccountsView: View {
                     HStack(spacing: 14) {
                         SenderAvatar(email: account.email, name: account.displayName)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(account.displayName).font(.headline)
-                            Text(account.email).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
+                            Text(account.displayName).font(.subheadline.weight(.semibold))
+                            Text(account.email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                         }
                     }.padding(.vertical, 8)
                     HStack(spacing: 6) {
                         if let deadline = runtime.gmail?.waitingUntil[account.id], deadline > Date() {
                             GmailWaitStatus(deadline: deadline)
                         } else {
-                            Circle().fill(account.lastSyncError == nil ? MailStyle.success : .orange).frame(width: 6, height: 6)
-                            Text(account.lastSyncError == nil ? "Connected to Gmail" : "Connection needs attention")
-                                .font(.caption).foregroundStyle(.secondary)
+                            Label(account.lastSyncError == nil ? "Connected to Gmail" : "Connection needs attention", systemImage: account.lastSyncError == nil ? "checkmark.circle" : "exclamationmark.circle")
+                                .font(.caption).foregroundStyle(account.lastSyncError == nil ? MailStyle.success : .orange)
                         }
                         Spacer()
                         if runtime.gmail?.syncing.contains(account.id) == true { ProgressView() }
@@ -46,12 +45,12 @@ struct AccountsView: View {
                         }
                     }
                         .disabled(runtime.gmail?.syncing.contains(account.id) == true)
-                    NavigationLink("Nickname, colour and signature") { AccountPreferencesView(account: account) }
-                    NavigationLink("Queued mailbox changes") { PendingActionsView(accountID: account.id) }
+                    NavigationLink { AccountPreferencesView(account: account) } label: { Label("Nickname, colour and signature", systemImage: "slider.horizontal.3") }
+                    NavigationLink { PendingActionsView(accountID: account.id) } label: { Label("Queued mailbox changes", systemImage: "clock.arrow.circlepath") }
                     DisclosureGroup("Connection options") {
-                        Button("Reconnect Gmail") { Task { await runtime.gmail?.connect() } }
+                        Button("Reconnect Gmail", systemImage: "arrow.triangle.2.circlepath") { Task { await runtime.gmail?.connect() } }
                             .disabled(runtime.gmail?.connecting == true)
-                        Button("Remove account", role: .destructive) { removing = account }
+                        Button("Remove account", systemImage: "person.crop.circle.badge.minus", role: .destructive) { removing = account }
                             .disabled(runtime.gmail?.syncing.contains(account.id) == true || runtime.gmail?.writing.contains(account.id) == true)
                     }.font(.subheadline)
                 }
@@ -60,21 +59,33 @@ struct AccountsView: View {
                 Button { Task { await runtime.gmail?.connect() } } label: {
                     HStack {
                         if runtime.gmail?.connecting == true { ProgressView() }
-                        Label(runtime.gmail?.connecting == true ? "Connecting…" : "Connect Gmail", systemImage: "plus")
-                    }.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10)
+                        Image(systemName: "envelope.badge").font(.title3)
+                        Text(runtime.gmail?.connecting == true ? "Connecting…" : "Connect Gmail")
+                        Spacer()
+                        Image(systemName: "plus.circle.fill")
+                    }.font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(runtime.gmail == nil || runtime.gmail?.connecting == true)
                 .listRowBackground(Color.clear)
+                .accessibilityIdentifier("connectGmailButton")
                 if let error = runtime.gmail?.error { Text(error).foregroundStyle(.red) }
             } footer: {
-                Text("Google handles sign-in. Dispatch keeps credentials in Keychain and cached mail on this device. Zoho is planned for a later stage.")
+                Text("Google handles sign-in. Dispatch keeps credentials in Keychain and cached mail on this device.")
+            }
+            Section {
+                LabeledContent { Text("Awaiting provider setup").foregroundStyle(.secondary) } label: { Label("Zoho Mail", systemImage: "envelope") }
+                LabeledContent { Text("Coming soon").foregroundStyle(.secondary) } label: { Label("Outlook", systemImage: "envelope") }
+            } header: { Text("More providers") }
+              footer: {
+                Text("Zoho and Outlook account linking are not available yet.")
             }
         }
         .scrollContentBackground(.hidden)
         .background(MailStyle.canvas)
         .navigationTitle("Accounts")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
+        .font(.subheadline)
         .confirmationDialog("Remove this account and its cached mail and drafts?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
             Button("Remove account", role: .destructive) {
                 if let id = removing?.id { Task { await runtime.gmail?.removeAccount(id); try? session.reloadDrafts() } }

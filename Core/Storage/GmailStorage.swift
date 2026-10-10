@@ -81,6 +81,7 @@ extension MailRepository {
         default:
             if kind.hasPrefix("labelAdd:") { labels.insert(String(kind.dropFirst(9))) }
             if kind.hasPrefix("labelRemove:") { labels.remove(String(kind.dropFirst(12))) }
+            if kind.hasPrefix("move:") { labels.insert(String(kind.dropFirst(5))); labels.remove("INBOX") }
         }
         row.folderIDs = labels.sorted(); flags(row)
     }

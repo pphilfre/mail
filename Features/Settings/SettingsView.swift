@@ -60,6 +60,7 @@ struct SettingsView: View {
     @AppStorage("trailingSwipe") private var trailingSwipe = "archive"
     @AppStorage("fullSwipe") private var fullSwipe = false
     @AppStorage("previewLines") private var previewLines = 2
+    @AppStorage("compactInbox") private var compactInbox = false
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("conversationRows") private var conversationRows = true
     @AppStorage("hapticFeedback") private var haptics = true
@@ -83,9 +84,10 @@ struct SettingsView: View {
             Section {
                 Toggle("Load remote images", isOn: $remoteImages)
                 Toggle("Show company icons", isOn: $senderPictures)
+                Toggle("Compact inbox", isOn: $compactInbox).accessibilityIdentifier("compactInboxToggle")
                 Picker("Preview lines", selection: $previewLines) {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
-                }
+                }.accessibilityIdentifier("previewLinesPicker")
                 Toggle("Group conversations", isOn: $conversationRows)
             } header: { Text("Reading") } footer: {
                 Text("Remote images can reveal when you open mail. Company icons load from senders’ websites and do not verify their identity.")
@@ -106,7 +108,7 @@ struct SettingsView: View {
             Section("Swipe actions") {
                 Picker("Swipe right", selection: $leadingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
-                }
+                }.accessibilityIdentifier("leadingSwipePicker")
                 Picker("Swipe left", selection: $trailingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
                 }
@@ -125,6 +127,10 @@ struct SettingsView: View {
             } header: { Text("Feedback") } footer: {
                 Text("A little tap and a quick celebration when things are done. Animations follow your device’s Reduce Motion setting.")
             }
+            Section("Privacy & intelligence") {
+                NavigationLink("Privacy & intelligence") { MailIntegrationSettings() }
+                    .accessibilityIdentifier("privacyIntelligenceSettingsLink")
+            }
             Section("Sample mail") {
                 Toggle("Show sample inbox", isOn: $showSamples).accessibilityIdentifier("sampleInboxToggle")
             }
@@ -136,7 +142,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(MailStyle.canvas)
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: appearance) { _, _ in feedback.select() }
         .onChange(of: haptics) { _, enabled in if enabled { feedback.select() } }
         .onChange(of: confirmationAnimations) { _, enabled in

@@ -5,6 +5,14 @@ import Charts
 private enum SenderProfileTab: String, CaseIterable, Identifiable {
     case mail = "Mail", files = "Files", tasks = "Tasks", receipts = "Receipts"
     var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .mail: "envelope"
+        case .files: "paperclip"
+        case .tasks: "checklist"
+        case .receipts: "receipt"
+        }
+    }
 }
 
 struct SenderProfileView: View {
@@ -20,6 +28,8 @@ struct SenderProfileView: View {
     @State private var editingTask: MailTask?
     @State private var detected: [UUID: ReceiptSummary] = [:]
     @State private var scanning = true
+    @State private var showingDetails = false
+    @State private var composing = false
     init(email: String, name: String, initialAccountID: UUID?) {
         self.email = SenderInsights.normalise(email); self.name = name
         _accountID = State(initialValue: initialAccountID)
@@ -29,7 +39,7 @@ struct SenderProfileView: View {
     private var correspondence: [MailMessage] { incoming + outgoing }
     private var files: [MailAttachment] {
         let ids = Set(correspondence.map(\.id))
-        return attachments.filter { ids.contains($0.messageID) }.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
+        return attachments.filter { ids.contains($0.messageID) && $0.contentID == nil }.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
     }
     private var tasks: [MailTask] {
         SenderInsights.linkedTasks(metadata.filter { $0.key.hasPrefix("mail-task:") }.compactMap { try? MailTask.decode($0) }, received: correspondence)
@@ -56,61 +66,12 @@ struct SenderProfileView: View {
     var body: some View {
         let snapshot = sources
         List {
-            Section {
-                HStack(spacing: 12) {
-                    SenderAvatar(email: email, name: title)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title).font(.title2.bold())
-                        Text(email).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                }.padding(.vertical, 8)
-                Picker("Account", selection: $accountID) {
-                    Text("All accounts").tag(nil as UUID?)
-                    ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
-                }
-                Text("Counts and history cover mail saved on this device. Spam, trash and drafts are excluded.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("At a glance") {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 24) { statistics }
-                    VStack(alignment: .leading, spacing: 12) { statistics }
-                }.padding(.vertical, 6)
-                if let first = incoming.last?.receivedAt, let latest = incoming.first?.receivedAt {
-                    LabeledContent("First received", value: first.formatted(date: .abbreviated, time: .omitted))
-                    LabeledContent("Latest received", value: latest.formatted(date: .abbreviated, time: .omitted))
-                }
-                if !incoming.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Received · last 8 weeks").font(.subheadline.weight(.semibold))
-                        Chart(SenderInsights.activity(incoming)) { point in
-                            BarMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Messages", point.count))
-                                .foregroundStyle(MailStyle.accent)
-                                .accessibilityLabel("Week of \(point.week.formatted(date: .abbreviated, time: .omitted))")
-                                .accessibilityValue("\(point.count) messages")
-                        }.chartYAxis { AxisMarks(values: .automatic(desiredCount: 3)) }
-                            .frame(height: 130).accessibilityIdentifier("senderActivityChart")
-                    }.padding(.vertical, 8)
-                }
-            }
-            Section("Private notes") {
-                if profileRow != nil && profile == nil {
-                    Text(SenderProfileError.invalidData.localizedDescription).font(.caption).foregroundStyle(.secondary)
-                } else if let notes = profile?.notes, !notes.isEmpty {
-                    Text(notes).textSelection(.enabled)
-                } else { Text("Keep useful details about this sender here.").foregroundStyle(.secondary) }
-                Button("Edit nickname and notes", systemImage: "square.and.pencil") { editingProfile = true }
-                    .disabled(profileRow != nil && profile == nil)
-                    .accessibilityIdentifier("editSenderProfileButton")
-            }
-            Section {
-                Picker("Profile content", selection: $tab) {
-                    ForEach(SenderProfileTab.allCases) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).accessibilityIdentifier("senderContentPicker")
-            }
+            profileHeader
             content
+            senderDetails
         }
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
+        .buttonStyle(.borderless)
         .navigationTitle("Sender profile").navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $editingProfile) {
             let owners = Set((SenderInsights.received(messages, email: email, accountID: nil) +
@@ -118,6 +79,9 @@ struct SenderProfileView: View {
             NavigationStack {
                 SenderProfileEditor(profile: profile ?? SenderProfile(email: email, accountIDs: Array(owners)), ownerIDs: owners)
             }
+        }
+        .sheet(isPresented: $composing) {
+            NavigationStack { ComposeView(draft: LocalDraft(to: email, accountID: accountID)) }
         }
         .sheet(item: $editingTask) { task in NavigationStack { MailTaskEditor(task: task) } }
         .onChange(of: accounts.map(\.id)) { _, ids in
@@ -137,17 +101,98 @@ struct SenderProfileView: View {
             detected = values; scanning = false
         }
     }
-    @ViewBuilder private var statistics: some View {
-        statistic("Received", count: incoming.count)
-        statistic("Sent to them", count: outgoing.count)
-        statistic("Unread", count: incoming.filter { !$0.isRead }.count)
-        statistic("Files", count: files.count)
+    private var profileHeader: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                SenderAvatar(email: email, name: title, size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.headline).lineLimit(2)
+                    Text(email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                Spacer(minLength: 0)
+                Button { composing = true } label: {
+                    Image(systemName: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }.accessibilityLabel("Compose to sender")
+                    .accessibilityIdentifier("senderComposeButton")
+            }
+            HStack(spacing: 16) {
+                Text("\(incoming.count) received")
+                Text("\(outgoing.count) sent")
+                Label("\(incoming.filter { !$0.isRead }.count)", systemImage: "envelope.badge")
+            }.font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Menu {
+                    Picker("Account", selection: $accountID) {
+                        Text("All accounts").tag(nil as UUID?)
+                        ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
+                    }
+                } label: {
+                    Label(accounts.first { $0.id == accountID }?.displayName ?? "All accounts", systemImage: "person.crop.circle")
+                        .font(.caption).lineLimit(1).frame(minHeight: 44)
+                }
+                Spacer()
+                Button { editingProfile = true } label: {
+                    Image(systemName: "note.text").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }.accessibilityLabel("Edit nickname and notes")
+                    .disabled(profileRow != nil && profile == nil)
+                    .accessibilityIdentifier("editSenderProfileButton")
+            }
+            if let notes = profile?.notes, !notes.isEmpty {
+                Text(notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+            HStack(spacing: 4) {
+                ForEach(SenderProfileTab.allCases) { value in
+                    Button { tab = value } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: value.symbol).font(.system(size: 18, weight: .medium))
+                            Text(tabCount(value), format: .number).font(.caption.monospacedDigit())
+                    }.frame(maxWidth: .infinity, minHeight: 52).contentShape(.rect)
+                            .background(tab == value ? MailStyle.accent.opacity(0.12) : .clear, in: .rect(cornerRadius: 14))
+                    }.buttonStyle(.plain).foregroundStyle(tab == value ? MailStyle.accent : .secondary)
+                        .accessibilityLabel(value.rawValue).accessibilityValue("\(tabCount(value))")
+                        .accessibilityAddTraits(tab == value ? [.isSelected] : [])
+                        .accessibilityIdentifier("senderTab-\(value.rawValue)")
+                }
+            }
+            }.accessibilityElement(children: .contain)
+        }
     }
-    private func statistic(_ label: String, count: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(count, format: .number).font(.system(.title2, design: .rounded, weight: .bold)).monospacedDigit()
-            Text(label).font(.caption).foregroundStyle(.secondary)
-        }.accessibilityElement(children: .combine)
+    private var senderDetails: some View {
+        Section {
+            DisclosureGroup("Sender details", isExpanded: $showingDetails) {
+                if profileRow != nil && profile == nil {
+                    Text(SenderProfileError.invalidData.localizedDescription).font(.caption)
+                }
+                if let first = incoming.last?.receivedAt, let latest = incoming.first?.receivedAt {
+                    LabeledContent("First received", value: first.formatted(date: .abbreviated, time: .omitted))
+                    LabeledContent("Latest received", value: latest.formatted(date: .abbreviated, time: .omitted))
+                }
+                if showingDetails && !incoming.isEmpty {
+                    Chart(SenderInsights.activity(incoming)) { point in
+                        BarMark(x: .value("Week", point.week, unit: .weekOfYear), y: .value("Messages", point.count))
+                            .foregroundStyle(MailStyle.accent)
+                    }.frame(height: 100).accessibilityIdentifier("senderActivityChart")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Frequent subjects").font(.subheadline.weight(.semibold))
+                        ForEach(Array(SenderInsights.commonSubjects(incoming).prefix(3))) { subject in
+                            LabeledContent(subject.subject, value: "\(subject.count)")
+                        }
+                    }
+                }
+                Text("History covers mail saved on this device. Spam, trash and drafts are excluded.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let notes = profile?.notes, !notes.isEmpty { Text(notes).textSelection(.enabled) }
+            }
+        }
+    }
+    private func tabCount(_ value: SenderProfileTab) -> Int {
+        switch value {
+        case .mail: MailConversation.rows(correspondence, grouped: true).count
+        case .files: files.count
+        case .tasks: tasks.filter { !$0.isCompleted }.count
+        case .receipts: receipts.count
+        }
     }
     @ViewBuilder private var content: some View {
         switch tab {
@@ -160,13 +205,6 @@ struct SenderProfileView: View {
                     }
                 }
                 if correspondence.isEmpty { Text("No downloaded messages in this account.").foregroundStyle(.secondary) }
-            }
-            if !incoming.isEmpty {
-                Section("Frequent subjects") {
-                    ForEach(Array(SenderInsights.commonSubjects(incoming).prefix(3))) { subject in
-                        LabeledContent(subject.subject, value: "\(subject.count)")
-                    }
-                }
             }
         case .files:
             Section("Files exchanged") {

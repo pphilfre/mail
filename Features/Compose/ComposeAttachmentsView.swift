@@ -7,10 +7,10 @@ struct ComposeAttachmentsView: View {
     let draftID: UUID
     @Binding var attachments: [DraftAttachment]
     @Binding var importing: Bool
+    @Binding var choosingFiles: Bool
+    @Binding var photos: [PhotosPickerItem]
     let onError: (String) -> Void
     @Environment(AppRuntime.self) private var runtime
-    @State private var choosingFiles = false
-    @State private var photos: [PhotosPickerItem] = []
     @State private var previewURL: URL?
     private var remaining: Int { max(1, DraftAttachmentStore.maximumCount - attachments.count) }
     private var totalSize: String {
@@ -18,15 +18,7 @@ struct ComposeAttachmentsView: View {
     }
 
     var body: some View {
-        Section {
-            HStack {
-                Button("Files", systemImage: "paperclip") { choosingFiles = true }
-                    .accessibilityIdentifier("attachFileButton")
-                Spacer()
-                PhotosPicker(selection: $photos, maxSelectionCount: remaining, matching: .images, preferredItemEncoding: .current) {
-                    Label("Photos", systemImage: "photo")
-                }.accessibilityIdentifier("attachPhotoButton")
-            }.disabled(attachments.count >= DraftAttachmentStore.maximumCount || importing)
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(attachments) { file in
                 HStack {
                     Button {
@@ -51,8 +43,10 @@ struct ComposeAttachmentsView: View {
                 }.buttonStyle(.borderless)
             }
             if importing { ProgressView("Copying attachments…").accessibilityIdentifier("attachmentImportProgress") }
-        } header: { Text(attachments.isEmpty ? "Attachments" : "Attachments · \(totalSize)") }
-        footer: { Text("Up to 20 files and 20 MB total. Attached files are saved with your draft.") }
+            if !attachments.isEmpty {
+                Text("Attachments · \(totalSize)").font(.caption).foregroundStyle(.secondary)
+            }
+        }
         .quickLookPreview($previewURL)
         .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
             switch result {
