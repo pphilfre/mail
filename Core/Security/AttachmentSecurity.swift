@@ -2,6 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 import Vision
 import ImageIO
+import CoreML
 
 struct AttachmentInspection: Sendable {
     let hash: String
@@ -70,20 +71,49 @@ enum QRCodeSecurity {
               let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
               width.doubleValue > 0, height.doubleValue > 0,
               width.doubleValue * height.doubleValue <= 20_000_000 else { throw AttachmentError.unavailable }
-        let request = VNDetectBarcodesRequest()
-        #if targetEnvironment(simulator)
-        request.usesCPUOnly = true
-        request.revision = VNDetectBarcodesRequestRevision1
-        #endif
-        request.symbologies = [.qr]
-        try VNImageRequestHandler(data: data, options: [:]).perform([request])
-        return (request.results ?? []).compactMap(\.payloadStringValue)
+        var completed = false
+        var lastError: Error?
+        var seen = Set<Int>()
+        // Retry supported older Vision decoders when a runtime returns no payload.
+        // Every reported payload still comes from an actual Vision observation.
+        for revision in [VNDetectBarcodesRequest.defaultRevision, VNDetectBarcodesRequestRevision2, VNDetectBarcodesRequestRevision1]
+            where seen.insert(revision).inserted && VNDetectBarcodesRequest.supportedRevisions.contains(revision) {
+            let request = VNDetectBarcodesRequest()
+            request.revision = revision
+            request.symbologies = [.qr]
+            #if targetEnvironment(simulator)
+            request.usesCPUOnly = true
+            if let stages = try? request.supportedComputeStageDevices {
+                for (stage, devices) in stages {
+                    if let cpu = devices.first(where: { if case .cpu = $0 { return true }; return false }) {
+                        request.setComputeDevice(cpu, for: stage)
+                    }
+                }
+            }
+            #endif
+            do {
+                try VNImageRequestHandler(data: data, options: [:]).perform([request])
+                completed = true
+                let values = (request.results ?? []).compactMap(\.payloadStringValue)
+                if !values.isEmpty { return values }
+            } catch { lastError = error }
+        }
+        if !completed { throw lastError ?? AttachmentError.unavailable }
+        return []
     }
     static func finding(_ payloads: [String]) -> SecurityFinding {
         let observations = MailSecurityObservations(html: "", text: payloads.joined(separator: "\n"))
         let concerns = observations.links.flatMap(\.concerns)
         return SecurityFinding(id: "qr", title: "QR codes", verdict: concerns.isEmpty ? .unknown : .concern,
             explanation: payloads.isEmpty ? "Vision found no QR payload in the inspected image. This does not exclude small, rotated, obscured or other-frame QR codes." : "Vision decoded \(payloads.count) QR payload(s). QR codes can hide phishing destinations; decoded links have not been opened or verified. " + concerns.joined(separator: "; "), points: concerns.isEmpty ? 0 : 15)
+    }
+    static func embeddedFinding(_ payloads: [String], imageCount: Int, failures: Int) -> SecurityFinding {
+        let observed = finding(payloads)
+        let coverage = imageCount == 0 ? "No supported embedded data images found. Remote and CID images have not been fetched or inspected." :
+            failures > 0 ? "\(failures) embedded images could not be inspected; coverage is incomplete." :
+            "Inspected \(imageCount) supported embedded data images. Remote and CID images remain uninspected."
+        return SecurityFinding(id: "embedded-qr", title: "Embedded QR codes", verdict: observed.verdict,
+            explanation: observed.explanation + " " + coverage, points: observed.points)
     }
     static func embeddedImages(_ html: String) -> [Data] {
         MailSecurityObservations.matches(#"(?i)\bsrc\s*=\s*["']data:image/(?:png|jpeg|gif|webp);base64,([^"']+)["']"#, in: html, group: 1)

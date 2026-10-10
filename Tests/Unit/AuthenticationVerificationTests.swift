@@ -87,6 +87,10 @@ import CryptoKit
         XCTAssertEqual(results.map(\.verdict), [.unknown, .checked, .checked])
         let mismatch = await MailAuthenticator(resolver: resolver).analyse(raw: raw, expectedSender: "other@football.example.com")
         XCTAssertEqual(mismatch.map(\.verdict), [.unknown, .unknown, .unknown])
+        let tampered = Data((String(data: raw, encoding: .utf8) ?? "").replacingOccurrences(of: "We lost the game.", with: "We won the game.").utf8)
+        let failed = await MailAuthenticator(resolver: resolver).analyse(raw: tampered, expectedSender: "joe@football.example.com")
+        XCTAssertEqual(failed.map(\.verdict), [.unknown, .concern, .unknown])
+        XCTAssertEqual(SecurityReport(findings: failed).score, 20)
     }
 }
 

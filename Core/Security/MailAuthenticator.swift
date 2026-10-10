@@ -29,7 +29,7 @@ actor MailAuthenticator {
             }
             let dkim = SecurityFinding(id: "dkim", title: "DKIM", verdict: !passed.isEmpty ? .checked : (failed > 0 ? .concern : .unknown),
                 explanation: (!passed.isEmpty ? "Original Gmail message signature and complete body verified locally for: \(Array(Set(passed)).sorted().joined(separator: ", "))." : failed > 0 ? "\(failed) original message signature/body checks failed against the current DNS key. Transit modification or key rotation can cause failures." : "No supported DKIM signature could be verified.") +
-                    " DNS keys came from Google Public DNS over HTTPS; DNSSEC is not independently validated. This authenticates a signing domain, not a person or message safety. " + unavailable.joined(separator: " "), points: passed.isEmpty && failed > 0 ? 20 : 0)
+                    " Only selected signed headers and the body are authenticated; unsigned headers may change. DNS keys came from Google Public DNS over HTTPS; DNSSEC is not independently validated. This authenticates a signing domain, not a person or message safety. " + unavailable.joined(separator: " "), points: passed.isEmpty && failed > 0 ? 20 : 0)
             let dmarc: SecurityFinding
             if passed.contains(fromDomain) {
                 do {
@@ -40,7 +40,12 @@ actor MailAuthenticator {
                 dmarc = SecurityFinding(id: "dmarc", title: "DMARC", verdict: .unknown,
                     explanation: "No cryptographically verified DKIM domain exactly matches the original From domain. SPF is unknown. Relaxed organisational-domain alignment and parent-domain/PSD policy discovery are not implemented; a DMARC failure cannot be inferred.")
             }
-            return [spf, dkim, dmarc]
+            var findings = [spf, dkim, dmarc]
+            if !passed.isEmpty && failed > 0 {
+                findings.append(SecurityFinding(id: "dkim-failures", title: "Other DKIM signatures", verdict: .concern,
+                    explanation: "\(failed) other full-body signature/body checks failed against current DNS keys. Another signing domain verified, but these failures remain evidence of modification or key rotation.", points: 20))
+            }
+            return findings
         } catch {
             return [spf] + ["dkim", "dmarc"].map { SecurityFinding(id: $0, title: $0.uppercased(), verdict: .unknown, explanation: error.localizedDescription) }
         }

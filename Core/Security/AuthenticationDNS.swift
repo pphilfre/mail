@@ -18,6 +18,7 @@ actor AuthenticationDNS: AuthenticationTXTResolver {
         configuration.timeoutIntervalForRequest = 15; configuration.timeoutIntervalForResource = 20
         session = URLSession(configuration: configuration, delegate: AuthenticationNoRedirects(), delegateQueue: nil)
     }
+    deinit { session.invalidateAndCancel() }
     func records(_ name: String) async throws -> [String] {
         guard DKIMVerifier.validDNSName(name, allowUnderscore: true) else { throw AuthenticationError.unavailable("Invalid DNS query name.") }
         var components = URLComponents(string: "https://dns.google/resolve")!
@@ -34,7 +35,9 @@ actor AuthenticationDNS: AuthenticationTXTResolver {
         let reply = try JSONDecoder().decode(Response.self, from: data)
         if reply.Status == 3 { return [] }
         guard reply.Status == 0, reply.TC != true else { throw AuthenticationError.unavailable("DNS query failed or was truncated. Authentication remains unknown.") }
-        return try (reply.Answer ?? []).filter { $0.type == 16 }.prefix(16).map { try Self.txt($0.data) }
+        let answers = reply.Answer ?? []
+        guard answers.count <= 32 else { throw AuthenticationError.unavailable("Too many DNS answers; authentication coverage is incomplete.") }
+        return try answers.filter { $0.type == 16 }.map { try Self.txt($0.data) }
     }
     nonisolated static func txt(_ value: String) throws -> String {
         // DNS presentation format: concatenate quoted TXT chunks, including decimal escapes.

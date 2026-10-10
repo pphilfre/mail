@@ -4,7 +4,7 @@
 <dict>
     <key>NSPrivacyTracking</key><false/>
     <key>NSPrivacyTrackingDomains</key><array/>
-    <!-- Optional, explicitly confirmed VirusTotal lookups only. No message/file bytes. -->
+    <!-- Optional, confirmed reputation/DNS authentication lookups. No message/file bytes. -->
     <key>NSPrivacyCollectedDataTypes</key>
     <array>
         <dict>

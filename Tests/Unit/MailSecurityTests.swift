@@ -76,7 +76,7 @@ import SwiftData
         let image = try XCTUnwrap(filter.outputImage).transformed(by: CGAffineTransform(scaleX: 8, y: 8))
         let background = CIImage(color: CIColor.white).cropped(to: image.extent.insetBy(dx: -32, dy: -32))
         let padded = image.composited(over: background)
-        let cgImage = try XCTUnwrap(CIContext().createCGImage(padded, from: padded.extent))
+        let cgImage = try XCTUnwrap(CIContext(options: [.useSoftwareRenderer: true]).createCGImage(padded, from: padded.extent))
         let data = try XCTUnwrap(UIImage(cgImage: cgImage).pngData())
         let results = try QRCodeSecurity.payloads(data)
         XCTAssertTrue(results.contains(payload))
@@ -116,6 +116,15 @@ import SwiftData
         XCTAssertThrowsError(try VirusTotalReputation.parse(Data("{\"data\":{\"attributes\":{}}}".utf8), now: now))
         let timeouts = Data("{\"data\":{\"attributes\":{\"last_analysis_date\":1800000000,\"last_analysis_stats\":{\"malicious\":0,\"suspicious\":0,\"timeout\":70}}}}".utf8)
         XCTAssertThrowsError(try VirusTotalReputation.parse(timeouts, now: now))
+    }
+    func testPartialEmbeddedQRScanRetainsObservedConcerns() {
+        let partial = QRCodeSecurity.embeddedFinding(["http://example.com/login"], imageCount: 2, failures: 1)
+        XCTAssertEqual(partial.verdict, .concern)
+        XCTAssertEqual(partial.points, 15)
+        XCTAssertTrue(partial.explanation.contains("coverage is incomplete"))
+        XCTAssertEqual(SecurityReport(findings: [partial]).score, 15)
+        XCTAssertEqual(QRCodeSecurity.embeddedFinding(["https://example.com"], imageCount: 2, failures: 1).verdict, .unknown)
+        XCTAssertEqual(QRCodeSecurity.embeddedFinding([], imageCount: 0, failures: 0).verdict, .unknown)
     }
     func testProtectedPreviewIsCopyBlockedForMismatchAndCleaned() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

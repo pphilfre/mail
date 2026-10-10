@@ -5,16 +5,20 @@ import Security
 /// access-group names, Secure Enclave availability or normal installation are assumed.
 enum LocalMailProtection {
     static func protectDirectory(_ directory: URL) throws {
+        #if targetEnvironment(simulator)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        #else
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.complete])
+        #endif
         try protect(directory)
         var directory = directory
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try directory.setResourceValues(values)
     }
     static func protect(_ file: URL) throws {
-        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: file.path)
         #if !targetEnvironment(simulator)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: file.path)
         // Directory attributes request inheritance; encryption guarantees apply to files.
         guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { return }
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
