@@ -35,6 +35,8 @@ struct ComposeView: View {
     @State private var showingScanner = false
     @State private var showingSchedule = false
     @State private var scheduledDate = Date().addingTimeInterval(3600)
+    @State private var showingWriting = false
+    @State private var writingSource = ""
     private var sendingAccount: MailAccount? { accounts.first { $0.id == draft.accountID } }
     private var recipientErrors: Bool {
         [draft.to, draft.cc, draft.bcc].contains { !RecipientInput.invalid($0).isEmpty } ||
@@ -142,6 +144,9 @@ struct ComposeView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu("Composer options", systemImage: "ellipsis") {
+                    Section("Local assistance") {
+                        Button("Writing assistance", systemImage: "pencil.and.outline") { writingSource = draft.body; showingWriting = true }
+                    }
                     Section("Draft") {
                         Button("Save draft", systemImage: "square.and.pencil", action: save).disabled(draft.isEmpty || sendUnconfirmed)
                         Button("Save to Gmail", systemImage: "icloud.and.arrow.up") { perform(send: false) }
@@ -229,6 +234,14 @@ struct ComposeView: View {
     }
     var body: some View {
         composeChrome
+        .sheet(isPresented: $showingWriting) {
+            NavigationStack {
+                LocalWritingView(text: writingSource, tasks: [.polish, .shorten, .reply]) { suggestion in
+                    guard draft.body == writingSource else { saveError = "The draft changed while generating. Your current writing was kept."; return }
+                    draft.body = suggestion
+                }
+            }
+        }
         .interactiveDismissDisabled(!draft.isEmpty || importingAttachments)
         .onAppear {
             if editor == nil {

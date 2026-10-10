@@ -47,12 +47,12 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
 
 @MainActor extension AppRuntime {
     func deliverScheduledMail() async {
-        guard connectivity.isConnected == true, let repository, let gmail else { return }
+        guard appLock.unlocked, connectivity.isConnected == true, let repository, let gmail else { return }
         do {
             let due = try repository.scheduledDue()
             guard !due.isEmpty else { return }
             for row in due {
-                guard row.stateRaw == "scheduled", !deliveringScheduled.contains(row.id) else { continue }
+                guard appLock.unlocked, row.stateRaw == "scheduled", !deliveringScheduled.contains(row.id) else { continue }
                 deliveringScheduled.insert(row.id)
                 defer { deliveringScheduled.remove(row.id) }
                 let draft = try repository.localDraft(row)

@@ -15,6 +15,7 @@ struct MailSearchDocument: Equatable, Sendable {
     var isRead = true
     var isStarred = false
     var hasAttachments = false
+    var semanticText = ""
 }
 
 /// A disposable substring index over cached metadata. No schema migration or provider calls.
@@ -39,10 +40,10 @@ struct MailSearchIndex: Sendable {
     }
 
     /// Terms may match different fields. Preserve source order (newest mail first).
-    func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters()) -> [UUID] {
+    func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters(), ignoringTerms: Bool = false) -> [UUID] {
         let parsed = MailSearchQuery(query)
         guard parsed.error == nil, parsed.active || filters.active || accountID != nil else { return [] }
-        let terms = parsed.terms.map(Self.normalize)
+        let terms = ignoringTerms ? [] : parsed.terms.map(Self.normalize)
         let grams = Set(terms.flatMap { Self.trigrams($0) })
         var candidates: Set<Int>?
         // Intersect the shortest postings first, then verify real substrings to reject collisions.
@@ -55,19 +56,24 @@ struct MailSearchIndex: Sendable {
         let positions = candidates?.sorted() ?? Array(entries.indices)
         return positions.compactMap { position in
             let entry = entries[position]
-            guard accountID == nil || entry.document.accountID == accountID,
-                  includeTrashAndSpam || (!entry.document.isTrash && !entry.document.isSpam),
-                  !filters.unread || !entry.document.isRead,
-                  !filters.starred || entry.document.isStarred,
-                  !filters.attachments || entry.document.hasAttachments,
-                  filters.attachmentPresence == nil || filters.attachmentPresence == entry.document.hasAttachments,
-                  filters.sender.map { Self.normalize(entry.document.sender).contains(Self.normalize($0)) } ?? true,
-                  filters.after.map { entry.document.receivedAt >= $0 } ?? true,
-                  filters.before.map { entry.document.receivedAt < $0 } ?? true,
-                  parsed.clauses.allSatisfy({ Self.matches($0, document: entry.document) }),
+            guard Self.eligible(entry.document, query: parsed, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters),
                   terms.allSatisfy({ term in entry.fields.contains { $0.contains(term) } }) else { return nil }
             return entry.document.id
         }
+    }
+
+    static func eligible(_ document: MailSearchDocument, query: MailSearchQuery, accountID: UUID?,
+                         includeTrashAndSpam: Bool, filters: MailSearchFilters) -> Bool {
+        (accountID == nil || document.accountID == accountID)
+        && (includeTrashAndSpam || (!document.isTrash && !document.isSpam))
+        && (!filters.unread || !document.isRead)
+        && (!filters.starred || document.isStarred)
+        && (!filters.attachments || document.hasAttachments)
+        && (filters.attachmentPresence == nil || filters.attachmentPresence == document.hasAttachments)
+        && (filters.sender.map { normalize(document.sender).contains(normalize($0)) } ?? true)
+        && (filters.after.map { document.receivedAt >= $0 } ?? true)
+        && (filters.before.map { document.receivedAt < $0 } ?? true)
+        && query.clauses.allSatisfy { matches($0, document: document) }
     }
 
     private static func matches(_ clause: MailSearchQuery.Clause, document: MailSearchDocument) -> Bool {

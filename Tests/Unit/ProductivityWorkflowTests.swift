@@ -80,6 +80,11 @@ import SwiftData
         var advanced = MailSearchFilters(sender: "Alex", after: date, before: date.addingTimeInterval(1), attachmentPresence: true)
         XCTAssertEqual(index.matches("", filters: advanced), [row.id])
         advanced.attachmentPresence = false; XCTAssertTrue(index.matches("", filters: advanced).isEmpty)
+        XCTAssertFalse(MailSearchIndex.eligible(row, query: MailSearchQuery("budget"), accountID: account,
+                                               includeTrashAndSpam: false, filters: advanced))
+        XCTAssertTrue(index.matches("different", accountID: account, filters: advanced, ignoringTerms: true).isEmpty)
+        advanced.attachmentPresence = true
+        XCTAssertEqual(index.matches("different", accountID: account, filters: advanced, ignoringTerms: true), [row.id])
     }
     func testChangingSignatureReplacesOnlyOwnFooterAndDoesNotDuplicateItInSavedReplies() {
         let quote = "\n\nOn yesterday, Alex wrote:\n> Keep this original message"

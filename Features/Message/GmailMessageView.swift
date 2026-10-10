@@ -3,7 +3,7 @@ import SwiftData
 import Translation
 
 private enum ReaderPresentation: Identifiable {
-    case actions, move, contact, calendar, collection
+    case actions, move, contact, calendar, collection, insights
     case security(MailMessage), compose(LocalDraft), task(MailTask), receipt(ReceiptEditContext)
     case sender(SenderProfileRequest), pdf(MessageExport)
     var id: String {
@@ -13,6 +13,7 @@ private enum ReaderPresentation: Identifiable {
         case .contact: "contact"
         case .calendar: "calendar"
         case .collection: "collection"
+        case .insights: "insights"
         case .security(let row): "security-\(row.id)"
         case .compose(let draft): "compose-\(draft.id)"
         case .task(let task): "task-\(task.id)"
@@ -166,6 +167,8 @@ struct GmailMessageView: View {
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }
+                    .labelStyle(.iconOnly).accessibilityIdentifier("localInsightsButton")
                 ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
@@ -264,6 +267,7 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { readerPresentation = nil } } }
             }
         case .collection: NavigationStack { AddToCollectionView(message: message) }
+        case .insights: NavigationStack { MailInsightsView(mails: thread.suffix(30).map { IntelligenceMail($0) }) }
         case .contact: SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea()
         case .calendar: MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea()
         case .pdf(let file): MessageShareSheet(url: file.url)

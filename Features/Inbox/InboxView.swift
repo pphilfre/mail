@@ -280,6 +280,12 @@ struct InboxView: View {
                     }
                 }
             }
+            if !accounts.isEmpty && mailbox == "Inbox" && labelFilter == nil {
+                Section {
+                    NavigationLink { LocalMailOverview(accountID: accountFilter, catchUp: true) } label: { Label("Catch up", systemImage: "text.badge.star") }
+                    NavigationLink { LocalMailOverview(accountID: accountFilter, catchUp: false) } label: { Label("Local categories", systemImage: "tray.2") }
+                }
+            }
             if mailbox != "Drafts" && session.drafts.contains(where: { accountFilter == nil || $0.accountID == accountFilter }) {
                 Section {
                     NavigationLink {

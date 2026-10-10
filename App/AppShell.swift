@@ -14,6 +14,7 @@ struct AppShell: View {
     }
 
     var body: some View {
+        @Bindable var runtime = runtime
         Group {
             if accounts.isEmpty && !showSamples {
                 NavigationStack { WelcomeView() }
@@ -27,6 +28,12 @@ struct AppShell: View {
         .modifier(MailFeedbackOverlay())
         .environment(feedback)
         .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
+        .sheet(item: $runtime.sharedDraft, onDismiss: { Task { await runtime.importPendingShares() } }) { draft in
+            NavigationStack { ComposeView(draft: draft) }.environment(feedback)
+        }
+        .alert("Couldn’t import shared content", isPresented: Binding(get: { runtime.shareError != nil }, set: { if !$0 { runtime.shareError = nil } })) {
+            Button("OK") { runtime.shareError = nil }
+        } message: { Text(runtime.shareError ?? "") }
         .task {
             await Task.yield()
             MailWebViewPool.prepare()

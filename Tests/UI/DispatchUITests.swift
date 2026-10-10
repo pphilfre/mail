@@ -393,8 +393,13 @@ final class DispatchUITests: XCTestCase {
         app.buttons["mailboxDrawerButton"].tap()
         app.buttons["mailboxSettingsButton"].tap()
         XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
-        if !app.staticTexts["Swipe right"].isHittable { app.swipeUp() }
-        XCTAssertTrue(app.staticTexts["Swipe right"].exists)
+        let swipePicker = app.descendants(matching: .any)["leadingSwipePicker"].firstMatch
+        for _ in 0..<6 {
+            if swipePicker.exists && swipePicker.isHittable { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+        }
+        XCTAssertTrue(swipePicker.exists && swipePicker.isHittable)
     }
 
     func testMailboxSheetClosesAndProfileMenuOpensSettings() {
