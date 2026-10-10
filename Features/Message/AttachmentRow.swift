@@ -37,14 +37,23 @@ struct AttachmentRow: View {
         .buttonStyle(.borderless)
         .quickLookPreview($previewURL)
         .task(id: attachment.cachedRelativePath) {
-            fileURL = try? await runtime.gmail?.attachmentCache.existing(attachment.cachedRelativePath)
+            await preparePreview()
         }
+        .onDisappear { AttachmentPreviewStore.remove(fileURL); fileURL = nil; previewURL = nil }
     }
     private func download() async {
         guard !loading, let gmail = runtime.gmail else { return }
         loading = true; errorMessage = nil
         defer { loading = false }
-        do { fileURL = try await gmail.download(attachment); previewURL = fileURL }
+        do { _ = try await gmail.download(attachment); await preparePreview() }
         catch { if !Task.isCancelled { errorMessage = error.localizedDescription } }
+    }
+    private func preparePreview() async {
+        guard let cache = runtime.gmail?.attachmentCache, attachment.cachedRelativePath != nil else { return }
+        do {
+            let url = try await cache.securePreview(attachment.cachedRelativePath, filename: attachment.filename, mimeType: attachment.mimeType)
+            guard !Task.isCancelled else { AttachmentPreviewStore.remove(url); return }
+            AttachmentPreviewStore.remove(fileURL); fileURL = url; errorMessage = nil
+        } catch { fileURL = nil; errorMessage = error.localizedDescription }
     }
 }

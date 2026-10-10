@@ -2,51 +2,144 @@ name: iOS CI
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+    paths-ignore: ['docs/**', '**/*.md']
+  schedule:
+    - cron: '0 3 * * 1'
   workflow_dispatch:
     inputs:
       test_filter:
-        description: 'Optional XCTest selector, such as DispatchUITests/DispatchUITests/testSampleMessageOpens'
-        required: false
+        description: Optional XCTest selector for diagnosis (never used by releases)
         default: ''
         type: string
+      test_scope:
+        description: UI suite scope; all unit tests always run unless test_filter is set
+        default: full
+        type: choice
+        options: [full, smoke]
   workflow_call:
+    inputs:
+      test_scope:
+        default: full
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
   group: ios-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.workflow != 'Release IPA' }}
 
 jobs:
-  build-and-test:
-    runs-on: macos-26
-    timeout-minutes: 35
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+      shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v5
-      - name: Generate project with XcodeGen
-        run: bash scripts/prepare-macos.sh
-      - name: Build once and run unit and UI tests
+        with:
+          fetch-depth: 0
+      - name: Check CI partitioning and cache invalidation
+        run: python3 scripts/check-ci.py
+      - id: plan
         env:
-          DISPATCH_TEST_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_filter || '' }}
-        run: bash scripts/test-ios.sh
-      - name: Export simulator screenshots
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          REQUESTED_SCOPE: ${{ inputs.test_scope || 'full' }}
+          TEST_FILTER: ${{ github.event_name == 'workflow_dispatch' && inputs.test_filter || '' }}
+        run: |
+          scope="$REQUESTED_SCOPE"
+          if [[ "$EVENT" == pull_request ]]; then
+            scope=smoke
+            if git diff --name-only "$BASE...$HEAD" | grep -Eq '^(App/|Features/|DesignSystem/|Tests/UI/|Configuration/|project.yml|scripts/|\.github/)'; then scope=full; fi
+          fi
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          if [[ "$scope" == full && -z "$TEST_FILTER" ]]; then
+            echo 'shards=[0,1]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'shards=[0]' >> "$GITHUB_OUTPUT"
+          fi
+  compile:
+    needs: plan
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/xcode-setup
+        with:
+          variant: simulator
+          coverage: ${{ github.event_name == 'schedule' && 'YES' || 'NO' }}
+      - name: Compile app and test bundles once
+        env:
+          DISPATCH_COVERAGE: ${{ github.event_name == 'schedule' && 'YES' || 'NO' }}
+        run: bash scripts/build-tests.sh
+      - name: Share compiled tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-test-products
+          path: build/test-products.tar.gz
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+      - name: Preserve compilation logs and resolved dependencies
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-build-${{ github.run_id }}
+          path: |
+            build/*.log
+            Dispatch.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          retention-days: 7
+  test:
+    needs: [plan, compile]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select pinned Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+      - uses: actions/download-artifact@v4
+        with:
+          name: simulator-test-products
+          path: build
+      - name: Run unit tests and assigned UI tests without rebuilding
+        env:
+          DISPATCH_TEST_SCOPE: ${{ needs.plan.outputs.scope }}
+          DISPATCH_TEST_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_filter || '' }}
+        run: bash scripts/run-test-shard.sh '${{ matrix.shard }}'
+      - name: Export failure screenshots
+        if: failure()
         continue-on-error: true
         run: |
           if [[ -d build/Tests.xcresult ]]; then
             xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/screenshots
           fi
-      - name: Upload build logs and test results
+      - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-test-results-${{ github.run_id }}
+          name: ios-test-results-${{ github.run_id }}-${{ matrix.shard }}
           path: |
             build/*.log
+            build/test-selectors.txt
             build/Tests.xcresult
             build/screenshots/
-          retention-days: 14
+          retention-days: 7
           if-no-files-found: warn
+  build-and-test:
+    if: always()
+    needs: [plan, compile, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every validation stage
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+        run: test "$RESULTS" = 'success,success,success'

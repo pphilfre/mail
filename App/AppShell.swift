@@ -17,7 +17,7 @@ struct AppShell: View {
         @Bindable var runtime = runtime
         Group {
             if accounts.isEmpty && !showSamples {
-                WelcomeView()
+                NavigationStack { WelcomeView() }
             } else {
                 NavigationStack {
                     InboxView()
@@ -40,6 +40,13 @@ struct AppShell: View {
             if let record = undoRecord, record.expiresAt > Date() { showTriageConfirmation(record) }
             await runtime.gmail?.syncAll()
         }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await runtime.deliverScheduledMail()
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && runtime.gmail?.connecting != true { Task { await runtime.gmail?.syncAll() } }
         }
@@ -47,6 +54,10 @@ struct AppShell: View {
             if scenePhase == .active && runtime.gmail?.connecting != true {
                 Task { await runtime.gmail?.syncAll() }
             }
+        }
+        .onChange(of: runtime.scheduledSentSequence) { old, new in
+            guard scenePhase == .active, new > old else { return }
+            feedback.show(new - old == 1 ? "Message sent" : "\(new - old) messages sent", symbol: "paperplane.fill")
         }
         .onChange(of: runtime.gmail?.error) { _, error in
             if let error { feedback.show("Mail needs attention", detail: error, symbol: "exclamationmark", tone: .error) }
@@ -96,10 +107,8 @@ struct WelcomeView: View {
                 .ignoresSafeArea()
         }
         .task { withAnimation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.12)) { arrived = true } }
-        .sheet(isPresented: $showingTasks) {
-            NavigationStack { MailTasksView(accountID: nil).toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTasks = false } }
-            } }
+        .navigationDestination(isPresented: $showingTasks) {
+            MailTasksView(accountID: nil)
         }
     }
     private var welcomeContent: some View {

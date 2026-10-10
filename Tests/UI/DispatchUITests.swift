@@ -16,7 +16,7 @@ final class DispatchUITests: XCTestCase {
         attachScreenshot("Redesigned reader", app: app)
         app.buttons["securityInspector-latest"].tap()
         XCTAssertTrue(app.navigationBars["Security Inspector"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Not analysed"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["Incomplete analysis"].firstMatch.exists || app.staticTexts["Concerns found"].firstMatch.exists)
         XCTAssertFalse(app.staticTexts["Safe"].exists)
         attachScreenshot("Security Inspector unknown verdict", app: app)
         app.buttons["Close"].tap()
@@ -86,7 +86,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["composeButton"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["dockEmailsButton"].frame.height, app.buttons["composeButton"].frame.height, accuracy: 1)
         XCTAssertFalse(app.staticTexts["inboxResultCount"].exists)
-        app.buttons["profileMenuButton"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
         XCTAssertTrue(app.buttons["mailbox-Tasks"].waitForExistence(timeout: 5))
         XCTAssertGreaterThan(app.navigationBars["Mailboxes"].frame.minY, 150)
         XCTAssertTrue(app.buttons["mailbox-Subscriptions"].isHittable)
@@ -114,7 +114,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
         app.launchEnvironment["DISPATCH_UI_TEST_LIBRARY"] = "YES"
         app.launch()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-Attachments"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Attachments"].tap()
         let file = app.staticTexts["Project plans.pdf"].firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Inline logo.png"].exists)
@@ -133,7 +133,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
         app.launchEnvironment["DISPATCH_UI_TEST_LIBRARY"] = "YES"
         app.launch()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-People"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-People"].tap()
         let person = app.descendants(matching: .any)["senderProfile-reader-fixture@gmail.com"].firstMatch
         XCTAssertTrue(person.waitForExistence(timeout: 10)); person.tap()
         XCTAssertTrue(app.buttons["senderTab-Mail"].waitForExistence(timeout: 5))
@@ -183,7 +183,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["House move"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-Collections"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Collections"].tap()
         let collection = app.descendants(matching: .any)["collection-House move"].firstMatch
         XCTAssertTrue(collection.waitForExistence(timeout: 5)); collection.tap()
         app.segmentedControls["collectionContentPicker"].buttons["Files"].tap()
@@ -204,7 +204,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
         app.launchEnvironment["DISPATCH_UI_TEST_SUBSCRIPTIONS"] = "YES"
         app.launch()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-Subscriptions"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Subscriptions"].tap()
         let newsletter = app.descendants(matching: .any)["subscription-news@example.com"].firstMatch
         XCTAssertTrue(newsletter.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["1 unread · 1 message · 1 in 7 days"].exists)
@@ -229,7 +229,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
         app.launchEnvironment["DISPATCH_UI_TEST_SUBSCRIPTIONS"] = "YES"
         app.launch()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-Subscriptions"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Subscriptions"].tap()
         let archive = app.buttons["archiveSubscription-news@example.com"]
         XCTAssertTrue(archive.waitForExistence(timeout: 10)); archive.tap()
         let confirm = app.buttons["Archive 1 inbox message"]
@@ -260,7 +260,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Task saved"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-Tasks"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Tasks"].tap()
         let toggle = app.buttons["toggleTask-latest"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Check the delivery date"].exists)
@@ -280,7 +280,7 @@ final class DispatchUITests: XCTestCase {
         app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
         app.launchEnvironment["DISPATCH_UI_TEST_PRODUCTIVITY"] = "YES"
         app.launch()
-        app.buttons["profileMenuButton"].tap(); app.buttons["mailbox-Receipts"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Receipts"].tap()
         let receipt = app.descendants(matching: .any)["receipt-receipt-fixture"].firstMatch
         XCTAssertTrue(receipt.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["GBP 22.00"].exists)
@@ -352,6 +352,7 @@ final class DispatchUITests: XCTestCase {
         search.typeText("from:reader-fixture subject:layout")
         XCTAssertTrue(app.staticTexts["2 results"].waitForExistence(timeout: 5))
         app.buttons["Attachments"].tap()
+        app.buttons["With attachments"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["searchNoResults"].firstMatch.waitForExistence(timeout: 5))
     }
 
@@ -413,7 +414,7 @@ final class DispatchUITests: XCTestCase {
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["composeButton"].isHittable)
-        app.buttons["profileMenuButton"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
         app.buttons["mailboxSettingsButton"].tap()
         XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
         attachScreenshot("Settings redesign", app: app)
@@ -456,23 +457,49 @@ final class DispatchUITests: XCTestCase {
         attachScreenshot("All tasks", app: app)
     }
 
+    func testMailNavigationControlsAndTaskBackNavigation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        app.buttons["profileMenuButton"].tap()
+        XCTAssertTrue(app.staticTexts["No accounts connected"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["closeMailboxesButton"].exists)
+        app.buttons["Done"].tap()
+        app.buttons["mailboxDrawerButton"].tap(); app.buttons["mailbox-Unread"].tap()
+        XCTAssertTrue(app.buttons["inboxFilterMenu"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["inboxFilterMenu"].value as? String, "Unread")
+        XCTAssertTrue(app.navigationBars["Unread"].exists)
+        app.buttons["dockEmailsButton"].tap()
+        XCTAssertTrue(app.navigationBars["Inbox"].exists)
+        XCTAssertFalse(app.buttons["closeMailboxesButton"].exists)
+        app.buttons["dockTasksButton"].tap()
+        XCTAssertTrue(app.segmentedControls["taskStatusFilter"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Done"].exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["dockEmailsButton"].waitForExistence(timeout: 5))
+    }
+
     func testQuickUnreadFilterUpdatesAfterReadingAndCanReturnToAll() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launch()
-        app.buttons["inboxFilter-Unread"].tap()
-        XCTAssertTrue(app.staticTexts["A quieter inbox"].exists)
-        XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
+        app.buttons["inboxFilterMenu"].tap()
+        let unreadOption = app.buttons["inboxFilter-Unread"]
+        XCTAssertTrue(unreadOption.waitForExistence(timeout: 5)); unreadOption.tap()
+        XCTAssertTrue(app.navigationBars["Unread"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].waitForNonExistence(timeout: 5))
         app.staticTexts["A quieter inbox"].tap()
         XCTAssertTrue(app.staticTexts["Sample message"].waitForExistence(timeout: 5))
         let bodyText = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hi Freddie,")).firstMatch
         XCTAssertTrue(bodyText.waitForExistence(timeout: 15), "The sample message body must finish rendering before capture")
         attachScreenshot("Reader redesign", app: app)
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertFalse(app.staticTexts["A quieter inbox"].exists)
-        app.buttons["inboxFilter-All"].tap()
-        XCTAssertTrue(app.staticTexts["A quieter inbox"].exists)
-        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].exists)
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForNonExistence(timeout: 5))
+        app.buttons["inboxFilterMenu"].tap(); app.buttons["inboxFilter-All"].tap()
+        XCTAssertTrue(app.navigationBars["Inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].waitForExistence(timeout: 5))
     }
 
     func testSavingDraftShowsConfirmationAndStillOpensSavedDraft() {
@@ -484,6 +511,13 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(subject.waitForExistence(timeout: 5))
         let title = "Confirmed draft \(UUID().uuidString.prefix(8))"
         subject.tap(); subject.typeText(title)
+        // Hosted simulators can drop keyboard events during first-responder transitions.
+        // Verify the input before testing persistence, and complete only a missing suffix.
+        if let entered = subject.value as? String, entered != title, title.hasPrefix(entered) {
+            subject.tap()
+            subject.typeText(String(title.dropFirst(entered.count)))
+        }
+        XCTAssertEqual(subject.value as? String, title)
         app.buttons["saveDraftButton"].tap()
         XCTAssertTrue(app.staticTexts["Draft saved"].waitForExistence(timeout: 5))
         attachScreenshot("Draft confirmation", app: app)

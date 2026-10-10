@@ -12,6 +12,8 @@ extension MailRepository {
                 if let row = try message(accountID: accountID, remoteID: remoteID) {
                     let id = row.id
                     try context.delete(model: MailAttachment.self, where: #Predicate { $0.messageID == id })
+                    try setMetadata("security-headers:\(id)", value: nil)
+                    try setMetadata(MailUnsubscribe.key(row), value: nil)
                     context.delete(row)
                 }
             }
@@ -27,7 +29,13 @@ extension MailRepository {
                 row.snippet = MailMIME.readableHTML(dto.snippet ?? "")
                 row.to = MailMIME.addresses(payload?.header("To") ?? ""); row.cc = MailMIME.addresses(payload?.header("Cc") ?? "")
                 row.bcc = MailMIME.addresses(payload?.header("Bcc") ?? ""); row.replyTo = MailMIME.addresses(payload?.header("Reply-To") ?? "")
+                if let header = payload?.header("List-Unsubscribe") {
+                    let value = MailUnsubscribe(header: header, post: payload?.header("List-Unsubscribe-Post") ?? "",
+                        signature: payload?.header("DKIM-Signature") ?? "", authentication: payload?.header("Authentication-Results") ?? "")
+                    try setMetadata(MailUnsubscribe.key(row), value: String(decoding: try JSONEncoder().encode(value), as: UTF8.self))
+                } else { try setMetadata(MailUnsubscribe.key(row), value: nil) }
                 row.internetMessageID = payload?.header("Message-ID"); row.referencesHeader = payload?.header("References")
+                try saveSecurityHeaders(payload?.headers ?? [], messageID: row.id)
                 row.folderIDs = dto.labelIds ?? []
                 for operation in pending where operation.targetRemoteID == dto.id { Self.overlay(operation.kindRaw, on: row) }
                 Self.flags(row)
@@ -56,6 +64,8 @@ extension MailRepository {
                     if date >= thread.latestMessageAt { thread.subject = row.subject; thread.latestMessageAt = date }
                 } else { context.insert(MailThread(accountID: accountID, remoteID: dto.threadId, subject: row.subject, latestMessageAt: date)) }
             }
+            let ruleMessages = try dtos.compactMap { try message(accountID: accountID, remoteID: $0.id) }
+            try applyRules(to: ruleMessages)
             if let historyID, let account = try account(id: accountID) { account.historyID = historyID }
             try context.save()
         }

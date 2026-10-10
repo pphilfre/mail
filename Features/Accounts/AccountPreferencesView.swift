@@ -9,13 +9,11 @@ struct AccountPreferencesView: View {
     @State private var nickname: String
     @State private var colour: String
     @State private var saveError: String?
-    @State private var signature: String
     private let colours = [("Blue", "007AFF"), ("Purple", "AF52DE"), ("Green", "248A3D"), ("Orange", "C93400"), ("Pink", "D70069")]
     init(account: MailAccount) {
         self.account = account
         _nickname = State(initialValue: account.displayName)
         _colour = State(initialValue: account.colourHex)
-        _signature = State(initialValue: UserDefaults.standard.string(forKey: MailSignature.key(account.id)) ?? "")
     }
     var body: some View {
         Form {
@@ -28,9 +26,7 @@ struct AccountPreferencesView: View {
                     }
                 }
             }
-            Section {
-                TextEditor(text: $signature).frame(minHeight: 120).accessibilityLabel("Signature")
-            } header: { Text("Signature") } footer: { Text("Added to new messages and replies from this account. Saved drafts keep their existing text.") }
+            NavigationLink("Signatures") { MailTextLibraryView(kind: "Signatures", accountID: account.id) }
             if let saveError { Text(saveError).foregroundStyle(.red) }
         }
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
@@ -43,7 +39,6 @@ struct AccountPreferencesView: View {
                     account.colourHex = colour
                     do {
                         try context.save()
-                        UserDefaults.standard.set(signature, forKey: MailSignature.key(account.id))
                         feedback.show("Account updated", detail: "Just the way you like it")
                         dismiss()
                     }

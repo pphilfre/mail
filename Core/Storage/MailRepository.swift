@@ -32,7 +32,8 @@ final class MailRepository: DraftPersistence {
             let incomingIDs = Set(drafts.map(\.id))
             let byID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
             for row in existing where !incomingIDs.contains(row.id) {
-                try removeDraftMetadata(row.id); context.delete(row)
+                try removeDraftMetadata(row.id)
+                try setMetadata(ScheduledDelivery.key(row.id), value: nil); context.delete(row)
             }
             for draft in drafts {
                 if let row = byID[draft.id] {
@@ -94,6 +95,7 @@ final class MailRepository: DraftPersistence {
             try removeCollectionAccount(id)
             for row in try context.fetch(FetchDescriptor<OutgoingMessage>(predicate: #Predicate { $0.accountID == id })) {
                 try removeDraftMetadata(row.id)
+                try setMetadata(ScheduledDelivery.key(row.id), value: nil)
             }
             // Undo can span accounts; remove the whole record rather than retaining deleted identities.
             if let undo = try context.fetch(FetchDescriptor<StoreMetadata>(predicate: #Predicate { $0.key == "mail-triage-undo" })).first {
@@ -103,13 +105,21 @@ final class MailRepository: DraftPersistence {
                 where metadata.key.hasPrefix(GmailMailbox.pagePrefix(id)) || metadata.key.hasPrefix(DraftLinks.prefix(id)) ||
                     metadata.key.hasPrefix(MailTask.prefix(id)) || metadata.key.hasPrefix(ReceiptOverride.prefix(id)) ||
                     metadata.key.hasPrefix(SubscriptionRule.prefix(id)) ||
-                    metadata.key.hasPrefix("mail-organisation:\(id.uuidString):") { context.delete(metadata) }
+                    metadata.key.hasPrefix("mail-organisation:\(id.uuidString):") ||
+                    metadata.key.hasPrefix("mail-unsubscribe:\(id.uuidString):") ||
+                    metadata.key.hasPrefix("mail-rule-applied:\(id.uuidString):") { context.delete(metadata) }
+            for message in try context.fetch(FetchDescriptor<MailMessage>(predicate: #Predicate { $0.accountID == id })) {
+                try setMetadata("security-headers:\(message.id)", value: nil)
+            }
             try context.delete(model: MailAttachment.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: PendingMailOperation.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: OutgoingMessage.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: MailMessage.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: MailThread.self, where: #Predicate { $0.accountID == id })
             try context.delete(model: MailFolder.self, where: #Predicate { $0.accountID == id })
+            for saved in try context.fetch(FetchDescriptor<StoreMetadata>()) {
+                if let rule = MailOrganisationRule.decode(saved), rule.accountID == id { context.delete(saved) }
+            }
             try context.delete(model: MailAccount.self, where: #Predicate { $0.id == id })
             try context.save()
         }

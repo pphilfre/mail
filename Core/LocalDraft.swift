@@ -64,6 +64,7 @@ struct DraftStore: Sendable, DraftPersistence {
 
     func load() throws -> [LocalDraft] {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+        try LocalMailProtection.protect(fileURL)
         return try JSONDecoder().decode([LocalDraft].self, from: Data(contentsOf: fileURL))
     }
 

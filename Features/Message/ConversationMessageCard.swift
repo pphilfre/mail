@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ConversationMessageCard: View {
+    @Environment(AppRuntime.self) private var runtime
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(MailFeedback.self) private var feedback
     let message: MailMessage
@@ -27,6 +28,10 @@ struct ConversationMessageCard: View {
     }
     private var bodyText: String {
         message.plainTextBody ?? message.snippet
+    }
+    private var securityVerdict: SecurityVerdict {
+        guard let saved = runtime.securityReports[message.id], saved.fingerprint == MailSecurityContent.fingerprint(message, attachments: attachments) else { return .unknown }
+        return saved.report.verdict
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -59,9 +64,9 @@ struct ConversationMessageCard: View {
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityHint(expanded ? "Collapse message" : "Expand message")
             Button { feedback.select(); onSecurity() } label: {
-                Image(systemName: MailSecurityObservations.statusSymbol).font(.title3).frame(width: 44, height: 44).contentShape(.rect)
+                Image(systemName: securityVerdict.symbol).font(.title3).frame(width: 44, height: 44).contentShape(.rect)
             }.buttonStyle(.plain).foregroundStyle(.secondary)
-                .accessibilityLabel("Security Inspector, not analysed").accessibilityIdentifier("securityInspector-\(message.remoteID)")
+                .accessibilityLabel("Security Inspector, \(securityVerdict == .concern ? "concerns found" : "analysis incomplete")").accessibilityIdentifier("securityInspector-\(message.remoteID)")
           }
             if expanded {
                 MessageRecipientDetails(message: message, account: account)

@@ -1,4 +1,22 @@
-Dispatch v0.7.0 adds standalone tasks and makes the mail controls and reader faster to use.
+Dispatch v0.8.0 consolidates mail productivity, local intelligence and security improvements.
+
+- Native mail navigation, advanced search dropdowns and saved-search smart folders.
+- Device-local scheduled delivery with cancellation and Undo; organisation rules,
+  multiple signatures, templates/snippets, scanned PDF attachments and local file OCR.
+- Explicit List-Unsubscribe actions and original EML export.
+- App lock, incoming file sharing and optional on-device mail intelligence, with account
+  and search scope preserved. Model downloads remain optional.
+- Evidence-based attachment/QR inspection, original DKIM verification and aligned DMARC
+  checks with consent. Incomplete checks retain observed concerns and never imply safety.
+- Faster CI through shared simulator compilation, parallel UI shards, incremental build
+  caches and device compilation alongside full validation. Publication remains gated on
+  every release test, device build and checksum check.
+
+Scheduled delivery requires Dispatch to be open, unlocked and online. The unsigned IPA
+requires re-signing with a compatible sideloading tool; automated fixtures do not verify
+live Gmail delivery, push notifications or installation on a physical device.
+
+Included from v0.7.0: standalone tasks and faster mail controls and reader.
 
 - Create a task from a title without linking an email or connecting an account. Add status, priority, due date, notes, a list and checklist steps; search tasks and filter by list, progress or due date. Personal tasks survive account removal.
 - Use a single icon row for inbox search, All, Unread, Starred and selection. Sync status floats above the dock without increasing header height.

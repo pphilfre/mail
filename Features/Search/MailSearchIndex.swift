@@ -42,7 +42,7 @@ struct MailSearchIndex: Sendable {
     /// Terms may match different fields. Preserve source order (newest mail first).
     func matches(_ query: String, accountID: UUID? = nil, includeTrashAndSpam: Bool = false, filters: MailSearchFilters = MailSearchFilters(), ignoringTerms: Bool = false) -> [UUID] {
         let parsed = MailSearchQuery(query)
-        guard parsed.error == nil, parsed.active || filters.active else { return [] }
+        guard parsed.error == nil, parsed.active || filters.active || accountID != nil else { return [] }
         let terms = ignoringTerms ? [] : parsed.terms.map(Self.normalize)
         let grams = Set(terms.flatMap { Self.trigrams($0) })
         var candidates: Set<Int>?
@@ -69,6 +69,10 @@ struct MailSearchIndex: Sendable {
         && (!filters.unread || !document.isRead)
         && (!filters.starred || document.isStarred)
         && (!filters.attachments || document.hasAttachments)
+        && (filters.attachmentPresence == nil || filters.attachmentPresence == document.hasAttachments)
+        && (filters.sender.map { normalize(document.sender).contains(normalize($0)) } ?? true)
+        && (filters.after.map { document.receivedAt >= $0 } ?? true)
+        && (filters.before.map { document.receivedAt < $0 } ?? true)
         && query.clauses.allSatisfy { matches($0, document: document) }
     }
 

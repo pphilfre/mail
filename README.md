@@ -4,9 +4,9 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-The released v0.4.0 app passed its full macOS CI gate and device IPA build. The next release, v0.5.0, adds [email tasks and a receipt organiser](docs/mail-productivity.md) plus [compose and forward attachments](docs/composer-attachments.md), with all builds and tests running on GitHub Actions. See the [everyday feature wave](docs/feature-wave.md) and [signed device checklist](docs/oauth-setup.md).
+The consolidated v0.8.0 tree includes [productivity workflows](docs/productivity-workflows.md), [local intelligence and iOS integrations](docs/ios-local-intelligence.md), and [mail security checks](docs/security-and-livecontainer.md), alongside tasks, receipts, composer attachments and the compact native UI. See [release notes](docs/release-notes.md), [CI performance](docs/ci-performance.md) and the [signed device checklist](docs/oauth-setup.md).
 
-The v0.5.0 source is preserved at its release tag. A separate v0.6.0 development wave adds [sender profiles and an attachment library](docs/people-and-attachments.md), [project collections and a subscription centre](docs/collections-and-subscriptions.md). Its iOS build and tests are deferred while GitHub recovers; these features have not yet passed the macOS CI gate. Further proposals are in the [feature ideas](docs/feature-ideas.md).
+Earlier releases remain available at their tags. Sender profiles, attachment library, project collections and subscriptions are included. Further proposals are in the [feature ideas](docs/feature-ideas.md).
 
 Download the latest IPA from [Dispatch releases](https://github.com/pphilfre/mail/releases). The IPA requires re-signing with your sideloading tool.
 
@@ -16,7 +16,7 @@ The foundation includes Inbox, Accounts, Settings, a sample message reader, and 
 
 ## Windows workflow
 
-Edit `.swift` files and `project.yml` in your preferred editor. Commit and push to GitHub. Open **Actions → iOS CI** to see the simulator build and unit/UI test results. Download `ios-test-results-*` for logs and the Xcode result bundle. Never manually edit a generated `.xcodeproj`.
+Edit `.swift` files and `project.yml` in your preferred editor. Commit and push a pull request to GitHub. Open **Actions → iOS CI** to see the simulator build and unit/UI test results. Download `ios-test-results-*` for logs and the Xcode result bundle. Never manually edit a generated `.xcodeproj`. Main and releases run the full suite; core-only pull requests use all unit tests plus eight UI checks. Documentation-only changes skip CI, and weekly full runs collect coverage.
 
 ```powershell
 git add .
@@ -35,7 +35,7 @@ git tag v0.2.1
 git push origin v0.2.1
 ```
 
-The release workflow runs the full iOS CI suite for the tagged commit, then builds for a physical iOS device, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release. Tests must pass before the device build or publication can start. Tags must use `vMAJOR.MINOR.PATCH`. The historical `v0.1.0` tag predates the Dispatch rename.
+The release workflow runs the full iOS CI suite alongside the physical-device build, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release only after both succeed. The simulator app/test bundles compile once and run on two separate test runners. Package downloads and compatible incremental compiler outputs are cached. Tags must use `vMAJOR.MINOR.PATCH`. Manual runs save artifacts; enable their publish input to publish the validated commit as a release. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 

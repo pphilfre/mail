@@ -5,8 +5,12 @@ import SwiftData
 @MainActor
 @Observable
 final class AppRuntime {
+    var scheduledSentSequence = 0
+    @ObservationIgnored var deliveringScheduled = Set<UUID>()
     let connectivity = NetworkConnectivity()
     let draftAttachments = DraftAttachmentStore()
+    let reputation = VirusTotalReputation()
+    var securityReports: [UUID: (fingerprint: String, report: SecurityReport)] = [:]
     let appLock = MailAppLock()
     let localModel = LocalMailModel()
     var sharedDraft: LocalDraft?
@@ -47,6 +51,11 @@ final class AppRuntime {
             #else
             let readerFixture = false
             #endif
+            if !readerFixture {
+                try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Mail/Attachments"))
+                try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Dispatch/DraftAttachments"))
+                try AttachmentPreviewStore.cleanExpired()
+            }
             let container = try MailStorage.open(inMemory: readerFixture)
             let repository = MailRepository(context: container.mainContext)
             #if DEBUG
@@ -85,6 +94,7 @@ final class AppRuntime {
             container = nil; repository = nil; session = nil; gmail = nil; storageFailed = true
         }
     }
+
     func receiveShare(_ url: URL) {
         guard IncomingMailShare.parse(url) != nil, pendingShares.count < 20 else { return }
         pendingShares.append(url)
