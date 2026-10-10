@@ -506,6 +506,13 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(subject.waitForExistence(timeout: 5))
         let title = "Confirmed draft \(UUID().uuidString.prefix(8))"
         subject.tap(); subject.typeText(title)
+        // Hosted simulators can drop keyboard events during first-responder transitions.
+        // Verify the input before testing persistence, and complete only a missing suffix.
+        if let entered = subject.value as? String, entered != title, title.hasPrefix(entered) {
+            subject.tap()
+            subject.typeText(String(title.dropFirst(entered.count)))
+        }
+        XCTAssertEqual(subject.value as? String, title)
         app.buttons["saveDraftButton"].tap()
         XCTAssertTrue(app.staticTexts["Draft saved"].waitForExistence(timeout: 5))
         attachScreenshot("Draft confirmation", app: app)
