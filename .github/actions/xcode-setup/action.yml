@@ -27,6 +27,8 @@ runs:
       with:
         path: build/SourcePackages
         key: spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('project.yml', 'Configuration/Package.resolved') }}
+        restore-keys: |
+          spm-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Restore incremental build data
       uses: actions/cache@v4
       with:

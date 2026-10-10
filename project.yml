@@ -41,6 +41,7 @@ targets:
         excludes: ["**/*.md"]
       - path: Configuration
         buildPhase: resources
+        excludes: [Package.resolved]
     info:
       path: App/GeneratedInfo.plist
       properties:

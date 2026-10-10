@@ -34,6 +34,10 @@ and warm runs of the consolidated tree; do not present the estimated improvement
 - Cache package downloads separately from build products. Compiler caches are split
   by device/simulator, coverage, OS, architecture, runner image and Xcode build.
   Source hashes choose exact caches, with compatible prior builds as fallback.
+- Pin all nine resolved Swift packages in Configuration/Package.resolved, copy the
+  lock into the generated workspace and prohibit automatic version changes/package
+  updates in CI. Exclude the lock from app resources. Restored downloads remain inputs
+  to Xcode's locked resolution, never a substitute for it.
 - Restore input mtimes only when SHA-256 matches, including generated project inputs,
   so checkout timestamps do not invalidate every unchanged Swift compilation. Changed
   and deleted files remain visible to Xcode; its dependency graph still controls rebuilding.
@@ -60,8 +64,8 @@ outputs, so those stages cannot safely begin together.
 Record cold and warm run URLs, elapsed time, compilation time and each shard's duration
 after validation. Runner queues and simulator migration can dominate variance. Rebalance
 weights with consolidated-tree timings; consider three shards only if concurrency/cost
-permits. Check the generated transitive Package.resolved into Configuration after the
-first successful resolve for reproducible dependencies. Benchmark larger macOS runners
+permits. Update the dependency lock explicitly when changing package constraints.
+Benchmark larger macOS runners
 or a maintained self-hosted Mac before committing to their cost. Device login, sideloading,
 notifications and real Gmail delivery still need signed-device validation.
 

@@ -36,7 +36,7 @@ Included from v0.6.1:
 - Receipt detection recognises more transaction confirmations and uses HTML when plain text is empty or incomplete.
 - Fixed-width HTML emails fit the reader and resize with the available width. Email scripts remain disabled.
 
-Manual GitHub Actions builds run the full test suite before saving an IPA and checksum as downloadable artifacts. Tag builds also publish a release.
+Manual GitHub Actions builds run the full test suite alongside packaging. Publication is gated on both succeeding; artifacts from a failed run are not a validated release. Tag builds also publish a release, and manual builds can opt into publication.
 
 Included from v0.6.0: sender profiles, an attachment library, project collections and a subscription centre, alongside the v0.5.0 tasks, receipts and composer improvements.
 
@@ -64,6 +64,6 @@ Tasks and receipt corrections stay on this device. Task due dates do not schedul
 
 The release retains the v0.4.0 conversation inbox, bulk actions/Undo, search filters/saved searches, account signatures, recipient assistance, UI redesign and Gmail pacing fixes. Automated tests use fixtures and do not send personal mail.
 
-Tag builds now run the full iOS test suite before building and publishing the device IPA.
+Tag builds run the full iOS test suite and device build; publication requires both to pass.
 
 The IPA requires iOS 26 or later and is unsigned. Sign and install with your compatible sideloading tool and Apple account. Bundle identifier: dev.freddiephilpot.dispatch.
