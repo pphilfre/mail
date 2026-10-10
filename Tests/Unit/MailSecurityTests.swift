@@ -76,7 +76,7 @@ import SwiftData
         let image = try XCTUnwrap(filter.outputImage).transformed(by: CGAffineTransform(scaleX: 8, y: 8))
         let background = CIImage(color: CIColor.white).cropped(to: image.extent.insetBy(dx: -32, dy: -32))
         let padded = image.composited(over: background)
-        let cgImage = try XCTUnwrap(CIContext().createCGImage(padded, from: padded.extent))
+        let cgImage = try XCTUnwrap(CIContext(options: [.useSoftwareRenderer: true]).createCGImage(padded, from: padded.extent))
         let data = try XCTUnwrap(UIImage(cgImage: cgImage).pngData())
         let results = try QRCodeSecurity.payloads(data)
         XCTAssertTrue(results.contains(payload))

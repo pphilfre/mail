@@ -2,6 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 import Vision
 import ImageIO
+import CoreML
 
 struct AttachmentInspection: Sendable {
     let hash: String
@@ -70,13 +71,35 @@ enum QRCodeSecurity {
               let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
               width.doubleValue > 0, height.doubleValue > 0,
               width.doubleValue * height.doubleValue <= 20_000_000 else { throw AttachmentError.unavailable }
-        let request = VNDetectBarcodesRequest()
-        #if targetEnvironment(simulator)
-        request.usesCPUOnly = true
-        #endif
-        request.symbologies = [.qr]
-        try VNImageRequestHandler(data: data, options: [:]).perform([request])
-        return (request.results ?? []).compactMap(\.payloadStringValue)
+        var completed = false
+        var lastError: Error?
+        var seen = Set<Int>()
+        // Retry supported older Vision decoders when a runtime returns no payload.
+        // Every reported payload still comes from an actual Vision observation.
+        for revision in [VNDetectBarcodesRequest.defaultRevision, VNDetectBarcodesRequestRevision2, VNDetectBarcodesRequestRevision1]
+            where seen.insert(revision).inserted && VNDetectBarcodesRequest.supportedRevisions.contains(revision) {
+            let request = VNDetectBarcodesRequest()
+            request.revision = revision
+            request.symbologies = [.qr]
+            #if targetEnvironment(simulator)
+            request.usesCPUOnly = true
+            if let stages = try? request.supportedComputeStageDevices {
+                for (stage, devices) in stages {
+                    if let cpu = devices.first(where: { if case .cpu = $0 { return true }; return false }) {
+                        request.setComputeDevice(cpu, for: stage)
+                    }
+                }
+            }
+            #endif
+            do {
+                try VNImageRequestHandler(data: data, options: [:]).perform([request])
+                completed = true
+                let values = (request.results ?? []).compactMap(\.payloadStringValue)
+                if !values.isEmpty { return values }
+            } catch { lastError = error }
+        }
+        if !completed { throw lastError ?? AttachmentError.unavailable }
+        return []
     }
     static func finding(_ payloads: [String]) -> SecurityFinding {
         let observations = MailSecurityObservations(html: "", text: payloads.joined(separator: "\n"))
