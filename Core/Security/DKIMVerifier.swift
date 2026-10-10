@@ -44,8 +44,8 @@ enum DKIMVerifier {
         var output: [String: String] = [:]
         for part in value.replacingOccurrences(of: "\r\n", with: "").split(separator: ";") {
             guard let equals = part.firstIndex(of: "=") else { throw AuthenticationError.unavailable("Malformed authentication tag.") }
-            let key = part[..<equals].trimmingCharacters(in: .whitespaces).lowercased()
-            guard !key.isEmpty, output[key] == nil else { throw AuthenticationError.unavailable("Duplicate or invalid authentication tag.") }
+            let key = part[..<equals].trimmingCharacters(in: .whitespaces)
+            guard key.range(of: "^[A-Za-z][A-Za-z0-9_]*$", options: .regularExpression) != nil, output[key] == nil else { throw AuthenticationError.unavailable("Duplicate or invalid authentication tag.") }
             output[key] = part[part.index(after: equals)...].trimmingCharacters(in: .whitespaces)
         }
         return output
@@ -102,7 +102,9 @@ enum DKIMVerifier {
         guard let regex = try? NSRegularExpression(pattern: pattern), regex.numberOfMatches(in: header.value, range: NSRange(header.value.startIndex..., in: header.value)) == 1 else { throw AuthenticationError.unavailable("Ambiguous DKIM signature value.") }
         let stripped = regex.stringByReplacingMatches(in: header.value, range: NSRange(header.value.startIndex..., in: header.value), withTemplate: "$1$2")
         let final = canonicalHeader(Header(name: header.name, value: stripped), mode: signature.headerMode)
-        canonical += String(final.dropLast(2))
+        // CRLF is a single Swift Character. Remove its two UTF-8 bytes, not two
+        // Characters (which would also remove the final byte of the b= tag).
+        canonical += String(decoding: final.utf8.dropLast(2), as: UTF8.self)
         guard let data = canonical.data(using: .isoLatin1) else { throw AuthenticationError.unavailable("Unsupported signed header bytes.") }
         return data
     }

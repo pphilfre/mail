@@ -352,6 +352,7 @@ final class DispatchUITests: XCTestCase {
         search.typeText("from:reader-fixture subject:layout")
         XCTAssertTrue(app.staticTexts["2 results"].waitForExistence(timeout: 5))
         app.buttons["Attachments"].tap()
+        app.buttons["With attachments"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["searchNoResults"].firstMatch.waitForExistence(timeout: 5))
     }
 

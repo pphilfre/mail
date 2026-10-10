@@ -13,6 +13,7 @@ extension MailRepository {
                     let id = row.id
                     try context.delete(model: MailAttachment.self, where: #Predicate { $0.messageID == id })
                     try setMetadata("security-headers:\(id)", value: nil)
+                    try setMetadata(MailUnsubscribe.key(row), value: nil)
                     context.delete(row)
                 }
             }

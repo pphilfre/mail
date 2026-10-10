@@ -78,7 +78,7 @@ struct MailboxSheet: View {
                         }
                     }
                     DisclosureGroup("Custom inboxes and smart folders") {
-                        ForEach(SavedMailSearch.decode(savedRaw)) { search in
+                        ForEach(SavedMailSearch.decode(savedRaw).filter { search in search.accountID == nil || accounts.contains { $0.id == search.accountID } }) { search in
                             Button {
                                 feedback.select(); mailbox = "All Mail"; label = "smart:" + search.id.uuidString; dismiss()
                             } label: { mailboxRow(search.name, symbol: "line.3.horizontal.decrease.circle", selected: label == "smart:" + search.id.uuidString, count: 0) }

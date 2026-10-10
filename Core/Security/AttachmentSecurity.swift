@@ -73,6 +73,7 @@ enum QRCodeSecurity {
         let request = VNDetectBarcodesRequest()
         #if targetEnvironment(simulator)
         request.usesCPUOnly = true
+        request.revision = VNDetectBarcodesRequestRevision1
         #endif
         request.symbologies = [.qr]
         try VNImageRequestHandler(data: data, options: [:]).perform([request])
