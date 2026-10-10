@@ -174,11 +174,8 @@ struct SecurityInspectorView: View {
             return (values, images.count, failures)
         }.value
         guard !Task.isCancelled else { return }
-        embeddedQR = result.0; qrFinding = QRCodeSecurity.finding(result.0)
-        if result.1 == 0 || result.2 > 0 {
-            qrFinding = SecurityFinding(id: "embedded-qr", title: "Embedded QR codes", verdict: .unknown,
-                explanation: result.1 == 0 ? "No supported embedded data images found. Remote and CID images have not been fetched or inspected." : "\(result.2) embedded images could not be inspected. \(result.0.count) QR payloads decoded; coverage is incomplete.")
-        }
+        embeddedQR = result.0
+        qrFinding = QRCodeSecurity.embeddedFinding(result.0, imageCount: result.1, failures: result.2)
     }
     private func verifyAuthentication() async {
         authenticationBusy = true; defer { authenticationBusy = false }

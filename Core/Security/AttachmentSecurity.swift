@@ -107,6 +107,14 @@ enum QRCodeSecurity {
         return SecurityFinding(id: "qr", title: "QR codes", verdict: concerns.isEmpty ? .unknown : .concern,
             explanation: payloads.isEmpty ? "Vision found no QR payload in the inspected image. This does not exclude small, rotated, obscured or other-frame QR codes." : "Vision decoded \(payloads.count) QR payload(s). QR codes can hide phishing destinations; decoded links have not been opened or verified. " + concerns.joined(separator: "; "), points: concerns.isEmpty ? 0 : 15)
     }
+    static func embeddedFinding(_ payloads: [String], imageCount: Int, failures: Int) -> SecurityFinding {
+        let observed = finding(payloads)
+        let coverage = imageCount == 0 ? "No supported embedded data images found. Remote and CID images have not been fetched or inspected." :
+            failures > 0 ? "\(failures) embedded images could not be inspected; coverage is incomplete." :
+            "Inspected \(imageCount) supported embedded data images. Remote and CID images remain uninspected."
+        return SecurityFinding(id: "embedded-qr", title: "Embedded QR codes", verdict: observed.verdict,
+            explanation: observed.explanation + " " + coverage, points: observed.points)
+    }
     static func embeddedImages(_ html: String) -> [Data] {
         MailSecurityObservations.matches(#"(?i)\bsrc\s*=\s*["']data:image/(?:png|jpeg|gif|webp);base64,([^"']+)["']"#, in: html, group: 1)
             .prefix(12).compactMap { value in
