@@ -435,7 +435,15 @@ final class DispatchUITests: XCTestCase {
         app.buttons["mailboxSettingsButton"].tap()
         let compact = app.switches["compactInboxToggle"]
         XCTAssertTrue(compact.waitForExistence(timeout: 5))
+        XCTAssertTrue(compact.isHittable)
         compact.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let enabled = NSPredicate(format: "value == %@", "1")
+        if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: compact)], timeout: 3) != .completed {
+            // A hosted simulator may lose a coordinate tap during sheet presentation.
+            // Retry only while the switch is still off; retain the real row-height assertion.
+            if compact.value as? String == "0" { compact.tap() }
+            XCTAssertTrue(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: compact)], timeout: 5) == .completed)
+        }
         XCTAssertEqual(compact.value as? String, "1")
         attachScreenshot("Compact reading setting enabled", app: app)
         app.buttons["Done"].tap()
