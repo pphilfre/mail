@@ -390,7 +390,7 @@ struct ComposeView: View {
             finished = true
             try? session.reloadDrafts()
             let id = draft.id
-            feedback.show("Message queued", detail: date.timeIntervalSinceNow < 15 ? "Sending in 10 seconds" : date.formatted(),
+            feedback.show("Message queued", detail: date.timeIntervalSinceNow < 15 ? "Undo available for 10 seconds" : date.formatted(),
                           symbol: "clock", expiresAt: date, undo: {
                 do { try repository.cancelScheduled(id); try session.reloadDrafts(); feedback.show("Send cancelled", detail: "Your message is in Drafts") }
                 catch { feedback.show("Couldn’t cancel send", detail: error.localizedDescription, tone: .error) }

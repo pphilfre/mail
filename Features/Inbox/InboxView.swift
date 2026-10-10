@@ -246,7 +246,10 @@ struct InboxView: View {
         .onChange(of: accounts.map(\.id)) { _, ids in
             if let selected = accountFilter, !ids.contains(selected) { accountFilterRaw = "" }
         }
-        .onChange(of: accountFilter) { _, _ in labelFilter = nil; quickFilter = .all; loadMailbox() }
+        .onChange(of: accountFilter) { _, _ in
+            if smartSearch == nil || smartSearch?.accountID != accountFilter { labelFilter = nil }
+            quickFilter = .all; loadMailbox()
+        }
         .onChange(of: labelFilter) { _, _ in quickFilter = .all; loadMailbox() }
         .onChange(of: quickFilter) { _, _ in selectedIDs.removeAll() }
         .onChange(of: conversationRows) { _, _ in selectedIDs.removeAll() }

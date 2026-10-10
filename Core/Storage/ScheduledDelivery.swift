@@ -13,6 +13,7 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
         guard date > now, let accountID = draft.accountID, let account = try account(id: accountID),
               account.providerRaw == MailProviderKind.gmail.rawValue,
               let row = try outgoing(draft.id), row.stateRaw == "draft" else { throw GmailError.reconnect }
+        guard row.lastError != "remote-draft-create-unconfirmed" else { throw GmailError.uncertainDraft }
         try context.transaction {
             let delivery = ScheduledDelivery(id: draft.id, date: date)
             try setMetadata(ScheduledDelivery.key(draft.id), value: String(decoding: try JSONEncoder().encode(delivery), as: UTF8.self))
@@ -57,12 +58,14 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
                 let draft = try repository.localDraft(row)
                 do {
                     try await gmail.send(draft, queued: true)
+                    scheduledSentSequence += 1
                     try repository.setMetadata(ScheduledDelivery.key(row.id), value: nil)
                     try repository.context.save()
                 } catch {
+                    let remainsQueued = try repository.metadata(ScheduledDelivery.key(row.id)) != nil
                     if row.stateRaw == "scheduled", Self.retryablePreparation(error) {
                         try repository.deferScheduled(row.id, until: Date().addingTimeInterval(60), error: error.localizedDescription)
-                    } else if row.stateRaw == "scheduled" || (row.stateRaw == "draft" && error as? GmailError != .cancelled) {
+                    } else if row.stateRaw == "scheduled" || (row.stateRaw == "draft" && remainsQueued) {
                         row.stateRaw = "sendFailed"; row.lastError = error.localizedDescription; try repository.context.save()
                     }
                     // Sending/uncertain states are never retried automatically.

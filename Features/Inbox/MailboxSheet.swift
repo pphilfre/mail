@@ -80,7 +80,7 @@ struct MailboxSheet: View {
                     DisclosureGroup("Custom inboxes and smart folders") {
                         ForEach(SavedMailSearch.decode(savedRaw).filter { search in search.accountID == nil || accounts.contains { $0.id == search.accountID } }) { search in
                             Button {
-                                feedback.select(); mailbox = "All Mail"; label = "smart:" + search.id.uuidString; dismiss()
+                                feedback.select(); account = search.accountID?.uuidString ?? ""; mailbox = "All Mail"; label = "smart:" + search.id.uuidString; dismiss()
                             } label: { mailboxRow(search.name, symbol: "line.3.horizontal.decrease.circle", selected: label == "smart:" + search.id.uuidString, count: 0) }
                         }
                         Button("Create smart folder", systemImage: "plus", action: openSearch)
@@ -111,7 +111,11 @@ struct MailboxSheet: View {
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(32)
         .presentationBackground(.regularMaterial)
-        .onChange(of: account) { _, _ in feedback.select(); label = nil }
+        .onChange(of: account) { _, _ in
+            feedback.select()
+            let search = SavedMailSearch.decode(savedRaw).first { "smart:" + $0.id.uuidString == label }
+            if search == nil || (search?.accountID?.uuidString ?? "") != account { label = nil }
+        }
         .onChange(of: moreMailboxes) { _, expanded in if expanded { detent = .large } }
     }
 

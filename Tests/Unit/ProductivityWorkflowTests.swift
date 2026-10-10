@@ -11,6 +11,11 @@ import SwiftData
         let draft = LocalDraft(to: "you@example.com", subject: "Scheduled", body: "Keep this", accountID: account.id)
         try repository.save([draft])
         let date = Date().addingTimeInterval(3600)
+        let queuedRow = try XCTUnwrap(repository.outgoing(draft.id))
+        queuedRow.lastError = "remote-draft-create-unconfirmed"
+        XCTAssertThrowsError(try repository.schedule(draft, at: date)) { XCTAssertEqual($0 as? GmailError, .uncertainDraft) }
+        XCTAssertEqual(queuedRow.stateRaw, "draft")
+        queuedRow.lastError = nil
         try repository.schedule(draft, at: date)
         XCTAssertTrue(try repository.load().isEmpty)
         XCTAssertTrue(try repository.scheduledDue(at: date.addingTimeInterval(-1)).isEmpty)

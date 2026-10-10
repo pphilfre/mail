@@ -48,6 +48,10 @@ struct AppShell: View {
                 Task { await runtime.gmail?.syncAll() }
             }
         }
+        .onChange(of: runtime.scheduledSentSequence) { old, new in
+            guard scenePhase == .active, new > old else { return }
+            feedback.show(new - old == 1 ? "Message sent" : "\(new - old) messages sent", symbol: "paperplane.fill")
+        }
         .onChange(of: runtime.gmail?.error) { _, error in
             if let error { feedback.show("Mail needs attention", detail: error, symbol: "exclamationmark", tone: .error) }
         }

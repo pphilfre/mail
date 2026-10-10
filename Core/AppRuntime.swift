@@ -5,6 +5,7 @@ import SwiftData
 @MainActor
 @Observable
 final class AppRuntime {
+    var scheduledSentSequence = 0
     @ObservationIgnored var deliveringScheduled = Set<UUID>()
     let connectivity = NetworkConnectivity()
     let draftAttachments = DraftAttachmentStore()
