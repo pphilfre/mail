@@ -159,7 +159,7 @@ struct ComposeView: View {
                                     Button(item.name) {
                                         feedback.select()
                                         if kind == "Templates" && draft.subject.isEmpty { draft.subject = item.subject }
-                                        draft.body += (draft.body.isEmpty ? "" : "\n\n") + item.body
+                                        draft.body = MailSignature.insertContent(item.body, in: draft.body)
                                     }
                                 }
                                 Button("Manage " + kind.lowercased()) { textLibrary = kind; showingTextLibrary = true }
@@ -170,9 +170,7 @@ struct ComposeView: View {
                         ForEach(MailTextLibrary.read("Signatures", accountID: draft.accountID)) { item in
                             Button(item.name) {
                                 feedback.select()
-                                if let appliedSignature, let body = MailSignature.replace(appliedSignature, with: item.body, in: draft.body) { draft.body = body }
-                                else { draft.body = MailSignature.insert(item.body, in: draft.body) }
-                                appliedSignature = item.body
+                                chooseSignature(item.body)
                             }
                         }
                         Button("Manage signatures") { textLibrary = "Signatures"; showingTextLibrary = true }.disabled(sendingAccount == nil)
@@ -310,7 +308,12 @@ struct ComposeView: View {
         let signature = signatureForAccount()
         guard !signature.isEmpty else { return }
         feedback.select()
-        if !draft.body.hasSuffix(signature) { draft.body = MailSignature.insert(signature, in: draft.body) }
+        chooseSignature(signature)
+    }
+    private func chooseSignature(_ signature: String) {
+        let known = accounts.flatMap { MailTextLibrary.read("Signatures", accountID: $0.id).map(\.body) }
+        draft.body = MailSignature.choose(signature, replacing: known + [appliedSignature].compactMap { $0 }, in: draft.body)
+        appliedSignature = signature
     }
 
     private func signatureForAccount() -> String {

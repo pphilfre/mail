@@ -81,6 +81,17 @@ import SwiftData
         XCTAssertEqual(index.matches("", filters: advanced), [row.id])
         advanced.attachmentPresence = false; XCTAssertTrue(index.matches("", filters: advanced).isEmpty)
     }
+    func testChangingSignatureReplacesOnlyOwnFooterAndDoesNotDuplicateItInSavedReplies() {
+        let quote = "\n\nOn yesterday, Alex wrote:\n> Keep this original message"
+        let original = MailSignature.insert("Work signature", in: "My reply" + quote)
+        let switched = MailSignature.choose("Personal signature", replacing: ["Work signature", "Personal signature"], in: original)
+        XCTAssertEqual(switched, "My reply\n\n-- \nPersonal signature" + quote)
+        XCTAssertEqual(MailSignature.insertContent("Reusable text", in: switched), "My reply\n\nReusable text\n\n-- \nPersonal signature" + quote)
+        XCTAssertEqual(MailSignature.choose("Personal signature", replacing: ["Work signature", "Personal signature"], in: switched), switched)
+        let edited = original.replacingOccurrences(of: "Work signature", with: "My edited footer")
+        let preserved = MailSignature.choose("Personal signature", replacing: ["Work signature"], in: edited)
+        XCTAssertTrue(preserved.contains("My edited footer")); XCTAssertTrue(preserved.hasSuffix(quote))
+    }
     func testUnsubscribeRejectsLocalURLsAndRequiresAdvertisedPost() {
         let privateLink = MailUnsubscribe(header: "<https://127.0.0.1/remove>, <https://host.local/remove>", post: "List-Unsubscribe=One-Click", signature: "", authentication: "")
         XCTAssertNil(privateLink.web); XCTAssertFalse(privateLink.oneClick)
