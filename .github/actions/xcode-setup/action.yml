@@ -1,0 +1,46 @@
+name: Prepare pinned Xcode and incremental cache
+description: Generate project inputs and restore toolchain-specific build data
+inputs:
+  variant:
+    description: Separate simulator and device compiler products
+    required: true
+  coverage:
+    description: Instrumentation changes compiled products
+    default: 'NO'
+runs:
+  using: composite
+  steps:
+    - name: Generate project
+      shell: bash
+      run: bash scripts/prepare-macos.sh
+    - name: Identify cache compatibility
+      id: identity
+      shell: bash
+      env:
+        VARIANT: ${{ inputs.variant }}
+        COVERAGE: ${{ inputs.coverage }}
+      run: |
+        toolchain="$(xcodebuild -version | shasum -a 256 | cut -d' ' -f1)"
+        echo "prefix=xcode-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ImageVersion}-${toolchain}-${VARIANT}-${COVERAGE}" >> "$GITHUB_OUTPUT"
+    - name: Cache Swift package downloads
+      uses: actions/cache@v4
+      with:
+        path: build/SourcePackages
+        key: spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('project.yml', 'Configuration/Package.resolved') }}
+    - name: Restore incremental build data
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/DerivedData/Build
+          build/DerivedData/ModuleCache.noindex
+          build/DerivedData/SDKStatCaches.noindex
+          build/ReleaseDerivedData/Build
+          build/ReleaseDerivedData/ModuleCache.noindex
+          build/ReleaseDerivedData/SDKStatCaches.noindex
+          build/input-times.json
+        key: ${{ steps.identity.outputs.prefix }}-${{ hashFiles('project.yml', 'Configuration/Package.resolved', 'App/**', 'Core/**', 'Features/**', 'DesignSystem/**', 'Providers/**', 'Tests/**', 'Configuration/**', 'scripts/**') }}
+        restore-keys: |
+          ${{ steps.identity.outputs.prefix }}-
+    - name: Preserve unchanged input timestamps
+      shell: bash
+      run: python3 scripts/cache-inputs.py restore build/input-times.json
