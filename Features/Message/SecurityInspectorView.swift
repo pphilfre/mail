@@ -195,22 +195,4 @@ struct SecurityInspectorView: View {
             verifiedAuthentication = ["spf", "dkim", "dmarc"].map { SecurityFinding(id: $0, title: $0.uppercased(), verdict: .unknown, explanation: error.localizedDescription) }
         }
     }
-    private func verifyAuthentication() async {
-        authenticationBusy = true; defer { authenticationBusy = false }
-        let accountID = message.accountID, remoteID = message.remoteID, sender = message.senderEmail
-        let fingerprint = MailSecurityContent.fingerprint(message, attachments: attachments)
-        do {
-            guard let gmail = runtime.gmail, let repository = runtime.repository,
-                  let account = try repository.account(id: accountID), account.providerRaw == MailProviderKind.gmail.rawValue else {
-                throw AuthenticationError.unavailable("Original-message verification requires a connected Gmail account.")
-            }
-            let raw = try await gmail.client(accountID).originalMessage(remoteID)
-            let findings = await MailAuthenticator().analyse(raw: raw, expectedSender: sender)
-            guard !Task.isCancelled, fingerprint == MailSecurityContent.fingerprint(message, attachments: attachments) else { return }
-            verifiedAuthentication = findings
-        } catch {
-            guard !Task.isCancelled else { return }
-            verifiedAuthentication = ["spf", "dkim", "dmarc"].map { SecurityFinding(id: $0, title: $0.uppercased(), verdict: .unknown, explanation: error.localizedDescription) }
-        }
-    }
 }
