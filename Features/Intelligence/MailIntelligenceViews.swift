@@ -161,7 +161,8 @@ struct MailIntegrationSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Face ID app lock", isOn: Binding(get: { locked }, set: { enabled in Task { await runtime.appLock.setEnabled(enabled) } })).disabled(runtime.appLock.authenticating)
+                Toggle("Face ID app lock", isOn: Binding(get: { locked }, set: { enabled in Task { await runtime.appLock.setEnabled(enabled) } }))
+                    .disabled(runtime.appLock.authenticating).accessibilityIdentifier("mailAppLockToggle")
                 if let error = runtime.appLock.error { Text(error).font(.caption).foregroundStyle(.secondary) }
             } footer: { Text("Authenticates before enabling or disabling. Locks after backgrounding; device passcode recovers from biometric lockout. Mail is hidden from app-switcher snapshots.") }
             Section("Optional local writing model") {

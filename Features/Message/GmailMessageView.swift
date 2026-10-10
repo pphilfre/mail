@@ -145,7 +145,8 @@ struct GmailMessageView: View {
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }.labelStyle(.iconOnly)
+                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }
+                    .labelStyle(.iconOnly).accessibilityIdentifier("localInsightsButton")
                 ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
@@ -244,7 +245,7 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { readerPresentation = nil } } }
             }
         case .collection: NavigationStack { AddToCollectionView(message: message) }
-        case .insights: NavigationStack { MailInsightsView(mails: thread.map { IntelligenceMail($0) }) }
+        case .insights: NavigationStack { MailInsightsView(mails: thread.suffix(30).map { IntelligenceMail($0) }) }
         case .contact: SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea()
         case .calendar: MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea()
         case .pdf(let file): MessageShareSheet(url: file.url)
