@@ -108,7 +108,7 @@ struct SettingsView: View {
             Section("Swipe actions") {
                 Picker("Swipe right", selection: $leadingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
-                }
+                }.accessibilityIdentifier("leadingSwipePicker")
                 Picker("Swipe left", selection: $trailingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
                 }
@@ -126,6 +126,10 @@ struct SettingsView: View {
                 Toggle("Confirmation animations", isOn: $confirmationAnimations).accessibilityIdentifier("confirmationAnimationsToggle")
             } header: { Text("Feedback") } footer: {
                 Text("A little tap and a quick celebration when things are done. Animations follow your device’s Reduce Motion setting.")
+            }
+            Section("Privacy & intelligence") {
+                NavigationLink("Privacy & intelligence") { MailIntegrationSettings() }
+                    .accessibilityIdentifier("privacyIntelligenceSettingsLink")
             }
             Section("Sample mail") {
                 Toggle("Show sample inbox", isOn: $showSamples).accessibilityIdentifier("sampleInboxToggle")

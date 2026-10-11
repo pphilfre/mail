@@ -8,18 +8,36 @@ struct AppShell: View {
     @Query(filter: #Predicate<StoreMetadata> { $0.key == "mail-triage-undo" }) private var undoMetadata: [StoreMetadata]
     @AppStorage("showSampleInbox") private var showSamples = false
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("selectedMailAccount") private var selectedAccount = ""
+    @State private var tab = MailTab.mail
+    @State private var showingSearch = false
+    @State private var mailNavigationID = UUID()
+    @AppStorage("selectedMailbox") private var selectedMailbox = "Inbox"
+    private enum MailTab { case mail, tasks, search }
     @State private var feedback = MailFeedback()
     private var undoRecord: MailUndoRecord? {
         undoMetadata.first.flatMap { try? JSONDecoder().decode(MailUndoRecord.self, from: Data($0.value.utf8)) }
     }
 
     var body: some View {
+        @Bindable var runtime = runtime
         Group {
             if accounts.isEmpty && !showSamples {
-                WelcomeView()
+                NavigationStack { WelcomeView() }
             } else {
-                NavigationStack {
-                    InboxView()
+                TabView(selection: $tab) {
+                    Tab("Emails", systemImage: "envelope.fill", value: MailTab.mail) {
+                        NavigationStack { InboxView() }.id(mailNavigationID)
+                    }
+                    Tab("Tasks", systemImage: "checklist", value: MailTab.tasks) {
+                        NavigationStack { MailTasksView(accountID: UUID(uuidString: selectedAccount)) }
+                    }
+                    Tab("Search", systemImage: "magnifyingglass", value: MailTab.search, role: .search) {
+                        Color.clear
+                    }
+                }
+                .onChange(of: tab) { old, new in
+                    if new == .search { tab = old; showingSearch = true }
                 }
             }
         }
@@ -27,11 +45,31 @@ struct AppShell: View {
         .modifier(MailFeedbackOverlay())
         .environment(feedback)
         .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
+        .sheet(isPresented: $showingSearch) {
+            NavigationStack {
+                LocalSearchView(initialAccountID: UUID(uuidString: selectedAccount), onClose: {
+                    selectedMailbox = "Inbox"; mailNavigationID = UUID(); tab = .mail; showingSearch = false
+                })
+            }.environment(feedback)
+        }
+        .sheet(item: $runtime.sharedDraft, onDismiss: { Task { await runtime.importPendingShares() } }) { draft in
+            NavigationStack { ComposeView(draft: draft) }.environment(feedback)
+        }
+        .alert("Couldn’t import shared content", isPresented: Binding(get: { runtime.shareError != nil }, set: { if !$0 { runtime.shareError = nil } })) {
+            Button("OK") { runtime.shareError = nil }
+        } message: { Text(runtime.shareError ?? "") }
         .task {
             await Task.yield()
             MailWebViewPool.prepare()
             if let record = undoRecord, record.expiresAt > Date() { showTriageConfirmation(record) }
             await runtime.gmail?.syncAll()
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await runtime.deliverScheduledMail()
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && runtime.gmail?.connecting != true { Task { await runtime.gmail?.syncAll() } }
@@ -40,6 +78,10 @@ struct AppShell: View {
             if scenePhase == .active && runtime.gmail?.connecting != true {
                 Task { await runtime.gmail?.syncAll() }
             }
+        }
+        .onChange(of: runtime.scheduledSentSequence) { old, new in
+            guard scenePhase == .active, new > old else { return }
+            feedback.show(new - old == 1 ? "Message sent" : "\(new - old) messages sent", symbol: "paperplane.fill")
         }
         .onChange(of: runtime.gmail?.error) { _, error in
             if let error { feedback.show("Mail needs attention", detail: error, symbol: "exclamationmark", tone: .error) }
@@ -89,10 +131,8 @@ struct WelcomeView: View {
                 .ignoresSafeArea()
         }
         .task { withAnimation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.12)) { arrived = true } }
-        .sheet(isPresented: $showingTasks) {
-            NavigationStack { MailTasksView(accountID: nil).toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTasks = false } }
-            } }
+        .navigationDestination(isPresented: $showingTasks) {
+            MailTasksView(accountID: nil)
         }
     }
     private var welcomeContent: some View {

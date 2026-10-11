@@ -4,7 +4,11 @@ struct MailSearchFilters: Equatable, Codable, Sendable {
     var unread = false
     var starred = false
     var attachments = false
-    var active: Bool { unread || starred || attachments }
+    var sender: String?
+    var after: Date?
+    var before: Date?
+    var attachmentPresence: Bool?
+    var active: Bool { unread || starred || attachments || !(sender ?? "").isEmpty || after != nil || before != nil || attachmentPresence != nil }
 }
 
 struct SavedMailSearch: Identifiable, Codable, Equatable, Sendable {

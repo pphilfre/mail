@@ -16,7 +16,8 @@ struct MailHTMLView: UIViewRepresentable {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src \(images); font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>
         :root { color-scheme: light dark; }
-        html, body { margin: 0; padding: 0; width: 100%; font: -apple-system-body; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+        html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; overflow: visible !important; width: 100%; font: -apple-system-body; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+        #dispatch-mail-body { display: flow-root; position: relative; height: auto !important; overflow: visible !important; }
         img { max-width: 100% !important; height: auto; }
         table { max-width: 100% !important; }
         pre { white-space: pre-wrap; }
@@ -65,7 +66,8 @@ struct MailHTMLView: UIViewRepresentable {
         let lastHeight = 0;
         let lastWidth = 0;
         const report = () => {
-            const height = content.getBoundingClientRect().height;
+            const scale = parseFloat(content.style.zoom) || 1;
+            const height = Math.ceil(Math.max(content.getBoundingClientRect().height, content.scrollHeight * scale));
             if (height > 0 && Math.abs(height - lastHeight) > 1) {
                 lastHeight = height;
                 window.webkit?.messageHandlers?.mailLayout?.postMessage(height);
@@ -93,11 +95,15 @@ struct MailHTMLView: UIViewRepresentable {
         });
         document.addEventListener('load', schedule, true);
         new ResizeObserver(() => requestAnimationFrame(report)).observe(content);
+        new MutationObserver(schedule).observe(content, { childList: true, subtree: true, characterData: true });
+        document.fonts?.ready.then(schedule);
         fit();
     })();
     """
     func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.height = $height
+        guard context.coordinator.sourceHTML != html || context.coordinator.remoteImages != remoteImages else { return }
+        context.coordinator.sourceHTML = html; context.coordinator.remoteImages = remoteImages
         let document = Self.document(html, remoteImages: remoteImages)
         guard context.coordinator.document != document else { return }
         context.coordinator.document = document
@@ -112,9 +118,11 @@ struct MailHTMLView: UIViewRepresentable {
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var height: Binding<CGFloat>
         var document = ""
+        var sourceHTML: String?
+        var remoteImages = false
         init(height: Binding<CGFloat>) { self.height = height }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard let number = message.body as? NSNumber else { return }
+            guard message.frameInfo.isMainFrame, let number = message.body as? NSNumber else { return }
             let value = max(40, CGFloat(number.doubleValue))
             guard value.isFinite, abs(height.wrappedValue - value) > 1 else { return }
             height.wrappedValue = value
@@ -147,6 +155,7 @@ struct MailHTMLView: UIViewRepresentable {
     static func take() -> WKWebView {
         views.popLast() ?? WKWebView(frame: .zero, configuration: MailHTMLView.configuration())
     }
+    static func trimCache() { views.forEach { $0.stopLoading() }; views.removeAll() }
     static func put(_ view: WKWebView) {
         view.loadHTMLString("<html><body></body></html>", baseURL: nil)
         view.configuration.websiteDataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
@@ -161,6 +170,7 @@ struct MailHTMLView: UIViewRepresentable {
         cache.countLimit = 64; cache.totalCostLimit = 2_000_000
         return cache
     }()
+    static func clearCache() { cache.removeAllObjects() }
     static func linked(_ text: String) -> AttributedString {
         let key = text as NSString
         let value: NSAttributedString

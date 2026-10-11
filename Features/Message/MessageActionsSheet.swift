@@ -1,12 +1,14 @@
 import SwiftUI
+import SwiftData
 
 enum MessageSheetAction {
     case reply, replyAll, forward, triage(String), sender, contact, task, receipt, collection
-    case security, translate, printMessage, savePDF, forwardAttachment, calendar
+    case security, translate, printMessage, savePDF, saveEML, unsubscribe, forwardAttachment, calendar
     case pin(Bool), snooze(Date), unsnooze
 }
 
 struct MessageActionsSheet: View {
+    @Query private var metadata: [StoreMetadata]
     let message: MailMessage
     let folders: [MailFolder]
     let organisation: MailLocalOrganisation
@@ -14,6 +16,11 @@ struct MessageActionsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.dynamicTypeSize) private var typeSize
+    private var hasUnsubscribe: Bool {
+        guard let row = metadata.first(where: { $0.key == MailUnsubscribe.key(message) }),
+              let value = try? JSONDecoder().decode(MailUnsubscribe.self, from: Data(row.value.utf8)) else { return false }
+        return value.web != nil || value.mail != nil
+    }
     var body: some View {
         List {
             Section {
@@ -36,7 +43,7 @@ struct MessageActionsSheet: View {
             }
             Section {
                 row(message.isStarred ? "Unflag" : "Flag", "flag", .triage(message.isStarred ? "unstar" : "star"))
-                NavigationLink { folderPicker(move: false) } label: { Label("Tag", systemImage: "tag") }
+                NavigationLink { folderPicker(move: false) } label: { actionLabel("Tag", "tag") }
                     .disabled(folders.filter { $0.kindRaw == "user" }.isEmpty)
                 row(organisation.pinned ? "Unpin" : "Pin", "pin", .pin(!organisation.pinned))
                 if organisation.isSnoozed(at: Date()) { row(message.isInbox ? "Return to inbox" : "Stop snoozing", "clock.arrow.circlepath", .unsnooze) }
@@ -45,13 +52,12 @@ struct MessageActionsSheet: View {
                         Button("In one hour") { select(.snooze(Date().addingTimeInterval(3600))) }
                         Button("Tomorrow morning") { select(.snooze(Self.tomorrowMorning())) }
                         Button("In one week") { select(.snooze(Date().addingTimeInterval(7 * 86400))) }
-                    } label: { Label("Snooze", systemImage: "clock") }
+                    } label: { actionLabel("Snooze", "clock") }
                 }
                 row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"), identifier: "readerReadButton")
             } header: { Text("Organisation") }
-              footer: { Text("Pins and snoozes are saved on this device. Flag uses the account’s starred label.") }
             Section("Management") {
-                NavigationLink { folderPicker(move: true) } label: { Label("Move", systemImage: "folder") }
+                NavigationLink { folderPicker(move: true) } label: { actionLabel("Move", "folder") }
                     .disabled(message.isTrash || message.isSpam || message.isDraft)
                 row("Archive", "archivebox", .triage("archive")).disabled(!message.isInbox || message.isDraft)
                 if message.isTrash { row("Restore", "arrow.uturn.backward", .triage("restore")) }
@@ -60,13 +66,17 @@ struct MessageActionsSheet: View {
             Section("Sender") {
                 row("Add Contact", "person.crop.circle.badge.plus", .contact)
                 row("Show Emails", "envelope", .sender)
-                unavailable("Block Sender", "person.crop.circle.badge.xmark")
+
                 row(message.isSpam ? "Not Spam" : "Spam", "exclamationmark.shield", .triage(message.isSpam ? "notSpam" : "spam"), destructive: !message.isSpam)
             }
             Section {
                 row("Translate", "character.bubble", .translate)
                 row("Print", "printer", .printMessage)
                 row("Save PDF", "doc.richtext", .savePDF)
+                row("Save EML", "doc", .saveEML)
+                if hasUnsubscribe {
+                    row("Unsubscribe", "envelope.badge.minus", .unsubscribe)
+                }
                 if !message.isDraft { row("Forward as Attachment", "paperclip", .forwardAttachment) }
                 row("Create Reminder", "checklist", .task, identifier: "makeMailTaskButton")
                 row("Add Calendar Event", "calendar.badge.plus", .calendar)
@@ -75,31 +85,40 @@ struct MessageActionsSheet: View {
                     row("Save receipt", "receipt", .receipt, identifier: "makeReceiptButton")
                 }
             } header: { Text("Tools") }
-              footer: { Text("Reminders use Dispatch tasks. Print and PDF use a readable text copy. Forward as attachment includes the original message file.") }
+
             Section("Security") { row("Open Security Inspector", "checkmark.shield", .security) }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
+        .tint(.primary)
+        .scrollContentBackground(.hidden).background(MailStyle.paper)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listSectionSpacing(.compact)
+        .environment(\.defaultMinListRowHeight, 44)
         .navigationTitle("Message actions").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { dismiss() } } }
-        .presentationDetents([.large]).presentationDragIndicator(.visible)
+        .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
     }
     private func select(_ action: MessageSheetAction) { feedback.select(); choose(action) }
     private func row(_ title: String, _ symbol: String, _ action: MessageSheetAction, destructive: Bool = false, identifier: String? = nil) -> some View {
         Button(role: destructive ? .destructive : nil) { select(action) } label: {
-            Label(title, systemImage: symbol).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
+            actionLabel(title, symbol, destructive: destructive)
         }
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .accessibilityIdentifier(identifier ?? title).accessibilityLabel(title)
         .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.primary)
     }
+    private func actionLabel(_ title: String, _ symbol: String, destructive: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol).font(.system(size: 18)).frame(width: 24)
+            Text(title).font(.body)
+        }.foregroundStyle(destructive ? Color.red : Color.primary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
+    }
     private func quick(_ title: String, _ symbol: String, _ action: MessageSheetAction) -> some View {
         Button { select(action) } label: {
-            VStack(spacing: 8) { Image(systemName: symbol).font(.title2); Text(title).font(.subheadline) }
-                .frame(maxWidth: .infinity, minHeight: 68)
+            VStack(spacing: 4) { Image(systemName: symbol).font(.title2); Text(title).font(.subheadline) }
+                .frame(maxWidth: .infinity, minHeight: 52)
         }.buttonStyle(.glass).accessibilityLabel(title)
-    }
-    private func unavailable(_ title: String, _ symbol: String) -> some View {
-        HStack { Label(title, systemImage: symbol); Spacer(); Text("Coming soon").font(.caption) }.foregroundStyle(.secondary)
-            .accessibilityElement(children: .combine)
     }
     private func folderPicker(move: Bool) -> some View {
         List {

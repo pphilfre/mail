@@ -62,12 +62,35 @@ struct RecipientSuggestion: Identifiable, Sendable {
 }
 
 enum MailSignature {
+    static func authoredRange(in body: String) -> Range<String.Index> {
+        let quote = quoteBoundary(in: body) ?? body.endIndex
+        let footer = body[..<quote].range(of: "\n\n-- \n", options: .backwards)?.lowerBound ?? quote
+        var start = body.startIndex, end = footer
+        while start < end && body[start].isWhitespace { start = body.index(after: start) }
+        while end > start && body[body.index(before: end)].isWhitespace { end = body.index(before: end) }
+        return start..<end
+    }
     static func key(_ accountID: UUID) -> String { "signature-\(accountID.uuidString)" }
     static func insert(_ signature: String, in body: String) -> String {
         guard !signature.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return body }
         let block = "\n\n-- \n" + signature
         if let quote = quoteBoundary(in: body) { return String(body[..<quote]) + block + String(body[quote...]) }
         return body + block
+    }
+    static func insertContent(_ text: String, in body: String) -> String {
+        guard !text.isEmpty else { return body }
+        let quote = quoteBoundary(in: body) ?? body.endIndex
+        let footer = body[..<quote].range(of: "\n\n-- \n", options: .backwards)?.lowerBound ?? quote
+        let own = String(body[..<footer])
+        return own + (own.isEmpty ? "" : "\n\n") + text + String(body[footer...])
+    }
+    static func choose(_ next: String, replacing candidates: [String], in body: String) -> String {
+        // Only replace a known, unedited footer in the author's text; preserve quoted mail.
+        let previous = Set(candidates + [next]).filter { !$0.isEmpty }.sorted { $0.count > $1.count }
+        for signature in previous {
+            if let updated = replace(signature, with: next, in: body) { return updated }
+        }
+        return insert(next, in: body)
     }
     static func replace(_ previous: String, with next: String, in body: String) -> String? {
         let block = "\n\n-- \n" + previous

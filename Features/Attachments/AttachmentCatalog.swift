@@ -33,6 +33,7 @@ struct AttachmentCatalogEntry: Identifiable, Equatable, Sendable {
     let date: Date
     let inlineImage: Bool
     let cachedPath: String?
+    var recognizedText = ""
     var category: AttachmentCategory { AttachmentCategory.classify(filename: filename, mimeType: mimeType) }
     static func filtered(_ entries: [Self], accountID: UUID?, query: String, category: AttachmentCategory,
                          includeInline: Bool, savedOnly: Bool, savedIDs: Set<String>, sort: AttachmentSort) -> [Self] {
@@ -40,7 +41,7 @@ struct AttachmentCatalogEntry: Identifiable, Equatable, Sendable {
         return entries.filter {
             (accountID == nil || $0.accountID == accountID) && (includeInline || !$0.inlineImage) &&
             (category == .all || $0.category == category) && (!savedOnly || savedIDs.contains($0.id)) &&
-            (query.isEmpty || [$0.filename, $0.sourceTitle, $0.correspondent, $0.accountName].contains { $0.localizedCaseInsensitiveContains(query) })
+            (query.isEmpty || [$0.filename, $0.sourceTitle, $0.correspondent, $0.accountName, $0.recognizedText].contains { $0.localizedCaseInsensitiveContains(query) })
         }.sorted { first, second in
             switch sort {
             case .newest: if first.date != second.date { return first.date > second.date }

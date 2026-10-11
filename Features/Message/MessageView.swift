@@ -30,6 +30,7 @@ struct MessageView: View {
         .background(MailStyle.paper)
         .navigationTitle("Message")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: message.subject + "\n\n" + message.body) { Image(systemName: "square.and.arrow.up") }

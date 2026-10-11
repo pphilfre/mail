@@ -8,6 +8,7 @@ struct LocalDraft: Identifiable, Codable, Equatable, Sendable {
     var bcc = ""
     var subject = ""
     var body = ""
+    var richBody: RichMailBody?
     var updatedAt = Date()
     var accountID: UUID?
     var remoteThreadID: String?
@@ -36,6 +37,7 @@ extension LocalDraft {
         bcc = try values.decode(String.self, forKey: .bcc)
         subject = try values.decode(String.self, forKey: .subject)
         body = try values.decode(String.self, forKey: .body)
+        richBody = try values.decodeIfPresent(RichMailBody.self, forKey: .richBody)
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
         accountID = try values.decodeIfPresent(UUID.self, forKey: .accountID)
         remoteThreadID = try values.decodeIfPresent(String.self, forKey: .remoteThreadID)

@@ -20,11 +20,15 @@ codesign -d --entitlements - build/DerivedData/Build/Products/Debug-iphonesimula
 wait "$boot_pid"
 trap - EXIT
 if [[ -n "${DISPATCH_TEST_ONLY:-}" ]]; then
-  common+=(-only-testing:"$DISPATCH_TEST_ONLY")
+  IFS=',' read -r -a test_selectors <<< "$DISPATCH_TEST_ONLY"
+  for selector in "${test_selectors[@]}"; do
+    common+=(-only-testing:"$selector")
+  done
 fi
 xcodebuild "${common[@]}" test-without-building -parallel-testing-enabled NO \
   -resultBundlePath build/Tests.xcresult 2>&1 | tee build/test.log
-if [[ -z "${DISPATCH_TEST_ONLY:-}" ]]; then
+if [[ -z "${DISPATCH_TEST_ONLY:-}" || ",${DISPATCH_TEST_ONLY}," == *",DispatchTests,"* ]]; then
   app_container="$(xcrun simctl get_app_container "$simulator_id" dev.freddiephilpot.dispatch data)"
   python3 scripts/verify-compose-mime.py "$app_container/Library/Application Support/Dispatch/compose-mime-fixture.eml"
+  python3 scripts/verify-rich-compose-mime.py "$app_container/Library/Application Support/Dispatch/rich-compose-mime-fixture.eml"
 fi

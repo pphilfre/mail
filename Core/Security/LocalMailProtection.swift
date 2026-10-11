@@ -1,38 +1,49 @@
 import Foundation
 import Security
 
-/// iOS Data Protection encrypts these files using device keys. No guest entitlements,
-/// access-group names, Secure Enclave availability or normal installation are assumed.
+/// Device Data Protection. Background mail explicitly opts into access after the first unlock.
 enum LocalMailProtection {
-    static func protectDirectory(_ directory: URL) throws {
+    static func protectDirectory(_ directory: URL, protection: FileProtectionType = .complete) throws {
         #if targetEnvironment(simulator)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         #else
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.complete])
+            attributes: [.protectionKey: protection])
         #endif
-        try protect(directory)
+        try protect(directory, protection: protection)
         var directory = directory
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try directory.setResourceValues(values)
     }
-    static func protect(_ file: URL) throws {
+    static func protect(_ file: URL, protection: FileProtectionType = .complete) throws {
         #if !targetEnvironment(simulator)
-        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: file.path)
+        try FileManager.default.setAttributes([.protectionKey: protection], ofItemAtPath: file.path)
         // Directory attributes request inheritance; encryption guarantees apply to files.
         guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { return }
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
-        guard isComplete(attributes[.protectionKey]) else {
+        guard matches(attributes[.protectionKey], protection) else {
             throw CocoaError(.fileWriteNoPermission)
         }
         #endif
     }
     private static func isComplete(_ value: Any?) -> Bool {
-        (value as? FileProtectionType) == .complete || (value as? String) == FileProtectionType.complete.rawValue
+        matches(value, .complete)
     }
-    static func protectTree(_ directory: URL) throws {
-        try protectDirectory(directory)
-        for file in try entries(directory) { try protect(file) }
+    private static func matches(_ value: Any?, _ protection: FileProtectionType) -> Bool {
+        (value as? FileProtectionType) == protection || (value as? String) == protection.rawValue
+    }
+    static func storageProtection(backgroundRefresh: Bool) -> FileProtectionType {
+        backgroundRefresh ? .completeUntilFirstUserAuthentication : .complete
+    }
+    static func protectionForEntry(_ file: URL, storage: FileProtectionType, preservingDraftAttachments: Bool) -> FileProtectionType {
+        let components = file.standardizedFileURL.pathComponents
+        return preservingDraftAttachments && components.contains("DraftAttachments") ? .complete : storage
+    }
+    static func protectTree(_ directory: URL, protection: FileProtectionType = .complete, preservingDraftAttachments: Bool = false) throws {
+        try protectDirectory(directory, protection: protection)
+        for file in try entries(directory) {
+            try protect(file, protection: protectionForEntry(file, storage: protection, preservingDraftAttachments: preservingDraftAttachments))
+        }
     }
     private static func entries(_ directory: URL) throws -> [URL] {
         let root = directory.standardizedFileURL.resolvingSymlinksInPath().path + "/"
@@ -47,23 +58,25 @@ enum LocalMailProtection {
         }
         return result
     }
-    static func finding(for directory: URL, title: String = "Local file protection") -> SecurityFinding {
+    static func finding(for directory: URL, title: String = "Local file protection", protection: FileProtectionType = .complete) -> SecurityFinding {
         #if targetEnvironment(simulator)
         return SecurityFinding(id: directory.path, title: title, verdict: .unknown,
-            explanation: "The simulator does not expose device Data Protection guarantees. File workflows can be tested here, but encryption and lock behaviour require the signed LiveContainer device.")
+            explanation: "The simulator does not expose device Data Protection guarantees. Encryption and lock behaviour require a signed physical device.")
         #else
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
-            guard isComplete(attributes[.protectionKey]) else { throw CocoaError(.fileReadNoPermission) }
+            guard matches(attributes[.protectionKey], protection) else { throw CocoaError(.fileReadNoPermission) }
             let files = try entries(directory)
             for file in files {
-                guard isComplete(try FileManager.default.attributesOfItem(atPath: file.path)[.protectionKey]) else { throw CocoaError(.fileReadNoPermission) }
+                let value = try FileManager.default.attributesOfItem(atPath: file.path)[.protectionKey]
+                let expected = protectionForEntry(file, storage: protection, preservingDraftAttachments: true)
+                guard matches(value, expected) || isComplete(value) else { throw CocoaError(.fileReadNoPermission) }
             }
             return SecurityFinding(id: directory.path, title: title, verdict: .checked,
-                explanation: "Complete iOS Data Protection attributes confirmed on this directory and \(files.count) existing entries at inspection time. This checks file attributes, not LiveContainer isolation or hardware encryption. The host controls the sandbox; future files and device lock behaviour require runtime testing.")
+                explanation: "iOS Data Protection attributes confirmed on this directory and \(files.count) existing entries. " + (protection == .complete ? "Files require an unlocked device." : "Background mail storage remains available after the first unlock; draft attachment files retain Complete protection.") + " Future files and actual device lock behaviour require device testing.")
         } catch {
             return SecurityFinding(id: directory.path, title: title, verdict: .unknown,
-                explanation: "Complete protection could not be confirmed for every existing entry. LiveContainer host signing, shared sandbox, file creation and device lock behaviour require device testing.")
+                explanation: "The configured protection could not be confirmed for every existing entry. File creation and device lock behaviour require testing on the installed signed app.")
         }
         #endif
     }
@@ -78,7 +91,7 @@ enum LocalMailProtection {
         let add = SecItemAdd(item as CFDictionary, nil)
         guard add == errSecSuccess else {
             return SecurityFinding(id: "keychain", title: "Keychain compatibility", verdict: .unknown,
-                explanation: "Keychain write failed (\(add)). Check LiveContainer signing and Keychain separation settings. No plaintext credential fallback is used.")
+                explanation: "Keychain write failed (\(add)). Check the installed app’s signing identity and Keychain access group. No plaintext credential fallback is used.")
         }
         var read = query; read[kSecReturnData as String] = true
         var output: CFTypeRef?
@@ -86,6 +99,6 @@ enum LocalMailProtection {
         let remove = SecItemDelete(query as CFDictionary)
         let passed = load == errSecSuccess && (output as? Data) == bytes && remove == errSecSuccess
         return SecurityFinding(id: "keychain", title: "Keychain compatibility", verdict: passed ? .checked : .unknown,
-            explanation: passed ? "Device-local Keychain write/read/delete succeeded in this process. Cross-container isolation, relaunch persistence and host updates still need LiveContainer device testing." : "Keychain round trip failed (read \(load), delete \(remove)). Check host signing. Credentials are never saved to preferences or the mail database.")
+            explanation: passed ? "Device-local Keychain write/read/delete succeeded in this process. Relaunch persistence and signing continuity require testing on the installed app." : "Keychain round trip failed (read \(load), delete \(remove)). Check app signing. Credentials are never saved to preferences or the mail database.")
     }
 }

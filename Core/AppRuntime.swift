@@ -1,14 +1,24 @@
 import Foundation
 import Observation
 import SwiftData
+import UIKit
 
 @MainActor
 @Observable
 final class AppRuntime {
+    var scheduledSentSequence = 0
+    @ObservationIgnored var deliveringScheduled = Set<UUID>()
     let connectivity = NetworkConnectivity()
     let draftAttachments = DraftAttachmentStore()
     let reputation = VirusTotalReputation()
     var securityReports: [UUID: (fingerprint: String, report: SecurityReport)] = [:]
+    let appLock = MailAppLock()
+    let localModel = LocalMailModel()
+    let nativeServices = MailNativeServices()
+    var sharedDraft: LocalDraft?
+    var shareError: String?
+    @ObservationIgnored private var pendingShares: [URL] = []
+    @ObservationIgnored private var importingShare = false
     var container: ModelContainer?
     var session: AppSession?
     var storageFailed = false
@@ -43,7 +53,7 @@ final class AppRuntime {
             #else
             let readerFixture = false
             #endif
-            if !readerFixture {
+            if !readerFixture && UIApplication.shared.isProtectedDataAvailable {
                 try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Mail/Attachments"))
                 try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Dispatch/DraftAttachments"))
                 try AttachmentPreviewStore.cleanExpired()
@@ -84,6 +94,34 @@ final class AppRuntime {
         } catch {
             // No destructive reset, in-memory replacement or network fetch on storage failure.
             container = nil; repository = nil; session = nil; gmail = nil; storageFailed = true
+        }
+    }
+
+    func receiveShare(_ url: URL) {
+        guard IncomingMailShare.parse(url) != nil, pendingShares.count < 20 else { return }
+        pendingShares.append(url)
+        Task { await importPendingShares() }
+    }
+
+    func importPendingShares() async {
+        guard appLock.unlocked, !importingShare, sharedDraft == nil, let session else { return }
+        importingShare = true
+        defer { importingShare = false }
+        while appLock.unlocked, !pendingShares.isEmpty {
+            let url = pendingShares.removeFirst()
+            guard let incoming = IncomingMailShare.parse(url) else { continue }
+            do {
+                var draft = LocalDraft()
+                switch incoming {
+                case .file(let source):
+                    draft.attachments = [try await draftAttachments.importFile(source, draftID: draft.id, existing: [])]
+                case .link(let link): draft.body = link.absoluteString
+                case .compose(let to, let subject, let body): draft.to = to; draft.subject = subject; draft.body = body
+                }
+                try session.save(draft)
+                if appLock.unlocked { sharedDraft = draft }
+                return
+            } catch { shareError = error.localizedDescription }
         }
     }
 }

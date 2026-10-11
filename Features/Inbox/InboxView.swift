@@ -13,7 +13,6 @@ struct InboxView: View {
     @Query private var metadata: [StoreMetadata]
     @Query private var outgoing: [OutgoingMessage]
     @Query private var operations: [PendingMailOperation]
-    @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" }) private var uncertain: [OutgoingMessage]
     @AppStorage("selectedMailAccount") private var accountFilterRaw = ""
     @AppStorage("selectedMailbox") private var mailbox = "Inbox"
     private var accountFilter: UUID? { UUID(uuidString: accountFilterRaw) }
@@ -25,6 +24,7 @@ struct InboxView: View {
     @State private var showingSearch = false
     @State private var showingCompose = false
     @State private var editingDraft: LocalDraft?
+    @State private var draftLocation = DraftLocation.device
     @State private var showingTasks = false
     @State private var showingReceipts = false
     @State private var showingAttachments = false
@@ -33,7 +33,7 @@ struct InboxView: View {
     @State private var showingSubscriptions = false
     @State private var quickFilter = InboxQuickFilter.all
     @State private var sheetDestination: SheetDestination?
-    private enum SheetDestination { case accounts, settings, tasks, receipts, attachments, people, collections, subscriptions }
+    private enum SheetDestination { case accounts, settings, tasks, receipts, attachments, people, collections, subscriptions, search }
     @State private var selecting = false
     @State private var selectedIDs = Set<String>()
     @State private var confirmingTrash = false
@@ -56,7 +56,7 @@ struct InboxView: View {
     private let mailboxes = MailboxScope.names
     private var selectedAccounts: [MailAccount] { accounts.filter { accountFilter == nil || $0.id == accountFilter } }
     private var waitingUntil: Date? { selectedAccounts.compactMap { runtime.gmail?.waitingUntil[$0.id] }.filter { $0 > Date() }.max() }
-    private var uncertainCount: Int { uncertain.filter { accountFilter == nil || $0.accountID == accountFilter }.count }
+    private var uncertainCount: Int { outgoing.filter { ["scheduled", "sendFailed", "sendUnconfirmed"].contains($0.stateRaw) && (accountFilter == nil || $0.accountID == accountFilter) }.count }
     private var inboxError: String? {
         if let error = session.storageError { return error }
         if !accounts.isEmpty && runtime.connectivity.isConnected == false {
@@ -64,8 +64,28 @@ struct InboxView: View {
         }
         return selectedAccounts.first(where: { $0.lastSyncError != nil }).map { "\($0.email): \($0.lastSyncError ?? "")" } ?? runtime.gmail?.error
     }
+    @AppStorage("savedMailSearches") private var savedRaw = "[]"
+    private var smartSearch: SavedMailSearch? {
+        guard let labelFilter, labelFilter.hasPrefix("smart:") else { return nil }
+        return SavedMailSearch.decode(savedRaw).first { $0.id.uuidString == String(labelFilter.dropFirst(6)) }
+    }
     private var filtered: [MailMessage] {
-        messages.filter { row in
+        if let search = smartSearch {
+            let docs = messages.map { message in
+                let files = attachments.filter { $0.messageID == message.id }
+                let labels = folders.filter { $0.accountID == message.accountID && message.folderIDs.contains($0.remoteID) }.map(\.name)
+                return MailSearchDocument(id: message.id, accountID: message.accountID,
+                    fields: [message.subject, message.snippet, message.senderEmail, message.sender.displayName] + files.map(\.filename) + labels,
+                    isTrash: message.isTrash, isSpam: message.isSpam, sender: message.sender.displayName + " " + message.senderEmail,
+                    recipients: (message.to + message.cc + message.bcc).map(\.email), subject: message.subject,
+                    labels: labels + message.folderIDs, receivedAt: message.receivedAt, isRead: message.isRead,
+                    isStarred: message.isStarred, hasAttachments: !files.isEmpty)
+            }
+            let ids = Set(MailSearchIndex(documents: docs).matches(search.query, accountID: search.accountID,
+                includeTrashAndSpam: search.includeTrashAndSpam, filters: search.filters))
+            return messages.filter { ids.contains($0.id) }
+        }
+        return messages.filter { row in
             guard accountFilter == nil || row.accountID == accountFilter else { return false }
             return MailboxScope.contains(row, mailbox: mailbox, labelID: labelFilter)
         }
@@ -94,14 +114,30 @@ struct InboxView: View {
         }
     }
     private var mailboxTitle: String {
-        labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox
+        let base = smartSearch?.name ?? labelFilter.flatMap { id in folders.first { $0.remoteID == id && $0.accountID == accountFilter }?.name } ?? mailbox
+        return quickFilter == .all ? base : "\(quickFilter.rawValue) · \(base)"
+    }
+    private var activeFilter: Binding<InboxQuickFilter> {
+        Binding(get: {
+            if labelFilter == nil && mailbox == "Unread" { return .unread }
+            if labelFilter == nil && mailbox == "Starred" { return .starred }
+            return quickFilter
+        }, set: { value in
+            if labelFilter == nil && ["Inbox", "Unread", "Starred"].contains(mailbox) {
+                quickFilter = .all
+                mailbox = value == .all ? "Inbox" : value.rawValue
+            } else { quickFilter = value }
+        })
     }
     private var scopeTitle: String {
         accounts.first { $0.id == accountFilter }?.email ?? (accounts.isEmpty ? "Sample inbox" : "All accounts")
     }
 
     var body: some View {
-        mailList
+        Group {
+            if mailbox == "Catch Up" && labelFilter == nil { LocalMailOverview(accountID: accountFilter) }
+            else { mailList }
+        }
         // Recreate the list's size cache when reading density changes, rather than keeping old cell heights.
         .id("mail-density-\(compactInbox)-\(previewLines)")
         .listStyle(.plain)
@@ -112,8 +148,8 @@ struct InboxView: View {
         .environment(\.editMode, .constant(selecting ? .active : .inactive))
         .safeAreaInset(edge: .bottom) {
             if selecting { bulkToolbar }
-            else { composeDock }
         }
+        .safeAreaInset(edge: .top) { inboxHeader }
         .confirmationDialog("Move \(selectedMessages.count) loaded messages to Trash?", isPresented: $confirmingTrash, titleVisibility: .visible) {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
@@ -125,20 +161,35 @@ struct InboxView: View {
             organisationNow = Date()
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(showingDrawer ? .hidden : .visible, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text(mailboxTitle).font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader)
+                if mailbox == "Drafts" && labelFilter == nil { DraftLocationPicker(selection: $draftLocation) }
+                else { Text(mailboxTitle).font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader) }
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
                     .accessibilityIdentifier("mailboxDrawerButton")
+                    .disabled(showingDrawer)
             }
             ToolbarItem(placement: .primaryAction) {
                 profileMenu
+                    .disabled(showingDrawer)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Compose", systemImage: "square.and.pencil") { feedback.select(); showingCompose = true }
+                    .accessibilityIdentifier("composeButton")
+                    .disabled(showingDrawer)
             }
         }
-        .sheet(isPresented: $showingDrawer, onDismiss: presentDestination) {
-            MailboxSheet(accounts: accounts, folders: folders,
+        .overlay {
+          if showingDrawer {
+            GeometryReader { geometry in
+              ZStack(alignment: .leading) {
+                Color.black.opacity(0.22).ignoresSafeArea()
+                    .onTapGesture { showingDrawer = false }
+                    .accessibilityLabel("Close mailboxes").accessibilityAddTraits(.isButton)
+                MailboxPanel(accounts: accounts, folders: folders,
                 counts: Dictionary(uniqueKeysWithValues: mailboxes.map { name in
                     (name, name == "Drafts" ? draftCount : accounts.isEmpty && showSamples ? sampleUnread(name) : cachedUnread(accountID: accountFilter, mailbox: name))
                 }), accountCounts: accountUnreadCounts, labelCounts: labelUnreadCounts,
@@ -150,8 +201,21 @@ struct InboxView: View {
                 openAttachments: { sheetDestination = .attachments; showingDrawer = false },
                 openPeople: { sheetDestination = .people; showingDrawer = false },
                 openCollections: { sheetDestination = .collections; showingDrawer = false },
-                openSubscriptions: { sheetDestination = .subscriptions; showingDrawer = false })
+                openSearch: { showingDrawer = false; sheetDestination = .search },
+                openSubscriptions: { sheetDestination = .subscriptions; showingDrawer = false },
+                close: { showingDrawer = false })
+                  .frame(width: min(360, geometry.size.width * 0.88))
+                  .shadow(color: .black.opacity(0.15), radius: 16, x: 6)
+                  .transition(.move(edge: .leading))
+                  .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
+                      if value.translation.width < -60 && abs(value.translation.width) > abs(value.translation.height) { showingDrawer = false }
+                  })
+              }
+            }.transition(.opacity).zIndex(10)
+          }
         }
+        .animation(MailStyle.motion(reduced: reduceMotion), value: showingDrawer)
+        .onChange(of: showingDrawer) { _, open in if !open { presentDestination() } }
         .sheet(isPresented: $showingAccounts) {
             NavigationStack { AccountsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAccounts = false } } } }
                 .modifier(MailFeedbackOverlay(playsHaptics: false))
@@ -161,7 +225,9 @@ struct InboxView: View {
                 .modifier(MailFeedbackOverlay(playsHaptics: false))
         }
         .sheet(isPresented: $showingSearch) {
-            NavigationStack { LocalSearchView(initialAccountID: accountFilter) }
+            NavigationStack { LocalSearchView(initialAccountID: accountFilter, onClose: {
+                mailbox = "Inbox"; labelFilter = nil; quickFilter = .all; showingSearch = false
+            }) }
         }
         .sheet(isPresented: $showingCompose) {
             NavigationStack { ComposeView(draft: LocalDraft(accountID: accountFilter)) }
@@ -169,11 +235,8 @@ struct InboxView: View {
         .sheet(item: $editingDraft) { draft in
             NavigationStack { ComposeView(draft: draft) }
         }
-        .sheet(isPresented: $showingTasks) {
-            NavigationStack {
-                MailTasksView(accountID: accountFilter)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingTasks = false } } }
-            }.modifier(MailFeedbackOverlay(playsHaptics: false))
+        .navigationDestination(isPresented: $showingTasks) {
+            MailTasksView(accountID: accountFilter)
         }
         .sheet(isPresented: $showingReceipts) {
             NavigationStack {
@@ -209,14 +272,17 @@ struct InboxView: View {
         }
         .onChange(of: mailbox) { _, _ in quickFilter = .all; loadMailbox() }
         .task {
-            if !mailboxes.contains(mailbox) { mailbox = "Inbox" }
+            if !mailboxes.contains(mailbox) && mailbox != "Catch Up" { mailbox = "Inbox" }
             if let selected = accountFilter, !accounts.contains(where: { $0.id == selected }) { accountFilterRaw = "" }
             loadMailbox()
         }
         .onChange(of: accounts.map(\.id)) { _, ids in
             if let selected = accountFilter, !ids.contains(selected) { accountFilterRaw = "" }
         }
-        .onChange(of: accountFilter) { _, _ in labelFilter = nil; quickFilter = .all; loadMailbox() }
+        .onChange(of: accountFilter) { _, _ in
+            if smartSearch == nil || smartSearch?.accountID != accountFilter { labelFilter = nil }
+            quickFilter = .all; loadMailbox()
+        }
         .onChange(of: labelFilter) { _, _ in quickFilter = .all; loadMailbox() }
         .onChange(of: quickFilter) { _, _ in selectedIDs.removeAll() }
         .onChange(of: conversationRows) { _, _ in selectedIDs.removeAll() }
@@ -224,15 +290,11 @@ struct InboxView: View {
             refreshing = true
             defer { refreshing = false }
             await runtime.gmail?.syncAll()
-            if !accounts.isEmpty && (mailbox != "Snoozed" || labelFilter != nil) { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+            if smartSearch == nil && !accounts.isEmpty && !["Snoozed", "Catch Up"].contains(mailbox) { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
         }
     }
     private var mailList: some View {
         return List(selection: $selectedIDs) {
-            inboxHeader
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
-                .listRowSeparator(.hidden)
-                .listRowBackground(MailStyle.paper)
             if let error = inboxError {
                 Section {
                     DisclosureGroup {
@@ -267,7 +329,7 @@ struct InboxView: View {
                 Section {
                     NavigationLink { OutboxView(accountID: accountFilter) } label: {
                         HStack {
-                            Label("Sending needs confirmation", systemImage: "exclamationmark.circle")
+                            Label("Outbox", systemImage: "paperplane")
                             Spacer()
                             Text(uncertainCount, format: .number).foregroundStyle(.secondary)
                         }.font(.subheadline)
@@ -280,7 +342,7 @@ struct InboxView: View {
                 }
             }
             if mailbox == "Drafts" && labelFilter == nil {
-                DraftSections(accountID: accountFilter, onEdit: { editingDraft = $0 })
+                DraftSections(accountID: accountFilter, location: draftLocation, onEdit: { editingDraft = $0 })
             } else if !accounts.isEmpty {
                 cachedMailSection
             } else if showSamples {
@@ -350,7 +412,7 @@ struct InboxView: View {
                         }
                     }
                 }
-                ForEach(selectedAccounts.filter { (mailbox != "Snoozed" || labelFilter != nil) && runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
+                ForEach(selectedAccounts.filter { smartSearch == nil && (mailbox != "Snoozed" || labelFilter != nil) && runtime.gmail?.hasOlder($0.id, mailbox: mailbox, labelID: labelFilter) == true }) { account in
                     Button(selectedAccounts.count == 1 ? "Load older messages" : "Load older · \(account.email)") {
                         Task { await runtime.gmail?.loadOlder(account.id, mailbox: mailbox, labelID: labelFilter) }
                     }
@@ -363,59 +425,31 @@ struct InboxView: View {
     }
     private var inboxHeader: some View {
         InboxHeader(
-            filter: $quickFilter, showFilters: mailbox != "Drafts", allowStarred: !accounts.isEmpty,
-            canSelect: !accounts.isEmpty && mailbox != "Drafts", selecting: selecting,
+            filter: activeFilter, mailbox: Binding(get: { labelFilter == nil ? mailbox : "Custom" }, set: { value in
+                guard value != "Custom" else { return }
+                labelFilter = nil; quickFilter = .all; mailbox = value
+            }),
+            scopeTitle: mailboxTitle, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
+            canSelect: !accounts.isEmpty && !["Drafts", "Catch Up"].contains(mailbox), selecting: selecting,
             search: { feedback.select(); showingSearch = true },
             select: {
                 feedback.select()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { selecting.toggle(); selectedIDs.removeAll() }
-            })
+            }, updating: refreshing || selectedAccounts.contains { runtime.gmail?.syncing.contains($0.id) == true }, waitingUntil: waitingUntil)
     }
     private var profileMenu: some View {
-        Button { toggleDrawer()        } label: {
+        Button { feedback.select(); showingAccounts = true } label: {
             Group {
                 if let account = accounts.first(where: { $0.id == accountFilter }) { AccountBadge(account: account) }
                 else { Image(systemName: "person.crop.circle").font(.system(size: 21, weight: .regular)) }
             }.frame(minWidth: 44, minHeight: 44)
         }
-        .accessibilityLabel("Mail and tools")
+        .accessibilityLabel("Accounts")
         .accessibilityIdentifier("profileMenuButton")
-    }
-    private var composeDock: some View {
-        HStack(alignment: .center) {
-            HStack(spacing: 0) {
-                Button { feedback.select(); showingDrawer = true } label: {
-                    Label("Emails", systemImage: "envelope").frame(height: 56).padding(.horizontal, 14).contentShape(.rect)
-                }.accessibilityIdentifier("dockEmailsButton")
-                Divider().frame(height: 18)
-                Button { feedback.select(); showingTasks = true } label: {
-                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(height: 56).padding(.horizontal, 14).contentShape(.rect)
-                }.accessibilityIdentifier("dockTasksButton")
-            }.font(.subheadline.weight(.medium)).buttonStyle(.plain)
-                .glassEffect(.regular, in: .capsule)
-            Spacer(minLength: 12)
-            Button {
-                feedback.select(); showingCompose = true
-            } label: {
-                Image(systemName: "square.and.pencil").font(.system(size: 22, weight: .medium))
-                    .frame(width: 56, height: 56).contentShape(.circle)
-            }
-            .buttonStyle(.plain).foregroundStyle(.white)
-            .glassEffect(.regular.tint(MailStyle.accent).interactive(), in: .circle)
-            .accessibilityLabel("Compose").accessibilityIdentifier("composeButton")
-        }
-        .overlay(alignment: .topLeading) {
-            if refreshing || selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
-                ProgressView().frame(width: 32, height: 32).glassEffect(.regular, in: .circle)
-                    .offset(y: -40).accessibilityLabel("Updating mail").accessibilityIdentifier("mailSyncSpinner")
-            } else if let deadline = waitingUntil {
-                GmailWaitStatus(deadline: deadline).font(.caption).padding(8).glassEffect(.regular, in: .capsule).offset(y: -40)
-            }
-        }
-        .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 8)
     }
     private func presentDestination() {
         switch sheetDestination {
+        case .search: showingSearch = true
         case .accounts: showingAccounts = true
         case .settings: showingSettings = true
         case .tasks: showingTasks = true
@@ -437,8 +471,10 @@ struct InboxView: View {
     private func loadMailbox() {
         selecting = false; selectedIDs.removeAll()
         // The unified drafts section owns its initial load and provider-link refresh.
+        guard smartSearch == nil else { return }
         guard mailbox != "Drafts" || labelFilter != nil else { return }
         guard mailbox != "Snoozed" || labelFilter != nil else { return }
+        guard mailbox != "Catch Up" else { return }
         Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 
@@ -539,7 +575,7 @@ struct CachedMessageRow: View {
     @AppStorage("compactInbox") private var compactInbox = false
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.senderEmail, name: message.sender.displayName, size: compactInbox ? 36 : 38)
+            SenderAvatar(email: message.senderEmail, name: message.sender.displayName, size: compactInbox ? 36 : 38, context: message.subject)
                 .overlay(alignment: .bottomTrailing) {
                     if !isRead { Circle().fill(MailStyle.accent).frame(width: 9, height: 9).overlay(Circle().stroke(.background, lineWidth: 2)) }
                 }
@@ -558,12 +594,7 @@ struct CachedMessageRow: View {
                 }
                 Text(message.subject.isEmpty ? "No subject" : message.subject).font(.subheadline.weight(isRead ? .regular : .medium)).lineLimit(1)
                 if previewLines > 0 { Text(message.snippet).font(compactInbox ? .caption : .subheadline).foregroundStyle(.secondary).lineLimit(compactInbox ? min(previewLines, 1) : previewLines).fixedSize(horizontal: false, vertical: true) }
-                if let account {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color(mailHex: account.colourHex)).frame(width: 6, height: 6).accessibilityHidden(true)
-                        Text(account.displayName).lineLimit(1)
-                    }.font(.caption2).foregroundStyle(.secondary)
-                }
+
             }
         }.padding(.vertical, compactInbox ? 3 : 8)
         .padding(.leading, 10)

@@ -23,14 +23,11 @@ struct SecurityInspectorView: View {
     @State private var confirmAuthentication = false
     @State private var authenticationBusy = false
     @State private var authenticationTask: Task<Void, Never>?
+    @State private var inspecting = false
+    @State private var observations = MailSecurityObservations(html: "", text: "")
+    @State private var links: [MailSecurityObservations.Link] = []
     private var authenticationFindings: [SecurityFinding] { verifiedAuthentication ?? MailAuthentication.findings(headers: headers) }
     private var html: String { message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
-    private var observations: MailSecurityObservations { MailSecurityObservations(html: html, text: message.plainTextBody ?? message.snippet) }
-    private var links: [MailSecurityObservations.Link] {
-        let qr = MailSecurityObservations(html: "", text: (embeddedQR + inspections.values.flatMap(\.qrLinks)).joined(separator: "\n"))
-        var seen = Set<String>()
-        return (observations.links + qr.links).filter { seen.insert($0.destination).inserted }
-    }
     private var identityFindings: [SecurityFinding] { SenderSecurity.findings(sender: message.sender, replyTo: message.replyTo, history: history) }
     private var linkFinding: SecurityFinding {
         let known = Set(history.filter { !$0.spam }.map { SenderSecurity.domain($0.email) })
@@ -51,19 +48,28 @@ struct SecurityInspectorView: View {
     var body: some View {
         List {
             Section {
-                Label(report.verdict == .concern ? "Concerns found" : "Incomplete analysis", systemImage: report.verdict.symbol).font(.title3.weight(.semibold))
-                LabeledContent("Observed risk", value: "\(report.score)/100")
-                Text("\(report.unknownCount) checks remain unknown. Zero means no scored evidence was found, never that this email is safe. Points: sender 25, spam history 15, links 20, failed DKIM 20, type 30/file, QR concerns 15/image, VirusTotal flags 50/item; capped at 100.").font(.footnote).foregroundStyle(.secondary)
+                Label(report.verdict == .concern ? "Concerns found" : "Analysis incomplete", systemImage: report.verdict.symbol)
+                    .font(.headline).foregroundStyle(verdictColor(report.verdict))
+                overview("Authentication", authenticationFindings)
+                overview("Sender", identityFindings)
+                overview("Links", [linkFinding])
+                overview("Attachments", attachments.flatMap { file in
+                    if let value = inspections[file.id] { return [value.type, value.qr] }
+                    return [SecurityFinding(id: file.id.uuidString, title: file.filename, verdict: .unknown, explanation: "Not inspected")]
+                })
+                Text("Unknown checks do not establish safety.").font(.caption).foregroundStyle(.secondary)
+                if inspecting { HStack { ProgressView(); Text("Inspecting downloaded content…").font(.caption).foregroundStyle(.secondary) } }
             }
-            Section("Authentication & identity") {
+            Section {
+            DisclosureGroup("Authentication & identity") {
                 LabeledContent("Sender", value: message.senderEmail).textSelection(.enabled)
                 ForEach(authenticationFindings) { finding($0) }
                 Button(authenticationBusy ? "Verifying original message…" : "Verify original Gmail signature…") { confirmAuthentication = true }
                     .disabled(authenticationBusy || runtime.gmail == nil)
                 Text("Optional: downloads the original message from Gmail (up to 20 MB) and verifies full-body RSA/Ed25519 DKIM locally. Google Public DNS receives signing selectors/domains, the From domain and your IP. Sender-controlled DNS may observe queries or tracking identifiers in selectors. No email body or attachment bytes go to DNS. SPF and unsupported alignment remain unknown.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Phishing & impersonation") { ForEach(identityFindings) { finding($0) } }
-            Section("Links & redirects") {
+            DisclosureGroup("Sender details") { ForEach(identityFindings) { finding($0) } }
+            DisclosureGroup("Links & redirects (\(links.count))") {
                 finding(linkFinding)
                 ForEach(links) { link in
                     VStack(alignment: .leading, spacing: 6) {
@@ -73,7 +79,7 @@ struct SecurityInspectorView: View {
                     }
                 }
             }
-            Section("Attachments & SHA-256") {
+            DisclosureGroup("Attachments (\(attachments.count))") {
                 if attachments.isEmpty { Text("No attachments listed.").foregroundStyle(.secondary) }
                 ForEach(attachments) { file in
                     VStack(alignment: .leading, spacing: 6) {
@@ -91,26 +97,27 @@ struct SecurityInspectorView: View {
                 }
                 Text("Hashes identify contents; they are not safety verdicts. No local antivirus engine is installed. Preview accepts recognised PDF, raster image and UTF-8 text types; active content, mismatches and unidentified types are blocked.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("QR codes in cached content") {
+            DisclosureGroup("QR codes") {
                 finding(qrFinding)
                 ForEach(Array(embeddedQR.enumerated()), id: \.offset) { item in Text(item.element).font(.caption).textSelection(.enabled) }
                 Text("Vision inspects up to 12 embedded raster data images and downloaded raster attachments, first frame only, up to 20 megapixels. Remote images, CID images not stored as attachments, PDF pages and archives remain uninspected.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Tracking & privacy") {
+            DisclosureGroup("Tracking & privacy") {
                 LabeledContent("External images", value: observations.hasRemoteImages ? "Detected" : "None detected in cached HTML")
                 Label(imagesAllowed || remoteImages ? "Remote images allowed by your preference" : "Remote content blocked", systemImage: imagesAllowed || remoteImages ? SecurityVerdict.unknown.symbol : SecurityVerdict.checked.symbol)
                 LabeledContent("Possible tracking pixels", value: "\(observations.possibleTrackingPixels)")
                 Text("Scripts, frames, forms, objects, network connections and remote fonts are blocked. Remote images are blocked by default. Images with explicit one-pixel dimensions are removed even when images are enabled; other trackers may escape detection. Enabling images exposes requests, your IP and possibly message-specific tokens to their hosts.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Optional VirusTotal lookups") {
+            DisclosureGroup("VirusTotal") {
                 SecureField("VirusTotal API key (this sheet only)", text: $apiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Text("Each lookup requires your confirmation. URL lookups share the complete URL, including private query tokens. File lookups share only SHA-256 hashes, which may identify private files. VirusTotal receives your IP and API key. No attachment bytes or email bodies are uploaded. Only existing reports are retrieved; no scan is submitted. The key stays in memory while this sheet is open; report summaries stay in memory for this app session.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Storage & LiveContainer") {
+            DisclosureGroup("Device storage") {
                 ForEach(storageChecks) { finding($0) }
                 if let keychain { finding(keychain) }
-                Button("Check Keychain compatibility") { keychain = LocalMailProtection.keychainProbe() }
-                Text("LiveContainer supplies the host sandbox and entitlements. No custom Keychain group or Secure Enclave entitlement is requested. Successful checks cannot prove isolation from the host or other guest code. Device lock, relaunch, file-picker access and Quick Look require testing on your signed host.").font(.footnote).foregroundStyle(.secondary)
+                Button("Check Keychain") { keychain = LocalMailProtection.keychainProbe() }
+                Text("Credentials use this app’s device-only Keychain. Cached mail and attachments use protected files. Your installed signing profile determines access groups.").font(.footnote).foregroundStyle(.secondary)
+            }
             }
         }
         .navigationTitle("Security Inspector").navigationBarTitleDisplayMode(.inline)
@@ -133,9 +140,20 @@ struct SecurityInspectorView: View {
         }
     }
     private func finding(_ value: SecurityFinding) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Label(value.title, systemImage: value.verdict.symbol)
+        DisclosureGroup {
             Text(value.explanation).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+        } label: { Label(value.title, systemImage: value.verdict.symbol).foregroundStyle(verdictColor(value.verdict)) }
+    }
+    private func verdictColor(_ verdict: SecurityVerdict) -> Color {
+        switch verdict { case .checked: .green; case .unknown: .secondary; case .concern: .red }
+    }
+    private func overview(_ title: String, _ findings: [SecurityFinding]) -> some View {
+        let verdict = SecurityReport(findings: findings).verdict
+        return HStack {
+            Text(title)
+            Spacer()
+            Label(verdict == .checked ? "Checked" : verdict == .concern ? "Review" : "Unknown", systemImage: verdict.symbol)
+                .font(.subheadline).foregroundStyle(verdictColor(verdict))
         }
     }
     private func reputationRow(_ target: ReputationTarget) -> some View {
@@ -152,9 +170,12 @@ struct SecurityInspectorView: View {
         catch { reputations[target.sharedValue] = SecurityFinding(id: target.sharedValue, title: "VirusTotal reputation", verdict: .unknown, explanation: error.localizedDescription) }
     }
     private func inspect() async {
+        inspecting = true
+        defer { inspecting = false }
         authenticationTask?.cancel(); verifiedAuthentication = nil
+        let protection = LocalMailProtection.storageProtection(backgroundRefresh: UserDefaults.standard.bool(forKey: "backgroundMailRefresh"))
         storageChecks = await Task.detached(priority: .utility) {
-            [LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch"), title: "Email and draft file protection"),
+            [LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch"), title: "Email and draft file protection", protection: protection),
              LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Mail/Attachments"), title: "Received attachment file protection")]
         }.value
         headers = (try? runtime.repository?.securityHeaders(message.id)) ?? []
@@ -167,15 +188,26 @@ struct SecurityInspectorView: View {
             catch { inspectionErrors[file.id] = error.localizedDescription }
         }
         let content = html
-        let result = await Task.detached(priority: .utility) {
+        let plain = message.plainTextBody ?? message.snippet
+        let attachmentQR = inspections.values.flatMap(\.qrLinks)
+        let work = Task.detached(priority: .utility) {
             let images = QRCodeSecurity.embeddedImages(content)
             var values: [String] = []; var failures = 0
-            for data in images { do { values += try QRCodeSecurity.payloads(data) } catch { failures += 1 } }
-            return (values, images.count, failures)
-        }.value
+            for data in images {
+                if Task.isCancelled { break }
+                do { values += try QRCodeSecurity.payloads(data) } catch { failures += 1 }
+            }
+            let observations = MailSecurityObservations(html: content, text: plain)
+            let qr = MailSecurityObservations(html: "", text: (values + attachmentQR).joined(separator: "\n"))
+            var seen = Set<String>()
+            let links = (observations.links + qr.links).filter { seen.insert($0.destination).inserted }
+            return (values, images.count, failures, observations, links)
+        }
+        let result = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
         guard !Task.isCancelled else { return }
         embeddedQR = result.0
         qrFinding = QRCodeSecurity.embeddedFinding(result.0, imageCount: result.1, failures: result.2)
+        observations = result.3; links = result.4
     }
     private func verifyAuthentication() async {
         authenticationBusy = true; defer { authenticationBusy = false }

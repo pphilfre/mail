@@ -77,8 +77,8 @@ struct AddToCollectionView: View {
     @Query private var metadata: [StoreMetadata]
     @Environment(AppRuntime.self) private var runtime
     @Environment(\.dismiss) private var dismiss
-    @State private var creating = false
     @State private var errorMessage: String?
+    @State private var creating = false
     private var collections: [MailCollection] {
         metadata.filter { $0.key.hasPrefix(MailCollection.prefix) }.compactMap { try? MailCollection.decode($0) }.sorted { $0.name < $1.name }
     }
@@ -100,9 +100,9 @@ struct AddToCollectionView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .navigationTitle("Add to collection").navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-        .sheet(isPresented: $creating) {
-            NavigationStack { CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)])) }
+        .navigationDestination(isPresented: $creating) {
+            CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
         }
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
     }
 }

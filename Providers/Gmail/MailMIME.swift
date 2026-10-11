@@ -107,9 +107,11 @@ enum MailMIME {
     /// Native text only: no web view, JavaScript, navigation or remote-image loading.
     static func readableHTML(_ html: String) -> String {
         var text = html.replacingOccurrences(of: "(?is)<(script|style|head)\\b[^>]*>.*?</\\1\\s*>", with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: "(?i)<(?:br|/p|/div|/tr|/li|/h[1-6])\\b[^>]*>", with: "\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: "(?i)<(?:br|/p|/div|/tr|/td|/th|/li|/section|/blockquote|/h[1-6])\\b[^>]*>", with: "\n", options: .regularExpression)
         text = text.replacingOccurrences(of: "(?s)<[^>]*>", with: "", options: .regularExpression)
-        for (entity, replacement) in ["&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&amp;": "&"] {
+        for (entity, replacement) in ["&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'",
+            "&ndash;": "–", "&mdash;": "—", "&hellip;": "…", "&lsquo;": "‘", "&rsquo;": "’", "&ldquo;": "“", "&rdquo;": "”",
+            "&bull;": "•", "&euro;": "€", "&pound;": "£", "&copy;": "©", "&reg;": "®", "&amp;": "&"] {
             text = text.replacingOccurrences(of: entity, with: replacement)
         }
         if let regex = try? NSRegularExpression(pattern: "&#(x[0-9a-fA-F]+|[0-9]+);") {
@@ -177,14 +179,23 @@ enum MailMIME {
             data.base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed])
         }
         let textHeaders = "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64"
+        var contentHeaders = textHeaders
+        var contentBody = encoded(Data(normalizedBody.utf8)) + "\r\n"
+        if let html = draft.richBody?.html(matching: draft.body) {
+            let alternative = "dispatch_alt_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            contentHeaders = "Content-Type: multipart/alternative; boundary=\"\(alternative)\""
+            contentBody = "--\(alternative)\r\n\(textHeaders)\r\n\r\n" + contentBody
+                + "--\(alternative)\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                + encoded(Data(html.utf8)) + "\r\n--\(alternative)--\r\n"
+        }
         var body: String
         if attachments.isEmpty {
-            lines.append(textHeaders)
-            body = encoded(Data(normalizedBody.utf8)) + "\r\n"
+            lines.append(contentHeaders)
+            body = contentBody
         } else {
             let boundary = "dispatch_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
             lines.append("Content-Type: multipart/mixed; boundary=\"\(boundary)\"")
-            body = "--\(boundary)\r\n\(textHeaders)\r\n\r\n" + encoded(Data(normalizedBody.utf8)) + "\r\n"
+            body = "--\(boundary)\r\n\(contentHeaders)\r\n\r\n" + contentBody
             for file in attachments {
                 let type = file.mimeType.range(of: #"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"#, options: .regularExpression) != nil ? file.mimeType : "application/octet-stream"
                 body += "--\(boundary)\r\nContent-Type: \(type)\r\nContent-Transfer-Encoding: base64\r\n" +

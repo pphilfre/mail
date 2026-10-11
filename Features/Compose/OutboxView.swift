@@ -3,13 +3,15 @@ import SwiftData
 
 struct OutboxView: View {
     @Environment(AppRuntime.self) private var runtime
-    @Query(filter: #Predicate<OutgoingMessage> { $0.stateRaw == "sendUnconfirmed" }, sort: \OutgoingMessage.updatedAt, order: .reverse)
+    @Query(sort: \OutgoingMessage.updatedAt, order: .reverse)
     private var outgoing: [OutgoingMessage]
     @Query private var accounts: [MailAccount]
+    @Query private var metadata: [StoreMetadata]
+    @Environment(AppSession.self) private var session
     @State private var checking: Set<UUID> = []
     @State private var errors: [UUID: String] = [:]
     let accountID: UUID?
-    private var pending: [OutgoingMessage] { outgoing.filter { accountID == nil || $0.accountID == accountID } }
+    private var pending: [OutgoingMessage] { outgoing.filter { ["scheduled", "sendFailed", "sendUnconfirmed"].contains($0.stateRaw) && (accountID == nil || $0.accountID == accountID) } }
 
     var body: some View {
         List {
@@ -44,20 +46,31 @@ struct OutboxView: View {
                                 }
                             }
                         }
-                        Button {
+                        if row.stateRaw != "sendUnconfirmed" {
+                            if let saved = metadata.first(where: { $0.key == ScheduledDelivery.key(row.id) }),
+                               let delivery = try? JSONDecoder().decode(ScheduledDelivery.self, from: Data(saved.value.utf8)) {
+                                Text("Scheduled: " + delivery.date.formatted()).font(.caption)
+                            }
+                            if let error = row.lastError { Text(error).font(.caption).foregroundStyle(.red) }
+                            Text("Sends while Dispatch is open and online.").font(.caption).foregroundStyle(.secondary)
+                            Button("Cancel send and return to Drafts") {
+                                do { try runtime.repository?.cancelScheduled(row.id); try session.reloadDrafts() }
+                                catch { errors[row.id] = error.localizedDescription }
+                            }
+                        } else { Button {
                             check(row)
                         } label: {
                             HStack {
                                 Text("Check Sent in Gmail")
                                 if checking.contains(row.id) { Spacer(); ProgressView() }
                             }
-                        }.disabled(checking.contains(row.id))
+                        }.disabled(checking.contains(row.id)) }
                         if let error = errors[row.id] { Text(error).font(.caption).foregroundStyle(.secondary) }
                     }
                 }
             }
         }
-        .navigationTitle("Send confirmations")
+        .navigationTitle("Outbox")
         .navigationBarTitleDisplayMode(.inline)
     }
 

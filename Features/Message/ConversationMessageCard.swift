@@ -7,23 +7,20 @@ struct ConversationMessageCard: View {
     let message: MailMessage
     let attachments: [MailAttachment]
     let remoteImages: Bool
-    let onReply: () -> Void
-    let onReplyAll: () -> Void
-    let onForward: () -> Void
     let onSender: () -> Void
     let account: MailAccount?
     let onSecurity: () -> Void
     let onLoadImages: () -> Void
+    let onFocus: () -> Void
     @State private var expanded: Bool
 
     init(message: MailMessage, initiallyExpanded: Bool, attachments: [MailAttachment], remoteImages: Bool,
-         onReply: @escaping () -> Void, onReplyAll: @escaping () -> Void, onForward: @escaping () -> Void,
-         onSender: @escaping () -> Void, account: MailAccount? = nil, onSecurity: @escaping () -> Void = {}, onLoadImages: @escaping () -> Void = {}) {
+         onSender: @escaping () -> Void, account: MailAccount? = nil, onSecurity: @escaping () -> Void = {}, onLoadImages: @escaping () -> Void = {}, onFocus: @escaping () -> Void = {}) {
         self.message = message; self.attachments = attachments; self.remoteImages = remoteImages
-        self.onReply = onReply; self.onReplyAll = onReplyAll; self.onForward = onForward
         self.onSender = onSender
         self.account = account; self.onSecurity = onSecurity
         self.onLoadImages = onLoadImages
+        self.onFocus = onFocus
         _expanded = State(initialValue: initiallyExpanded)
     }
     private var bodyText: String {
@@ -34,16 +31,16 @@ struct ConversationMessageCard: View {
         return saved.report.verdict
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
           HStack(alignment: .top, spacing: 6) {
             Button { feedback.select(); onSender() } label: {
-                SenderAvatar(email: message.senderEmail, name: message.sender.displayName).frame(width: 44, height: 44).contentShape(.circle)
+                SenderAvatar(email: message.senderEmail, name: message.sender.displayName, context: message.subject).frame(width: 44, height: 44).contentShape(.circle)
             }.buttonStyle(.plain).disabled(!MailMIME.valid(message.senderEmail))
                 .accessibilityLabel("Show \(message.sender.displayName)’s contact sheet")
                 .accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
             Button {
                 feedback.select()
-                withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }
+                withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle(); if expanded { onFocus() } }
             } label: {
                 HStack(alignment: .top, spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -63,10 +60,6 @@ struct ConversationMessageCard: View {
             .accessibilityLabel("Message from \(message.sender.displayName), \(message.receivedAt.formatted())")
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityHint(expanded ? "Collapse message" : "Expand message")
-            Button { feedback.select(); onSecurity() } label: {
-                Image(systemName: securityVerdict.symbol).font(.title3).frame(width: 44, height: 44).contentShape(.rect)
-            }.buttonStyle(.plain).foregroundStyle(.secondary)
-                .accessibilityLabel("Security Inspector, \(securityVerdict == .concern ? "concerns found" : "analysis incomplete")").accessibilityIdentifier("securityInspector-\(message.remoteID)")
           }
             if expanded {
                 MessageRecipientDetails(message: message, account: account)
@@ -79,30 +72,10 @@ struct ConversationMessageCard: View {
                 MailBodyView(html: message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText, remoteImages: remoteImages)
                     .accessibilityIdentifier("conversationBody-\(message.remoteID)")
                 ForEach(attachments) { AttachmentRow(attachment: $0) }
-                if !message.isDraft {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) { replyButton; forwardButton; Spacer(minLength: 0); replyMenu }
-                        VStack(alignment: .leading, spacing: 10) { replyButton; forwardButton; replyMenu }
-                    }.padding(.top, 12)
-                }
             }
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, 8)
         .background(MailStyle.paper)
-    }
-    private var replyButton: some View {
-        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); onReply() }
-            .buttonStyle(.glassProminent).controlSize(.large)
-    }
-    private var forwardButton: some View {
-        Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
-            .buttonStyle(.glass).controlSize(.large)
-    }
-    private var replyMenu: some View {
-        Menu("More reply options", systemImage: "ellipsis") {
-            Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); onReplyAll() }
-            Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
-        }.labelStyle(.iconOnly).accessibilityLabel("More reply options").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
     }
 }
 
