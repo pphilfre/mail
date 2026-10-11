@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       test_filter:
-        description: 'Optional XCTest selector, such as DispatchUITests/DispatchUITests/testSampleMessageOpens'
+        description: 'Optional comma-separated XCTest selectors, such as DispatchTests,DispatchUITests/DispatchUITests/testSampleMessageOpens'
         required: false
         default: ''
         type: string
