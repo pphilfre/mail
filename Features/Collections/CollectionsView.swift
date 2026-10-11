@@ -78,6 +78,7 @@ struct AddToCollectionView: View {
     @Environment(AppRuntime.self) private var runtime
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
+    @State private var creating = false
     private var collections: [MailCollection] {
         metadata.filter { $0.key.hasPrefix(MailCollection.prefix) }.compactMap { try? MailCollection.decode($0) }.sorted { $0.name < $1.name }
     }
@@ -95,14 +96,13 @@ struct AddToCollectionView: View {
                 } label: { Label(collection.name, systemImage: included ? "checkmark.circle.fill" : "folder") }
                     .disabled(included)
             }
-            NavigationLink {
-                CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
-            } label: {
-                Label("New collection", systemImage: "folder.badge.plus")
-            }
+            Button("New collection", systemImage: "folder.badge.plus") { creating = true }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .navigationTitle("Add to collection").navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $creating) {
+            CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
+        }
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
     }
 }

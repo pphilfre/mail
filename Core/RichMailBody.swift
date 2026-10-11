@@ -75,6 +75,7 @@ struct RichMailBody: Codable, Equatable, Sendable {
             var prefix = 0
             var kind: String?
             if line.hasPrefix("• ") { prefix = 2; kind = "ul" }
+            else if line.hasPrefix("> ") { prefix = 2; kind = "blockquote" }
             else if let range = line.range(of: #"^\d+\. "#, options: .regularExpression) {
                 prefix = (String(line[range]) as NSString).length; kind = "ol"
             }
@@ -109,7 +110,7 @@ struct RichMailBody: Codable, Equatable, Sendable {
                 }
                 content += value
             }
-            paragraphs.append(kind == nil ? "<div>\(content.isEmpty ? "<br>" : content)</div>" : "<li>\(content)</li>")
+            paragraphs.append(kind == nil || kind == "blockquote" ? "<div>\(content.isEmpty ? "<br>" : content)</div>" : "<li>\(content)</li>")
             offset += length + 1
         }
         if let list { paragraphs.append("</\(list)>") }

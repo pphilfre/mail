@@ -71,17 +71,30 @@ import Observation
         changed?(); refresh(); view.becomeFirstResponder()
     }
     func list(numbered: Bool) {
+        paragraphs(numbered ? .numbered : .bulleted)
+    }
+    func quote() { paragraphs(.quote) }
+    private enum ParagraphKind { case numbered, bulleted, quote }
+    private func paragraphs(_ kind: ParagraphKind) {
         guard let view else { return }
         let source = view.text as NSString
         let range = source.paragraphRange(for: view.selectedRange)
         let paragraphText = source.substring(with: range)
         var lines = paragraphText.components(separatedBy: "\n")
         if lines.count > 1 && lines.last == "" { lines.removeLast() }
-        let remove = lines.allSatisfy { numbered ? $0.range(of: #"^\d+\. "#, options: .regularExpression) != nil : $0.hasPrefix("• ") }
+        let remove = lines.allSatisfy { line in
+            switch kind {
+            case .numbered: line.range(of: #"^\d+\. "#, options: .regularExpression) != nil
+            case .bulleted: line.hasPrefix("• ")
+            case .quote: line.hasPrefix("> ")
+            }
+        }
         var offset = range.location
         let edits = lines.enumerated().map { index, line -> (NSRange, String) in
-            let prefix = line.range(of: #"^(?:• |\d+\. )"#, options: .regularExpression).map { String(line[$0]).utf16.count } ?? 0
-            let edit = (NSRange(location: offset, length: prefix), remove ? "" : numbered ? "\(index + 1). " : "• ")
+            let prefix = line.range(of: #"^(?:• |\d+\. |> )"#, options: .regularExpression).map { String(line[$0]).utf16.count } ?? 0
+            let marker: String
+            switch kind { case .numbered: marker = "\(index + 1). "; case .bulleted: marker = "• "; case .quote: marker = "> " }
+            let edit = (NSRange(location: offset, length: prefix), remove ? "" : marker)
             offset += line.utf16.count + 1
             return edit
         }

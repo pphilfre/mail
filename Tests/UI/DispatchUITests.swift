@@ -362,7 +362,6 @@ final class DispatchUITests: XCTestCase {
         search.typeText("from:reader-fixture subject:layout")
         XCTAssertTrue(app.staticTexts["2 results"].waitForExistence(timeout: 5))
         app.buttons["Attachments"].tap()
-        app.buttons["With attachments"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["searchNoResults"].firstMatch.waitForExistence(timeout: 5))
     }
 
@@ -397,11 +396,11 @@ final class DispatchUITests: XCTestCase {
         app.buttons["Explore sample mail"].tap()
         XCTAssertTrue(app.buttons["mailboxDrawerButton"].waitForExistence(timeout: 5))
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["mailboxProfileMenu"].tap()
+        revealMailbox("mailbox-Accounts", app: app).tap()
         XCTAssertTrue(app.staticTexts["No accounts connected"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["mailboxSettingsButton"].tap()
+        revealMailbox("mailboxSettingsButton", app: app).tap()
         XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
         let swipePicker = app.descendants(matching: .any)["leadingSwipePicker"].firstMatch
         for _ in 0..<6 {
@@ -425,7 +424,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["composeButton"].isHittable)
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["mailboxSettingsButton"].tap()
+        revealMailbox("mailboxSettingsButton", app: app).tap()
         XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
         attachScreenshot("Settings redesign", app: app)
     }
@@ -441,7 +440,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(revealMailbox("mailbox-Receipts", app: app).isHittable)
         XCTAssertTrue(revealMailbox("mailbox-Subscriptions", app: app).isHittable)
         attachScreenshot("Compact navigation grid", app: app)
-        app.buttons["mailboxSettingsButton"].tap()
+        revealMailbox("mailboxSettingsButton", app: app).tap()
         let compact = app.switches["compactInboxToggle"]
         XCTAssertTrue(compact.waitForExistence(timeout: 5))
         XCTAssertTrue(compact.isHittable)
@@ -461,7 +460,7 @@ final class DispatchUITests: XCTestCase {
         let compactHeight = row.frame.height
         attachScreenshot("Compact inbox", app: app)
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["mailboxSettingsButton"].tap()
+        revealMailbox("mailboxSettingsButton", app: app).tap()
         app.buttons["previewLinesPicker"].tap()
         app.buttons["Off"].tap()
         app.buttons["Done"].tap()
@@ -631,7 +630,6 @@ final class DispatchUITests: XCTestCase {
         subject.tap(); subject.typeText(title)
         app.buttons["saveDraftButton"].tap()
         app.buttons["mailboxDrawerButton"].tap()
-        app.buttons["More mailboxes"].tap()
         revealMailbox("mailbox-Drafts", app: app).tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
         app.staticTexts[title].tap()

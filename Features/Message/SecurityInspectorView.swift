@@ -60,15 +60,16 @@ struct SecurityInspectorView: View {
                 Text("Unknown checks do not establish safety.").font(.caption).foregroundStyle(.secondary)
                 if inspecting { HStack { ProgressView(); Text("Inspecting downloaded content…").font(.caption).foregroundStyle(.secondary) } }
             }
-            Section { DisclosureGroup("Authentication & identity") {
+            Section {
+            DisclosureGroup("Authentication & identity") {
                 LabeledContent("Sender", value: message.senderEmail).textSelection(.enabled)
                 ForEach(authenticationFindings) { finding($0) }
                 Button(authenticationBusy ? "Verifying original message…" : "Verify original Gmail signature…") { confirmAuthentication = true }
                     .disabled(authenticationBusy || runtime.gmail == nil)
                 Text("Optional: downloads the original message from Gmail (up to 20 MB) and verifies full-body RSA/Ed25519 DKIM locally. Google Public DNS receives signing selectors/domains, the From domain and your IP. Sender-controlled DNS may observe queries or tracking identifiers in selectors. No email body or attachment bytes go to DNS. SPF and unsupported alignment remain unknown.").font(.footnote).foregroundStyle(.secondary)
-            } }
-            Section { DisclosureGroup("Sender details") { ForEach(identityFindings) { finding($0) } } }
-            Section { DisclosureGroup("Links & redirects (\(links.count))") {
+            }
+            DisclosureGroup("Sender details") { ForEach(identityFindings) { finding($0) } }
+            DisclosureGroup("Links & redirects (\(links.count))") {
                 finding(linkFinding)
                 ForEach(links) { link in
                     VStack(alignment: .leading, spacing: 6) {
@@ -77,8 +78,8 @@ struct SecurityInspectorView: View {
                         reputationRow(.url(link.destination))
                     }
                 }
-            } }
-            Section { DisclosureGroup("Attachments (\(attachments.count))") {
+            }
+            DisclosureGroup("Attachments (\(attachments.count))") {
                 if attachments.isEmpty { Text("No attachments listed.").foregroundStyle(.secondary) }
                 ForEach(attachments) { file in
                     VStack(alignment: .leading, spacing: 6) {
@@ -95,28 +96,29 @@ struct SecurityInspectorView: View {
                     }
                 }
                 Text("Hashes identify contents; they are not safety verdicts. No local antivirus engine is installed. Preview accepts recognised PDF, raster image and UTF-8 text types; active content, mismatches and unidentified types are blocked.").font(.footnote).foregroundStyle(.secondary)
-            } }
-            Section { DisclosureGroup("QR codes") {
+            }
+            DisclosureGroup("QR codes") {
                 finding(qrFinding)
                 ForEach(Array(embeddedQR.enumerated()), id: \.offset) { item in Text(item.element).font(.caption).textSelection(.enabled) }
                 Text("Vision inspects up to 12 embedded raster data images and downloaded raster attachments, first frame only, up to 20 megapixels. Remote images, CID images not stored as attachments, PDF pages and archives remain uninspected.").font(.footnote).foregroundStyle(.secondary)
-            } }
-            Section { DisclosureGroup("Tracking & privacy") {
+            }
+            DisclosureGroup("Tracking & privacy") {
                 LabeledContent("External images", value: observations.hasRemoteImages ? "Detected" : "None detected in cached HTML")
                 Label(imagesAllowed || remoteImages ? "Remote images allowed by your preference" : "Remote content blocked", systemImage: imagesAllowed || remoteImages ? SecurityVerdict.unknown.symbol : SecurityVerdict.checked.symbol)
                 LabeledContent("Possible tracking pixels", value: "\(observations.possibleTrackingPixels)")
                 Text("Scripts, frames, forms, objects, network connections and remote fonts are blocked. Remote images are blocked by default. Images with explicit one-pixel dimensions are removed even when images are enabled; other trackers may escape detection. Enabling images exposes requests, your IP and possibly message-specific tokens to their hosts.").font(.footnote).foregroundStyle(.secondary)
-            } }
-            Section { DisclosureGroup("VirusTotal") {
+            }
+            DisclosureGroup("VirusTotal") {
                 SecureField("VirusTotal API key (this sheet only)", text: $apiKey).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Text("Each lookup requires your confirmation. URL lookups share the complete URL, including private query tokens. File lookups share only SHA-256 hashes, which may identify private files. VirusTotal receives your IP and API key. No attachment bytes or email bodies are uploaded. Only existing reports are retrieved; no scan is submitted. The key stays in memory while this sheet is open; report summaries stay in memory for this app session.").font(.footnote).foregroundStyle(.secondary)
-            } }
-            Section { DisclosureGroup("Device storage") {
+            }
+            DisclosureGroup("Device storage") {
                 ForEach(storageChecks) { finding($0) }
                 if let keychain { finding(keychain) }
                 Button("Check Keychain") { keychain = LocalMailProtection.keychainProbe() }
                 Text("Credentials use this app’s device-only Keychain. Cached mail and attachments use protected files. Your installed signing profile determines access groups.").font(.footnote).foregroundStyle(.secondary)
-            } }
+            }
+            }
         }
         .navigationTitle("Security Inspector").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { dismiss() } } }

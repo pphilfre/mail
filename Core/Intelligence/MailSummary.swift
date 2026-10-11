@@ -9,9 +9,16 @@ struct MailSummarySource: Sendable, Equatable {
 
 enum MailSummaryPreparation {
     /// Keep every paragraph, exclude quoted history duplicated in a conversation, and never use subjects as bodies.
-    static func body(_ source: MailSummarySource) -> String {
+    static func body(_ source: MailSummarySource, includeQuotedHistory: Bool = false) -> String {
         let plain = source.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let extracted = plain.isEmpty ? MailMIME.readableHTML(source.html ?? "") : plain
+        if includeQuotedHistory {
+            return extracted.components(separatedBy: .newlines).map { line in
+                var value = line.trimmingCharacters(in: .whitespaces)
+                while value.hasPrefix(">") { value = String(value.dropFirst()).trimmingCharacters(in: .whitespaces) }
+                return value
+            }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         var lines: [String] = []
         for line in extracted.components(separatedBy: .newlines) {
             let clean = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -49,7 +56,7 @@ struct MailSummaryResult: Sendable {
     func summarise(_ sources: [MailSummarySource]) async throws -> MailSummaryResult {
         let preparation = Task.detached(priority: .userInitiated) {
             sources.map { source in
-                (source.sender, source.subject, MailSummaryPreparation.body(source))
+                (source.sender, source.subject, MailSummaryPreparation.body(source, includeQuotedHistory: sources.count == 1))
             }.filter { !$0.2.isEmpty }
         }
         let prepared = await withTaskCancellationHandler { await preparation.value } onCancel: { preparation.cancel() }

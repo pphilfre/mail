@@ -144,14 +144,11 @@ struct ComposeView: View {
                     if sendUnconfirmed { finished = true; dismiss() }
                     else if !hasCompositionContent { discard() }
                     else { save() }
-                }.accessibilityIdentifier("closeComposerButton").disabled(working || importingAttachments)
+                }.accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
+                    .disabled(working || importingAttachments)
             }
             ToolbarItem(placement: .confirmationAction) {
-                if accounts.isEmpty {
-                    Button("Save draft", action: save)
-                        .disabled(!hasCompositionContent || working || sendUnconfirmed)
-                        .accessibilityIdentifier("saveDraftButton")
-                } else {
+                if !accounts.isEmpty {
                     Button("Send", systemImage: "arrow.up") {
                         if draft.attachments.isEmpty && MailSignature.mentionsAttachment(draft.body) { confirmingAttachment = true }
                         else { perform(send: true) }
@@ -166,7 +163,6 @@ struct ComposeView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu("Composer options", systemImage: "ellipsis") {
                     Section("Draft") {
-                        Button("Save draft", systemImage: "square.and.pencil", action: save).disabled(draft.isEmpty || sendUnconfirmed)
                         Button("Save to Gmail", systemImage: "icloud.and.arrow.up") { perform(send: false) }
                             .disabled(draft.accountID == nil || draft.isEmpty || recipientErrors || sendUnconfirmed || runtime.gmail == nil)
                         Button("Discard changes", systemImage: "trash", role: .destructive) { confirmingClose = true }
@@ -376,6 +372,7 @@ struct ComposeView: View {
                 formatButton("Bulleted list", "list.bullet") { richEditor.list(numbered: false) }
                 formatButton("Numbered list", "list.number") { richEditor.list(numbered: true) }
                 formatButton("Add link", "link") { linkValue = ""; addingLink = true }
+                formatButton("Quote", "text.quote") { richEditor.quote() }
             }.padding(.horizontal, 12)
         }.background(.regularMaterial)
     }

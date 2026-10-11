@@ -52,7 +52,7 @@ struct GmailMessageView: View {
         _folders = Query(filter: #Predicate<MailFolder> { $0.accountID == accountID }, sort: \MailFolder.name)
     }
     @AppStorage("remoteImages") private var remoteImages = false
-    @State private var loadImagesOnce = false
+    @State private var loadedImageIDs = Set<UUID>()
     private var composing: LocalDraft? {
         get { guard case .compose(let draft)? = readerPresentation else { return nil }; return draft }
         nonmutating set { readerPresentation = newValue.map(ReaderPresentation.compose) }
@@ -117,10 +117,10 @@ struct GmailMessageView: View {
                 }
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
-                        attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
+                        attachments: files[row.id] ?? [], remoteImages: remoteImages || loadedImageIDs.contains(row.id),
                         onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) },
                         account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) },
-                        onLoadImages: { loadImagesOnce = true }, onFocus: { actionMessageID = row.id })
+                        onLoadImages: { loadedImageIDs.insert(row.id) }, onFocus: { actionMessageID = row.id })
                         .id(row.id)
                 }
                 if message.isDraft {
@@ -170,6 +170,7 @@ struct GmailMessageView: View {
             }
         }
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 ShareLink(item: MessageUtilities.readableCopy(actionMessage)) { Image(systemName: "square.and.arrow.up") }
@@ -263,7 +264,7 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { readerPresentation = nil } } }
             }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         case .security(let row):
-            NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadImagesOnce) }
+            NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadedImageIDs.contains(row.id)) }
         case .compose(let draft): NavigationStack { ComposeView(draft: draft) }
         case .task(let task): NavigationStack { MailTaskEditor(task: task) }
         case .receipt(let context): NavigationStack { ReceiptEditor(context: context) }
