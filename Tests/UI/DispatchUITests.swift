@@ -176,7 +176,11 @@ final class DispatchUITests: XCTestCase {
         let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
         XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
         openReaderActions(app: app); revealAction("addToCollectionButton", app: app).tap()
-        app.buttons["New collection"].tap()
+        XCTAssertTrue(app.navigationBars["Add to collection"].waitForExistence(timeout: 5))
+        let create = app.buttons["newReaderCollectionButton"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        XCTAssertTrue(create.isHittable)
+        create.tap()
         let name = app.textFields["collectionNameField"]
         XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("House move")
         app.buttons["saveCollectionButton"].tap()

@@ -56,8 +56,9 @@ and warm runs of the consolidated tree; do not present the estimated improvement
 
 The pipeline trades extra concurrent macOS runners for lower elapsed time. Simulator
 and device products cannot share compiled objects because SDKs/configurations differ;
-their dependency downloads can share a cache. Test execution requires its compilation
-outputs, so those stages cannot safely begin together.
+their dependency downloads can share a cache. Simulator migration starts alongside
+compilation. Test execution waits for compiled products from the same run; compilation
+failure stops the wait. The final gate still requires compilation and every shard to pass.
 
 ## Follow-up measurements and improvements
 

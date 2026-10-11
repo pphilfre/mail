@@ -5,6 +5,8 @@ Dispatch v0.8.1 retains the consolidated v0.8.0 functionality and further reduce
   every test and IPA check to pass.
 - Retains the compact-layout regression assertion while waiting for native switch state
   to settle on hosted simulators.
+- Uses explicit navigation state when creating a collection from the reader, preserving
+  the original conversation membership and the complete collection regression checks.
 
 Included from v0.8.0: consolidated mail productivity, local intelligence and security improvements.
 
