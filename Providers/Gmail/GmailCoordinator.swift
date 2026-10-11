@@ -71,7 +71,12 @@ final class GmailCoordinator {
     }
     func syncAll() async {
         error = nil
-        do { for account in try repository.accounts() where account.providerRaw == "gmail" { await sync(account.id) } }
+        do {
+            for account in try repository.accounts() where account.providerRaw == "gmail" {
+                guard !Task.isCancelled else { return }
+                await sync(account.id)
+            }
+        }
         catch { self.error = error.localizedDescription }
     }
     func sync(_ id: UUID) async {
@@ -106,6 +111,7 @@ final class GmailCoordinator {
         var messages: [GmailMessageDTO] = []; var deleted: Set<String> = []
         // Bounded memory and request concurrency; bodies never enter logs.
         for id in ids.sorted() {
+            try Task.checkCancellation()
             if skipCached, let cached = try repository.message(accountID: accountID, remoteID: id), !cached.folderIDs.contains("DRAFT") { continue }
             do { messages.append(try await api.message(id)) }
             catch GmailError.http(404) { deleted.insert(id) }

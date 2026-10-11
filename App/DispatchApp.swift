@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BackgroundTasks
 
 @main
 struct DispatchApp: App {
@@ -33,7 +34,13 @@ struct DispatchApp: App {
         }
         .onOpenURL { runtime.receiveShare($0) }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in runtime.localModel.cancel() }
-        .onChange(of: scenePhase) { _, phase in if phase == .background { runtime.localModel.cancel() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { runtime.localModel.cancel(); runtime.nativeServices.scheduleRefresh() }
+            if phase == .active { Task { await runtime.nativeServices.updateAuthorization() } }
+        }
+        }
+        .backgroundTask(.appRefresh(MailNativeServices.refreshIdentifier)) {
+            await runtime.refreshInBackground()
         }
     }
 }

@@ -1,32 +1,4 @@
-Dispatch v0.8.1 retains the consolidated v0.8.0 functionality and further reduces release validation time.
-
-- Starts simulator migration alongside compilation and balances the complete UI suite
-  across three isolated runners using measured durations. Publication still requires
-  every test and IPA check to pass.
-- Retains the compact-layout regression assertion while waiting for native switch state
-  to settle on hosted simulators.
-- Uses explicit navigation state when creating a collection from the reader, preserving
-  the original conversation membership and the complete collection regression checks.
-
-Included from v0.8.0: consolidated mail productivity, local intelligence and security improvements.
-
-- Native mail navigation, advanced search dropdowns and saved-search smart folders.
-- Device-local scheduled delivery with cancellation and Undo; organisation rules,
-  multiple signatures, templates/snippets, scanned PDF attachments and local file OCR.
-- Explicit List-Unsubscribe actions and original EML export.
-- App lock, incoming file sharing and optional on-device mail intelligence, with account
-  and search scope preserved. Model downloads remain optional.
-- Evidence-based attachment/QR inspection, original DKIM verification and aligned DMARC
-  checks with consent. Incomplete checks retain observed concerns and never imply safety.
-- Faster CI through shared simulator compilation, parallel UI shards, incremental build
-  caches and device compilation alongside full validation. Publication remains gated on
-  every release test, device build and checksum check.
-
-Scheduled delivery requires Dispatch to be open, unlocked and online. The unsigned IPA
-requires re-signing with a compatible sideloading tool; automated fixtures do not verify
-live Gmail delivery, push notifications or installation on a physical device.
-
-Included from v0.7.0: standalone tasks and faster mail controls and reader.
+Dispatch v0.7.0 adds standalone tasks and makes the mail controls and reader faster to use.
 
 - Create a task from a title without linking an email or connecting an account. Add status, priority, due date, notes, a list and checklist steps; search tasks and filter by list, progress or due date. Personal tasks survive account removal.
 - Use a single icon row for inbox search, All, Unread, Starred and selection. Sync status floats above the dock without increasing header height.
@@ -46,7 +18,7 @@ Included from v0.6.1:
 - Receipt detection recognises more transaction confirmations and uses HTML when plain text is empty or incomplete.
 - Fixed-width HTML emails fit the reader and resize with the available width. Email scripts remain disabled.
 
-Manual GitHub Actions builds run the full test suite alongside packaging. Publication is gated on both succeeding; artifacts from a failed run are not a validated release. Tag builds also publish a release, and manual builds can opt into publication.
+Manual GitHub Actions builds run the full test suite before saving an IPA and checksum as downloadable artifacts. Tag builds also publish a release.
 
 Included from v0.6.0: sender profiles, an attachment library, project collections and a subscription centre, alongside the v0.5.0 tasks, receipts and composer improvements.
 
@@ -74,6 +46,6 @@ Tasks and receipt corrections stay on this device. Task due dates do not schedul
 
 The release retains the v0.4.0 conversation inbox, bulk actions/Undo, search filters/saved searches, account signatures, recipient assistance, UI redesign and Gmail pacing fixes. Automated tests use fixtures and do not send personal mail.
 
-Tag builds run the full iOS test suite and device build; publication requires both to pass.
+Tag builds now run the full iOS test suite before building and publishing the device IPA.
 
 The IPA requires iOS 26 or later and is unsigned. Sign and install with your compatible sideloading tool and Apple account. Bundle identifier: dev.freddiephilpot.dispatch.

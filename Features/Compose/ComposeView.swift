@@ -37,6 +37,10 @@ struct ComposeView: View {
     @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var showingWriting = false
     @State private var writingSource = ""
+    @State private var richEditor = RichMailEditorController()
+    @State private var showingFormatting = false
+    @State private var addingLink = false
+    @State private var linkValue = ""
     private var sendingAccount: MailAccount? { accounts.first { $0.id == draft.accountID } }
     private var recipientErrors: Bool {
         [draft.to, draft.cc, draft.bcc].contains { !RecipientInput.invalid($0).isEmpty } ||
@@ -51,16 +55,18 @@ struct ComposeView: View {
     private var composeFields: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                recipientField("To", text: $draft.to).padding(.vertical, 14)
+                HStack(alignment: .top) {
+                    recipientField("To", text: $draft.to)
+                    if !showAdditionalRecipients && draft.cc.isEmpty && draft.bcc.isEmpty {
+                        Button("Cc / Bcc") { feedback.select(); showAdditionalRecipients = true }
+                            .font(.caption).frame(minHeight: 44)
+                    }
+                }.padding(.vertical, 4)
                 Divider()
                 if showAdditionalRecipients || !draft.cc.isEmpty || !draft.bcc.isEmpty {
-                    recipientField("Cc", text: $draft.cc).padding(.vertical, 14)
+                    recipientField("Cc", text: $draft.cc).padding(.vertical, 4)
                     Divider()
-                    recipientField("Bcc", text: $draft.bcc).padding(.vertical, 14)
-                    Divider()
-                } else {
-                    Button("Cc / Bcc", systemImage: "plus") { feedback.select(); showAdditionalRecipients = true }
-                        .font(.subheadline).padding(.vertical, 14)
+                    recipientField("Bcc", text: $draft.bcc).padding(.vertical, 4)
                     Divider()
                 }
                 HStack(spacing: 8) {
@@ -81,19 +87,19 @@ struct ComposeView: View {
                     Spacer(minLength: 0)
                 }.font(.subheadline).padding(.vertical, 10)
                 Divider()
-                TextField("Subject", text: $draft.subject)
-                    .font(.title3.weight(.semibold)).padding(.vertical, 16)
+                HStack(spacing: 8) {
+                    Text("Subject").foregroundStyle(.secondary)
+                    TextField("Subject", text: $draft.subject).font(.body.weight(.medium))
                     .accessibilityIdentifier("composeSubject")
                     .onChange(of: draft.subject) { _, _ in draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil }
+                }.font(.subheadline).padding(.vertical, 12)
                 Divider()
                 if !RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).isEmpty {
                     Text("Remove duplicate recipients: " + RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).sorted().joined(separator: ", "))
                         .font(.caption).foregroundStyle(.red).padding(.vertical, 8)
                 }
-                TextEditor(text: $draft.body)
-                    .font(.body).scrollContentBackground(.hidden)
-                    .frame(minHeight: 300).padding(.top, 14)
-                    .accessibilityLabel("Message body").accessibilityIdentifier("composeBody")
+                RichMailEditor(text: $draft.body, document: $draft.richBody, controller: richEditor)
+                    .frame(minHeight: 260)
                 ComposeAttachmentsView(draftID: draft.id, attachments: $draft.attachments, importing: $importingAttachments,
                     choosingFiles: $choosingFiles, photos: $photos) { attachmentError = $0 }
                     .padding(.vertical, 12)
@@ -113,17 +119,22 @@ struct ComposeView: View {
         composeFields
         .scrollDismissesKeyboard(.interactively)
         .background(MailStyle.paper)
-        .safeAreaInset(edge: .bottom) { composerDock }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+                if showingFormatting { formattingBar }
+                composerDock
+            }
+        }
         .modifier(MailFeedbackOverlay(playsHaptics: false))
         .navigationTitle("New message")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                MailCloseButton(title: "Close composer") {
+                Button("Done") {
                     if sendUnconfirmed { finished = true; dismiss() }
                     else if draft.isEmpty { discard() }
-                    else { confirmingClose = true }
-                }
+                    else { save() }
+                }.accessibilityIdentifier("closeComposerButton").disabled(working || importingAttachments)
             }
             ToolbarItem(placement: .confirmationAction) {
                 if accounts.isEmpty {
@@ -144,13 +155,11 @@ struct ComposeView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu("Composer options", systemImage: "ellipsis") {
-                    Section("Local assistance") {
-                        Button("Writing assistance", systemImage: "pencil.and.outline") { writingSource = draft.body; showingWriting = true }
-                    }
                     Section("Draft") {
                         Button("Save draft", systemImage: "square.and.pencil", action: save).disabled(draft.isEmpty || sendUnconfirmed)
                         Button("Save to Gmail", systemImage: "icloud.and.arrow.up") { perform(send: false) }
                             .disabled(draft.accountID == nil || draft.isEmpty || recipientErrors || sendUnconfirmed || runtime.gmail == nil)
+                        Button("Discard changes", systemImage: "trash", role: .destructive) { confirmingClose = true }
                     }
                     Section("Sending account") {
                         Picker("From", selection: $draft.accountID) {
@@ -242,7 +251,7 @@ struct ComposeView: View {
                 }
             }
         }
-        .interactiveDismissDisabled(!draft.isEmpty || importingAttachments)
+        .interactiveDismissDisabled(importingAttachments || working || sendUnconfirmed || saveError != nil)
         .onAppear {
             if editor == nil {
                 let saved = session.drafts.contains { $0.id == draft.id }
@@ -256,6 +265,11 @@ struct ComposeView: View {
                     let signature = signatureForAccount()
                     draft.body = MailSignature.insert(signature, in: draft.body)
                     if !signature.isEmpty { appliedSignature = signature }
+                } else {
+                    let signature = signatureForAccount()
+                    if !signature.isEmpty, MailSignature.replace(signature, with: signature, in: draft.body) != nil {
+                        appliedSignature = signature; manageSignature = true
+                    }
                 }
                 prepareSuggestions()
                 scheduleAutosave()
@@ -270,10 +284,14 @@ struct ComposeView: View {
         }
         .onDisappear { autosaveTask?.cancel(); checkpoint() }
         .disabled(working || importingAttachments)
-        .confirmationDialog("Keep this draft?", isPresented: $confirmingClose, titleVisibility: .visible) {
-            Button("Save draft", action: save)
+        .confirmationDialog("Discard your changes?", isPresented: $confirmingClose, titleVisibility: .visible) {
             Button("Discard changes", role: .destructive, action: discard)
             Button("Keep editing", role: .cancel) { }
+        } message: { Text("An existing draft returns to the version you opened. A new draft is deleted.") }
+        .alert("Add link", isPresented: $addingLink) {
+            TextField("https://example.com", text: $linkValue).textInputAutocapitalization(.never).autocorrectionDisabled()
+            Button("Add") { richEditor.link(linkValue) }.disabled(!RichMailBody.safeLink(linkValue))
+            Button("Cancel", role: .cancel) { }
         }
         .confirmationDialog("Your message mentions an attachment", isPresented: $confirmingAttachment, titleVisibility: .visible) {
             Button("Send without attachments") { perform(send: true) }
@@ -286,27 +304,27 @@ struct ComposeView: View {
             excluded: Set([draft.to, draft.cc, draft.bcc].flatMap(RecipientInput.tokens).compactMap { RecipientInput.address($0)?.email.lowercased() }))
     }
     private var composerDock: some View {
-        HStack(spacing: 6) {
-            Button(action: insertSignature) {
-                Image(systemName: "signature").frame(width: 48, height: 48).contentShape(.rect)
-            }.disabled(signatureForAccount().isEmpty).accessibilityLabel("Signature")
-            Menu {
-                Button("Add bullet") { draft.body += "\n• " }
-                Button("Add quote") { draft.body += "\n> " }
+        HStack(spacing: 0) {
+            Button {
+                feedback.select(); writingSource = draft.body; showingWriting = true
             } label: {
-                Image(systemName: "textformat").frame(width: 48, height: 48).contentShape(.rect)
-            }.accessibilityLabel("Text tools")
+                Image(systemName: "sparkles").foregroundStyle(MailIntelligenceStyle.gradient).frame(width: 44, height: 44)
+            }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton").disabled(draft.body.isEmpty)
+            Button { showingFormatting.toggle() } label: {
+                Image(systemName: "textformat").frame(width: 44, height: 44).contentShape(.rect)
+            }.foregroundStyle(showingFormatting ? MailStyle.accent : .primary).accessibilityLabel("Formatting")
+                .accessibilityAddTraits(showingFormatting ? .isSelected : [])
             if VNDocumentCameraViewController.isSupported {
                 Button { feedback.select(); showingScanner = true } label: {
-                    Image(systemName: "doc.viewfinder").frame(width: 48, height: 48).contentShape(.rect)
+                    Image(systemName: "doc.viewfinder").frame(width: 44, height: 44).contentShape(.rect)
                 }.accessibilityLabel("Scan document").disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
             }
             PhotosPicker(selection: $photos, maxSelectionCount: max(1, DraftAttachmentStore.maximumCount - draft.attachments.count), matching: .images, preferredItemEncoding: .current) {
-                Image(systemName: "photo").frame(width: 48, height: 48).contentShape(.rect)
+                Image(systemName: "photo").frame(width: 44, height: 44).contentShape(.rect)
             }.disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityLabel("Attach photo").accessibilityIdentifier("attachPhotoButton")
             Button { feedback.select(); choosingFiles = true } label: {
-                Image(systemName: "paperclip").frame(width: 48, height: 48).contentShape(.rect)
+                Image(systemName: "paperclip").frame(width: 44, height: 44).contentShape(.rect)
             }.accessibilityLabel("Attach file").disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityIdentifier("attachFileButton")
         }
@@ -322,6 +340,25 @@ struct ComposeView: View {
         guard !signature.isEmpty else { return }
         feedback.select()
         chooseSignature(signature)
+    }
+    private var formattingBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                formatButton("Bold", "bold", selected: richEditor.bold) { richEditor.toggleTrait(.traitBold) }
+                formatButton("Italic", "italic", selected: richEditor.italic) { richEditor.toggleTrait(.traitItalic) }
+                formatButton("Underline", "underline", selected: richEditor.underline) { richEditor.toggle(.underlineStyle) }
+                formatButton("Strikethrough", "strikethrough") { richEditor.toggle(.strikethroughStyle) }
+                formatButton("Bulleted list", "list.bullet") { richEditor.list(numbered: false) }
+                formatButton("Numbered list", "list.number") { richEditor.list(numbered: true) }
+                formatButton("Add link", "link") { linkValue = ""; addingLink = true }
+            }.padding(.horizontal, 12)
+        }.background(.regularMaterial)
+    }
+    private func formatButton(_ title: String, _ symbol: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(width: 44, height: 44) }
+            .buttonStyle(.plain).foregroundStyle(selected ? MailStyle.accent : .primary)
+            .background(selected ? MailStyle.accent.opacity(0.1) : .clear, in: .rect(cornerRadius: 8))
+            .accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : [])
     }
     private func chooseSignature(_ signature: String) {
         let known = accounts.flatMap { MailTextLibrary.read("Signatures", accountID: $0.id).map(\.body) }

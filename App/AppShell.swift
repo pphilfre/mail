@@ -8,6 +8,9 @@ struct AppShell: View {
     @Query(filter: #Predicate<StoreMetadata> { $0.key == "mail-triage-undo" }) private var undoMetadata: [StoreMetadata]
     @AppStorage("showSampleInbox") private var showSamples = false
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("selectedMailAccount") private var selectedAccount = ""
+    @State private var tab = MailTab.mail
+    private enum MailTab { case mail, tasks, search }
     @State private var feedback = MailFeedback()
     private var undoRecord: MailUndoRecord? {
         undoMetadata.first.flatMap { try? JSONDecoder().decode(MailUndoRecord.self, from: Data($0.value.utf8)) }
@@ -19,8 +22,16 @@ struct AppShell: View {
             if accounts.isEmpty && !showSamples {
                 NavigationStack { WelcomeView() }
             } else {
-                NavigationStack {
-                    InboxView()
+                TabView(selection: $tab) {
+                    Tab("Mail", systemImage: "envelope.fill", value: MailTab.mail) {
+                        NavigationStack { InboxView() }
+                    }
+                    Tab("Tasks", systemImage: "checklist", value: MailTab.tasks) {
+                        NavigationStack { MailTasksView(accountID: UUID(uuidString: selectedAccount)) }
+                    }
+                    Tab("Search", systemImage: "magnifyingglass", value: MailTab.search, role: .search) {
+                        NavigationStack { LocalSearchView(initialAccountID: UUID(uuidString: selectedAccount), dismissible: false) }
+                    }
                 }
             }
         }
@@ -44,7 +55,7 @@ struct AppShell: View {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
                 await runtime.deliverScheduledMail()
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
             }
         }
         .onChange(of: scenePhase) { _, phase in

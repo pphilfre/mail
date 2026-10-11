@@ -3,6 +3,7 @@ import SwiftData
 
 /// This parent observes cache changes; query text lives in the child so keystrokes do not rebuild snapshots.
 struct LocalSearchView: View {
+    var dismissible = true
     @Environment(AppSession.self) private var session
     @Query(sort: \MailMessage.receivedAt, order: .reverse) private var messages: [MailMessage]
     @Query(sort: \MailAccount.email) private var accounts: [MailAccount]
@@ -12,6 +13,9 @@ struct LocalSearchView: View {
     @State private var index = MailSearchIndex()
     @State private var indexing = true
     let initialAccountID: UUID?
+    init(initialAccountID: UUID?, dismissible: Bool = true) {
+        self.initialAccountID = initialAccountID; self.dismissible = dismissible
+    }
 
     private var samples: [SampleMessage] { accounts.isEmpty && showSamples ? session.sampleMessages : [] }
     private var documents: [MailSearchDocument] {
@@ -41,7 +45,7 @@ struct LocalSearchView: View {
         SearchResultsView(index: index, indexing: indexing,
                           mailByID: Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) }),
                           accounts: accounts, samplesByID: Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) }),
-                          initialAccountID: initialAccountID, documents: snapshot)
+                          initialAccountID: initialAccountID, documents: snapshot, dismissible: dismissible)
             .task(id: snapshot) {
                 indexing = true
                 let work = Task.detached(priority: .userInitiated) { MailSearchIndex(documents: snapshot) }
@@ -65,6 +69,7 @@ private struct SearchResultsView: View {
         let filters: MailSearchFilters
         let documents: [MailSearchDocument]
         let enabled: Bool
+        let indexing: Bool
     }
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.dismiss) private var dismiss
@@ -74,8 +79,10 @@ private struct SearchResultsView: View {
     let accounts: [MailAccount]
     let samplesByID: [UUID: SampleMessage]
     let documents: [MailSearchDocument]
+    let dismissible: Bool
     @State private var semanticEngine = MailSemanticSearch()
     @State private var semanticIDs: [UUID]?
+    @State private var resultIDs: [UUID] = []
     @State private var completedRequest: SemanticRequest?
     @AppStorage("semanticMailSearch") private var meaning = false
     @State private var query = ""
@@ -99,67 +106,49 @@ private struct SearchResultsView: View {
     private var recent: [String] { (try? JSONDecoder().decode([String].self, from: Data(recentRaw.utf8))) ?? [] }
 
     init(index: MailSearchIndex, indexing: Bool, mailByID: [UUID: MailMessage], accounts: [MailAccount],
-         samplesByID: [UUID: SampleMessage], initialAccountID: UUID?, documents: [MailSearchDocument]) {
+         samplesByID: [UUID: SampleMessage], initialAccountID: UUID?, documents: [MailSearchDocument], dismissible: Bool) {
         self.index = index; self.indexing = indexing; self.mailByID = mailByID
         self.accounts = accounts; self.samplesByID = samplesByID
         _accountID = State(initialValue: initialAccountID)
         self.documents = documents
+        self.dismissible = dismissible
     }
 
     var body: some View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed = MailSearchQuery(query)
         let request = SemanticRequest(query: query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam,
-                                      filters: filters, documents: documents, enabled: meaning)
+                                      filters: filters, documents: documents, enabled: meaning, indexing: indexing)
         let ready = completedRequest == request
-        let lexicalIDs = index.matches(query, accountID: accountID, includeTrashAndSpam: includeTrashAndSpam, filters: filters)
-        let ids = meaning && !ready ? [] : meaning ? semanticIDs ?? lexicalIDs : lexicalIDs
+        let ids = ready ? resultIDs : []
         List {
-            Picker("Search method", selection: $meaning) {
-                Text("Keywords").tag(false); Text("Meaning").tag(true)
-            }.pickerStyle(.segmented)
-            if meaning {
-                Text("Semantic search ranks up to 50 matches from the latest 1,000 cached emails in your scope. Uses Apple sentence embeddings when available for the query’s language.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if ready && semanticIDs == nil && !trimmed.isEmpty { Text("Sentence embeddings unavailable for this query; showing keyword matches.").font(.caption).foregroundStyle(.secondary) }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    filterChip("Unread", value: $filters.unread)
-                    filterChip("Starred", value: $filters.starred)
-                    Menu {
-                        Button("Any sender") { filters.sender = nil }
-                        Button("Enter sender…") { senderText = filters.sender ?? ""; showingSenderFilter = true }
-                        ForEach(Array(Set(mailByID.values.map(\.senderEmail))).sorted().prefix(30), id: \.self) { email in
-                            Button(email) { filters.sender = email }
-                        }
-                    } label: { Label(filters.sender ?? "Sender", systemImage: "person").lineLimit(1).frame(minHeight: 44) }
-                    Menu {
-                        Button("Any date") { filters.after = nil; filters.before = nil }
-                        Button("Last 7 days") { filters.after = Calendar.current.date(byAdding: .day, value: -7, to: Date()); filters.before = nil }
-                        Button("Last 30 days") { filters.after = Calendar.current.date(byAdding: .day, value: -30, to: Date()); filters.before = nil }
-                        Button("Date range…") { showingDateFilters = true }
-                    } label: { Label(filters.after != nil || filters.before != nil ? "Date filtered" : "Date", systemImage: "calendar").frame(minHeight: 44) }
-                    Menu {
-                        Button("Any attachments") { filters.attachments = false; filters.attachmentPresence = nil }
-                        Button("With attachments") { filters.attachments = false; filters.attachmentPresence = true }
-                        Button("Without attachments") { filters.attachments = false; filters.attachmentPresence = false }
-                    } label: { Label(filters.attachmentPresence == true ? "With files" : filters.attachmentPresence == false ? "Without files" : "Attachments", systemImage: "paperclip").frame(minHeight: 44) }
-                    Menu {
-                        Button("All accounts") { accountID = nil }
-                        ForEach(accounts) { account in Button(account.email) { accountID = account.id } }
-                    } label: { Label(accounts.first { $0.id == accountID }?.email ?? "Account", systemImage: "person.crop.circle").frame(minHeight: 44) }
-                    if filters.active { Button("Reset") { filters = MailSearchFilters(); accountID = nil }.font(.caption) }
-                }.padding(.vertical, 4)
+            HStack(spacing: 12) {
+                filterChip("Unread", value: $filters.unread)
+                filterChip("Starred", value: $filters.starred)
+                filterChip("Attachments", value: Binding(get: { filters.attachmentPresence == true }, set: { filters.attachments = false; filters.attachmentPresence = $0 ? true : nil }))
             }.listRowSeparator(.hidden)
-            if indexing || (meaning && !ready) {
+            if accounts.count > 1 {
+                Picker("Account", selection: $accountID) {
+                    Text("All accounts").tag(UUID?.none)
+                    ForEach(accounts) { Text($0.displayName).tag(Optional($0.id)) }
+                }.listRowSeparator(.hidden)
+            }
+            if filters.active || accountID != nil || includeTrashAndSpam || meaning {
+                HStack {
+                    Text(meaning ? "By meaning" : "Filtered mail").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Reset") { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false }
+                        .font(.caption)
+                }.listRowSeparator(.hidden)
+            }
+            if meaning && ready && semanticIDs == nil && !trimmed.isEmpty {
+                Text("Meaning search unavailable for this language. Showing keyword matches.").font(.caption).foregroundStyle(.secondary)
+            }
+            if indexing || !ready {
                 HStack { ProgressView(); Text("Preparing search…").foregroundStyle(.secondary) }
             } else if let error = parsed.error {
                 Label(error, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
             } else if trimmed.isEmpty && !filters.active && accountID == nil {
-                ContentUnavailableView("Search your mail", systemImage: "magnifyingglass",
-                    description: Text("Find people, subjects, labels, or attachment names in mail saved on this device."))
-                    .listRowBackground(Color.clear)
                 if !savedSearches.isEmpty {
                     Section("Saved searches") {
                         ForEach(savedSearches) { search in
@@ -184,11 +173,12 @@ private struct SearchResultsView: View {
                         Button("Clear recent searches") { recentRaw = "[]" }
                     }
                 }
-                Section("Search tips") {
-                    Text("Try from:alex, subject:\"weekend plans\", label:Work, before:2026-10-01 or has:attachment.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("Dates use your local calendar. after: includes the specified day; before: excludes it.")
-                        .font(.caption).foregroundStyle(.secondary)
+                Section("Suggestions") {
+                    ForEach(Array(Set(mailByID.values.map(\.senderEmail))).sorted().prefix(5), id: \.self) { email in
+                        Button(email, systemImage: "person.crop.circle") { query = "from:" + email }
+                    }
+                    Button("Mail with attachments", systemImage: "paperclip") { filters.attachmentPresence = true }
+                    Button("Unread mail", systemImage: "envelope.badge") { filters.unread = true }
                 }
             } else if ids.isEmpty {
                 ContentUnavailableView.search(text: trimmed)
@@ -226,23 +216,46 @@ private struct SearchResultsView: View {
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: request) {
-            guard meaning else { return }
+            guard !indexing else { return }
             do {
-                try await Task.sleep(for: .milliseconds(300))
-                let matches = try await semanticEngine.search(query, documents: documents, accountID: accountID,
-                    includeTrashAndSpam: includeTrashAndSpam, filters: filters)
+                if !trimmed.isEmpty { try await Task.sleep(for: .milliseconds(180)) }
+                let snapshot = index
+                let work = Task.detached(priority: .userInitiated) {
+                    snapshot.matches(request.query, accountID: request.accountID,
+                        includeTrashAndSpam: request.includeTrashAndSpam, filters: request.filters)
+                }
+                let lexical = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
                 try Task.checkCancellation()
-                semanticIDs = matches; completedRequest = request
+                let matches = meaning ? try await semanticEngine.search(query, documents: documents, accountID: accountID,
+                    includeTrashAndSpam: includeTrashAndSpam, filters: filters) : nil
+                try Task.checkCancellation()
+                semanticIDs = matches; resultIDs = matches ?? lexical; completedRequest = request
             } catch { }
         }
         .searchable(text: $query, isPresented: $searchPresented,
-                    placement: .navigationBarDrawer(displayMode: .always), prompt: "Search cached mail")
+                    placement: .navigationBarDrawer(displayMode: .always), prompt: "Search mail")
         .onSubmit(of: .search) { rememberQuery() }
         .onDisappear { rememberQuery() }
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            if dismissible { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             ToolbarItem(placement: .topBarLeading) {
                 Menu("Search options", systemImage: "line.3.horizontal.decrease") {
+                    Toggle("Search by meaning", isOn: $meaning)
+                    Menu("Sender") {
+                        Button("Any sender") { filters.sender = nil }
+                        Button("Choose sender…") { senderText = filters.sender ?? ""; showingSenderFilter = true }
+                    }
+                    Menu("Date") {
+                        Button("Any date") { filters.after = nil; filters.before = nil }
+                        Button("Last 7 days") { filters.after = Calendar.current.date(byAdding: .day, value: -7, to: Date()); filters.before = nil }
+                        Button("Last 30 days") { filters.after = Calendar.current.date(byAdding: .day, value: -30, to: Date()); filters.before = nil }
+                        Button("Date range…") { showingDateFilters = true }
+                    }
+                    Menu("Attachments") {
+                        Button("Any") { filters.attachments = false; filters.attachmentPresence = nil }
+                        Button("With attachments") { filters.attachments = false; filters.attachmentPresence = true }
+                        Button("Without attachments") { filters.attachments = false; filters.attachmentPresence = false }
+                    }
                     Toggle("Include Trash and Spam", isOn: $includeTrashAndSpam)
                     Toggle("Keep recent searches", isOn: $keepHistory)
                     Button("Save this search") { searchName = ""; namingSearch = true }
@@ -283,8 +296,8 @@ private struct SearchResultsView: View {
             HStack(spacing: 4) {
                 if value.wrappedValue { Image(systemName: "checkmark") }
                 Text(title)
-            }.font(.subheadline.weight(.medium)).padding(.horizontal, 14).frame(minHeight: 44)
-                .background(value.wrappedValue ? MailStyle.accent.opacity(0.1) : MailStyle.canvas, in: Capsule())
+            }.font(.subheadline.weight(.medium)).frame(minHeight: 44)
+                .foregroundStyle(value.wrappedValue ? MailStyle.accent : .secondary)
         }.buttonStyle(.plain).accessibilityAddTraits(value.wrappedValue ? [.isSelected] : [])
     }
     private func rememberQuery() {

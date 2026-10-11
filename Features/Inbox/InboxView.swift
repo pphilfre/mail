@@ -133,7 +133,10 @@ struct InboxView: View {
     }
 
     var body: some View {
-        mailList
+        Group {
+            if mailbox == "Catch Up" && labelFilter == nil { LocalMailOverview(accountID: accountFilter) }
+            else { mailList }
+        }
         // Recreate the list's size cache when reading density changes, rather than keeping old cell heights.
         .id("mail-density-\(compactInbox)-\(previewLines)")
         .listStyle(.plain)
@@ -144,8 +147,8 @@ struct InboxView: View {
         .environment(\.editMode, .constant(selecting ? .active : .inactive))
         .safeAreaInset(edge: .bottom) {
             if selecting { bulkToolbar }
-            else { composeDock }
         }
+        .safeAreaInset(edge: .top) { inboxHeader }
         .confirmationDialog("Move \(selectedMessages.count) loaded messages to Trash?", isPresented: $confirmingTrash, titleVisibility: .visible) {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
@@ -167,6 +170,10 @@ struct InboxView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 profileMenu
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Compose", systemImage: "square.and.pencil") { feedback.select(); showingCompose = true }
+                    .accessibilityIdentifier("composeButton")
             }
         }
         .sheet(isPresented: $showingDrawer, onDismiss: presentDestination) {
@@ -239,7 +246,7 @@ struct InboxView: View {
         }
         .onChange(of: mailbox) { _, _ in quickFilter = .all; loadMailbox() }
         .task {
-            if !mailboxes.contains(mailbox) { mailbox = "Inbox" }
+            if !mailboxes.contains(mailbox) && mailbox != "Catch Up" { mailbox = "Inbox" }
             if let selected = accountFilter, !accounts.contains(where: { $0.id == selected }) { accountFilterRaw = "" }
             loadMailbox()
         }
@@ -257,15 +264,11 @@ struct InboxView: View {
             refreshing = true
             defer { refreshing = false }
             await runtime.gmail?.syncAll()
-            if smartSearch == nil && !accounts.isEmpty && (mailbox != "Snoozed" || labelFilter != nil) { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
+            if smartSearch == nil && !accounts.isEmpty && !["Snoozed", "Catch Up"].contains(mailbox) { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
         }
     }
     private var mailList: some View {
         return List(selection: $selectedIDs) {
-            inboxHeader
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
-                .listRowSeparator(.hidden)
-                .listRowBackground(MailStyle.paper)
             if let error = inboxError {
                 Section {
                     DisclosureGroup {
@@ -278,12 +281,6 @@ struct InboxView: View {
                         Label(runtime.connectivity.isConnected == false ? "Offline · Saved mail is available" : "Mail needs attention",
                               systemImage: runtime.connectivity.isConnected == false ? "wifi.slash" : "exclamationmark.triangle").font(.subheadline)
                     }
-                }
-            }
-            if !accounts.isEmpty && mailbox == "Inbox" && labelFilter == nil {
-                Section {
-                    NavigationLink { LocalMailOverview(accountID: accountFilter, catchUp: true) } label: { Label("Catch up", systemImage: "text.badge.star") }
-                    NavigationLink { LocalMailOverview(accountID: accountFilter, catchUp: false) } label: { Label("Local categories", systemImage: "tray.2") }
                 }
             }
             if mailbox != "Drafts" && session.drafts.contains(where: { accountFilter == nil || $0.accountID == accountFilter }) {
@@ -402,8 +399,9 @@ struct InboxView: View {
     }
     private var inboxHeader: some View {
         InboxHeader(
-            filter: activeFilter, scopeTitle: mailboxTitle, showFilters: mailbox != "Drafts", allowStarred: !accounts.isEmpty,
-            canSelect: !accounts.isEmpty && mailbox != "Drafts", selecting: selecting,
+            filter: activeFilter, mailbox: Binding(get: { mailbox }, set: { labelFilter = nil; quickFilter = .all; mailbox = $0 }),
+            scopeTitle: mailboxTitle, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
+            canSelect: !accounts.isEmpty && !["Drafts", "Catch Up"].contains(mailbox), selecting: selecting,
             search: { feedback.select(); showingSearch = true },
             select: {
                 feedback.select()
@@ -480,6 +478,7 @@ struct InboxView: View {
         guard smartSearch == nil else { return }
         guard mailbox != "Drafts" || labelFilter != nil else { return }
         guard mailbox != "Snoozed" || labelFilter != nil else { return }
+        guard mailbox != "Catch Up" else { return }
         Task { await runtime.gmail?.loadMailbox(mailbox, accountID: accountFilter, labelID: labelFilter) }
     }
 

@@ -7,9 +7,6 @@ struct ConversationMessageCard: View {
     let message: MailMessage
     let attachments: [MailAttachment]
     let remoteImages: Bool
-    let onReply: () -> Void
-    let onReplyAll: () -> Void
-    let onForward: () -> Void
     let onSender: () -> Void
     let account: MailAccount?
     let onSecurity: () -> Void
@@ -17,10 +14,8 @@ struct ConversationMessageCard: View {
     @State private var expanded: Bool
 
     init(message: MailMessage, initiallyExpanded: Bool, attachments: [MailAttachment], remoteImages: Bool,
-         onReply: @escaping () -> Void, onReplyAll: @escaping () -> Void, onForward: @escaping () -> Void,
          onSender: @escaping () -> Void, account: MailAccount? = nil, onSecurity: @escaping () -> Void = {}, onLoadImages: @escaping () -> Void = {}) {
         self.message = message; self.attachments = attachments; self.remoteImages = remoteImages
-        self.onReply = onReply; self.onReplyAll = onReplyAll; self.onForward = onForward
         self.onSender = onSender
         self.account = account; self.onSecurity = onSecurity
         self.onLoadImages = onLoadImages
@@ -79,30 +74,10 @@ struct ConversationMessageCard: View {
                 MailBodyView(html: message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, text: bodyText, remoteImages: remoteImages)
                     .accessibilityIdentifier("conversationBody-\(message.remoteID)")
                 ForEach(attachments) { AttachmentRow(attachment: $0) }
-                if !message.isDraft {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) { replyButton; forwardButton; Spacer(minLength: 0); replyMenu }
-                        VStack(alignment: .leading, spacing: 10) { replyButton; forwardButton; replyMenu }
-                    }.padding(.top, 12)
-                }
             }
         }
         .padding(.vertical, 18)
         .background(MailStyle.paper)
-    }
-    private var replyButton: some View {
-        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); onReply() }
-            .buttonStyle(.glassProminent).controlSize(.large)
-    }
-    private var forwardButton: some View {
-        Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
-            .buttonStyle(.glass).controlSize(.large)
-    }
-    private var replyMenu: some View {
-        Menu("More reply options", systemImage: "ellipsis") {
-            Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); onReplyAll() }
-            Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); onForward() }
-        }.labelStyle(.iconOnly).accessibilityLabel("More reply options").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
     }
 }
 

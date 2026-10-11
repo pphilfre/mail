@@ -10,7 +10,3 @@ if ! command -v xcodegen >/dev/null 2>&1; then
 fi
 xcodegen --version
 xcodegen generate --spec project.yml
-if [[ -f Configuration/Package.resolved ]]; then
-  mkdir -p Dispatch.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
-  cp Configuration/Package.resolved Dispatch.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-fi

@@ -13,6 +13,7 @@ final class AppRuntime {
     var securityReports: [UUID: (fingerprint: String, report: SecurityReport)] = [:]
     let appLock = MailAppLock()
     let localModel = LocalMailModel()
+    let nativeServices = MailNativeServices()
     var sharedDraft: LocalDraft?
     var shareError: String?
     @ObservationIgnored private var pendingShares: [URL] = []

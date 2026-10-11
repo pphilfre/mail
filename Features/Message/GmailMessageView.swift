@@ -3,7 +3,7 @@ import SwiftData
 import Translation
 
 private enum ReaderPresentation: Identifiable {
-    case actions, move, contact, calendar, collection, insights
+    case actions, move, contact, calendar, collection
     case security(MailMessage), compose(LocalDraft), task(MailTask), receipt(ReceiptEditContext)
     case sender(SenderProfileRequest), pdf(MessageExport)
     var id: String {
@@ -13,7 +13,6 @@ private enum ReaderPresentation: Identifiable {
         case .contact: "contact"
         case .calendar: "calendar"
         case .collection: "collection"
-        case .insights: "insights"
         case .security(let row): "security-\(row.id)"
         case .compose(let draft): "compose-\(draft.id)"
         case .task(let task): "task-\(task.id)"
@@ -103,6 +102,10 @@ struct GmailMessageView: View {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)
                     .font(.title2.weight(.bold)).textSelection(.enabled)
                     .padding(.horizontal, 4).padding(.vertical, 8)
+                InlineMailSummary(sources: thread.map {
+                    MailSummarySource(sender: $0.sender.displayName, subject: $0.subject,
+                        text: $0.plainTextBody, html: $0.cachedHTML.flatMap { String(data: $0, encoding: .utf8) })
+                }, loadingBody: loadingThread)
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
                     VStack(alignment: .leading, spacing: 8) {
@@ -113,7 +116,6 @@ struct GmailMessageView: View {
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
                         attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
-                        onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) },
                         onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) },
                         account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) }, onLoadImages: { loadImagesOnce = true })
                         .id(row.id)
@@ -167,13 +169,14 @@ struct GmailMessageView: View {
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }
-                    .labelStyle(.iconOnly).accessibilityIdentifier("localInsightsButton")
                 ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
                     Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(message) }.labelStyle(.iconOnly)
-                    Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(message, all: false) }.labelStyle(.iconOnly)
+                    Menu("Reply", systemImage: "arrowshape.turn.up.left") {
+                        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(message, all: false) }
+                        Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); reply(message, all: true) }
+                    }.labelStyle(.iconOnly)
                 }
             }
         }
@@ -267,7 +270,6 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { readerPresentation = nil } } }
             }
         case .collection: NavigationStack { AddToCollectionView(message: message) }
-        case .insights: NavigationStack { MailInsightsView(mails: thread.suffix(30).map { IntelligenceMail($0) }) }
         case .contact: SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea()
         case .calendar: MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea()
         case .pdf(let file): MessageShareSheet(url: file.url)

@@ -13,7 +13,6 @@ trap 'kill "$boot_pid" 2>/dev/null || true' EXIT
 destination="platform=iOS Simulator,id=$simulator_id"
 common=(-project Dispatch.xcodeproj -scheme Dispatch -configuration Debug
   -destination "$destination" -derivedDataPath build/DerivedData
-  -clonedSourcePackagesDirPath build/SourcePackages -disableAutomaticPackageResolution -skipPackageUpdates
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= ONLY_ACTIVE_ARCH=YES)
 xcodebuild "${common[@]}" build-for-testing 2>&1 | tee build/build.log
 codesign -d --entitlements - build/DerivedData/Build/Products/Debug-iphonesimulator/Dispatch.app \
@@ -28,4 +27,5 @@ xcodebuild "${common[@]}" test-without-building -parallel-testing-enabled NO \
 if [[ -z "${DISPATCH_TEST_ONLY:-}" ]]; then
   app_container="$(xcrun simctl get_app_container "$simulator_id" dev.freddiephilpot.dispatch data)"
   python3 scripts/verify-compose-mime.py "$app_container/Library/Application Support/Dispatch/compose-mime-fixture.eml"
+  python3 scripts/verify-rich-compose-mime.py "$app_container/Library/Application Support/Dispatch/rich-compose-mime-fixture.eml"
 fi

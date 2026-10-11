@@ -10,6 +10,7 @@ struct InboxHeader: View {
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var filter: InboxQuickFilter
+    @Binding var mailbox: String
     let scopeTitle: String
     let showFilters: Bool
     let allowStarred: Bool
@@ -19,6 +20,13 @@ struct InboxHeader: View {
     let select: () -> Void
 
     var body: some View {
+        VStack(spacing: 4) {
+            Picker("Mailbox", selection: $mailbox) {
+                Text("Inbox").tag("Inbox")
+                Text("Catch Up").tag("Catch Up")
+                Text("Sent").tag("Sent")
+                if !["Inbox", "Catch Up", "Sent"].contains(mailbox) { Text(scopeTitle).tag(mailbox) }
+            }.pickerStyle(.segmented).accessibilityIdentifier("mailboxSelector")
         HStack(spacing: 8) {
             Button(action: search) {
                 Image(systemName: "magnifyingglass").frame(width: 44, height: 44).contentShape(.rect)
@@ -36,10 +44,9 @@ struct InboxHeader: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        Label(scopeTitle, systemImage: filter.symbol).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                        Label(filter == .all ? "Filter" : filter.rawValue, systemImage: "line.3.horizontal.decrease").lineLimit(1)
                     }.font(.subheadline.weight(.medium)).padding(.horizontal, 14).frame(minHeight: 44)
-                }.buttonStyle(.plain).glassEffect(.regular.interactive(), in: .capsule)
+                }.buttonStyle(.plain).foregroundStyle(filter == .all ? .secondary : MailStyle.accent)
                     .accessibilityIdentifier("inboxFilterMenu").accessibilityValue(scopeTitle)
             }
             Spacer(minLength: 0)
@@ -50,5 +57,6 @@ struct InboxHeader: View {
                     .accessibilityIdentifier("selectMailButton")
             }
         }
+        }.padding(.horizontal, 20).padding(.top, 8).background(MailStyle.paper)
     }
 }
