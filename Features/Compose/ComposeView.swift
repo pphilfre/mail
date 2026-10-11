@@ -23,6 +23,8 @@ struct ComposeView: View {
     @State private var finished = false
     @State private var suggestions: [RecipientSuggestion] = []
     @State private var appliedSignature: String?
+    @State private var appliedSignatureID: UUID?
+    @State private var signatureAccountID: UUID?
     @State private var manageSignature = false
     @State private var confirmingAttachment = false
     @State private var importingAttachments = false
@@ -37,10 +39,18 @@ struct ComposeView: View {
     @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var showingWriting = false
     @State private var writingSource = ""
+    @State private var writingSnapshot = ""
+    @State private var writingRange = NSRange(location: 0, length: 0)
     @State private var richEditor = RichMailEditorController()
     @State private var showingFormatting = false
     @State private var addingLink = false
     @State private var linkValue = ""
+    @State private var openedSavedDraft = false
+    private var hasCompositionContent: Bool {
+        if openedSavedDraft || !draft.attachments.isEmpty || [draft.to, draft.cc, draft.bcc, draft.subject].contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { return !draft.isEmpty }
+        guard let appliedSignature, !appliedSignature.isEmpty else { return !draft.isEmpty }
+        return draft.body != MailSignature.insert(appliedSignature, in: "")
+    }
     private var sendingAccount: MailAccount? { accounts.first { $0.id == draft.accountID } }
     private var recipientErrors: Bool {
         [draft.to, draft.cc, draft.bcc].contains { !RecipientInput.invalid($0).isEmpty } ||
@@ -106,10 +116,10 @@ struct ComposeView: View {
                 if let saveError { Text(saveError).font(.callout).foregroundStyle(.red).padding(.vertical, 8) }
                 if let attachmentError { Text(attachmentError).font(.callout).foregroundStyle(.red).padding(.vertical, 8) }
                 if working { ProgressView("Contacting Gmail…").padding(.vertical, 8) }
-                if editor?.isSaved(draft) == true {
+                if hasCompositionContent && editor?.isSaved(draft) == true {
                     Text("Saved on this device").font(.caption).foregroundStyle(.secondary)
                         .accessibilityIdentifier("draftAutosaveStatus")
-                } else if !draft.isEmpty {
+                } else if hasCompositionContent {
                     Text(saveError == nil ? "Saving draft…" : "Draft couldn’t save").font(.caption).foregroundStyle(.secondary)
                 }
             }.padding(.horizontal, 20).padding(.bottom, 16).frame(maxWidth: 760).frame(maxWidth: .infinity)
@@ -132,14 +142,14 @@ struct ComposeView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") {
                     if sendUnconfirmed { finished = true; dismiss() }
-                    else if draft.isEmpty { discard() }
+                    else if !hasCompositionContent { discard() }
                     else { save() }
                 }.accessibilityIdentifier("closeComposerButton").disabled(working || importingAttachments)
             }
             ToolbarItem(placement: .confirmationAction) {
                 if accounts.isEmpty {
                     Button("Save draft", action: save)
-                        .disabled(draft.isEmpty || working || sendUnconfirmed)
+                        .disabled(!hasCompositionContent || working || sendUnconfirmed)
                         .accessibilityIdentifier("saveDraftButton")
                 } else {
                     Button("Send", systemImage: "arrow.up") {
@@ -184,7 +194,7 @@ struct ComposeView: View {
                         ForEach(MailTextLibrary.read("Signatures", accountID: draft.accountID)) { item in
                             Button(item.name) {
                                 feedback.select()
-                                chooseSignature(item.body)
+                                chooseSignature(item.body, id: item.id)
                             }
                         }
                         Button("Manage signatures") { textLibrary = "Signatures"; showingTextLibrary = true }.disabled(sendingAccount == nil)
@@ -213,7 +223,7 @@ struct ComposeView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingTextLibrary) {
+        .sheet(isPresented: $showingTextLibrary, onDismiss: { if textLibrary == "Signatures" { updateSignature() } }) {
             NavigationStack {
                 MailTextLibraryView(kind: textLibrary ?? "Snippets", accountID: textLibrary == "Signatures" ? draft.accountID : nil)
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showingTextLibrary = false } } }
@@ -232,7 +242,7 @@ struct ComposeView: View {
                     }
             }.presentationDetents([.medium])
         }
-        .sheet(isPresented: $showingSignatureSettings) {
+        .sheet(isPresented: $showingSignatureSettings, onDismiss: updateSignature) {
             if let sendingAccount {
                 NavigationStack {
                     AccountPreferencesView(account: sendingAccount)
@@ -246,8 +256,10 @@ struct ComposeView: View {
         .sheet(isPresented: $showingWriting) {
             NavigationStack {
                 LocalWritingView(text: writingSource, tasks: [.polish, .shorten, .reply]) { suggestion in
-                    guard draft.body == writingSource else { saveError = "The draft changed while generating. Your current writing was kept."; return }
-                    draft.body = suggestion
+                    guard draft.body == writingSnapshot else { saveError = "The draft changed while generating. Your current writing was kept."; return }
+                    let next = (draft.body as NSString).replacingCharacters(in: writingRange, with: suggestion)
+                    draft.richBody = draft.richBody?.replacingText(with: next)
+                    draft.body = next
                 }
             }
         }
@@ -255,6 +267,7 @@ struct ComposeView: View {
         .onAppear {
             if editor == nil {
                 let saved = session.drafts.contains { $0.id == draft.id }
+                openedSavedDraft = saved
                 manageSignature = !saved
                 editor = DraftEditingSession(draft: draft, alreadySaved: saved)
                 if let id = draft.accountID, !accounts.contains(where: { $0.id == id }) { draft.accountID = nil }
@@ -264,11 +277,16 @@ struct ComposeView: View {
                 if !saved {
                     let signature = signatureForAccount()
                     draft.body = MailSignature.insert(signature, in: draft.body)
-                    if !signature.isEmpty { appliedSignature = signature }
+                    if !signature.isEmpty {
+                        appliedSignature = signature
+                        appliedSignatureID = MailTextLibrary.read("Signatures", accountID: draft.accountID).first?.id
+                        signatureAccountID = draft.accountID
+                    }
                 } else {
-                    let signature = signatureForAccount()
-                    if !signature.isEmpty, MailSignature.replace(signature, with: signature, in: draft.body) != nil {
-                        appliedSignature = signature; manageSignature = true
+                    let candidates = MailTextLibrary.read("Signatures", accountID: draft.accountID).sorted { $0.body.count > $1.body.count }
+                    if let match = candidates.first(where: { MailSignature.replace($0.body, with: $0.body, in: draft.body) != nil }) {
+                        appliedSignature = match.body; appliedSignatureID = match.id
+                        signatureAccountID = draft.accountID; manageSignature = true
                     }
                 }
                 prepareSuggestions()
@@ -306,7 +324,14 @@ struct ComposeView: View {
     private var composerDock: some View {
         HStack(spacing: 0) {
             Button {
-                feedback.select(); writingSource = draft.body; showingWriting = true
+                feedback.select()
+                writingSnapshot = draft.body
+                if let view = richEditor.view, view.text == draft.body, view.selectedRange.length > 0 {
+                    let selection = view.selectedRange
+                    writingRange = selection
+                } else { writingRange = NSRange(MailSignature.authoredRange(in: draft.body), in: draft.body) }
+                writingSource = (draft.body as NSString).substring(with: writingRange)
+                showingWriting = true
             } label: {
                 Image(systemName: "sparkles").foregroundStyle(MailIntelligenceStyle.gradient).frame(width: 44, height: 44)
             }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton").disabled(draft.body.isEmpty)
@@ -360,15 +385,19 @@ struct ComposeView: View {
             .background(selected ? MailStyle.accent.opacity(0.1) : .clear, in: .rect(cornerRadius: 8))
             .accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : [])
     }
-    private func chooseSignature(_ signature: String) {
+    private func chooseSignature(_ signature: String, id: UUID? = nil) {
         let known = accounts.flatMap { MailTextLibrary.read("Signatures", accountID: $0.id).map(\.body) }
         draft.body = MailSignature.choose(signature, replacing: known + [appliedSignature].compactMap { $0 }, in: draft.body)
         appliedSignature = signature
+        appliedSignatureID = id ?? MailTextLibrary.read("Signatures", accountID: draft.accountID).first { $0.body == signature }?.id
+        signatureAccountID = draft.accountID
+        manageSignature = true
     }
 
     private func signatureForAccount() -> String {
         guard let id = draft.accountID else { return "" }
-        let value = MailTextLibrary.read("Signatures", accountID: id).first?.body ?? ""
+        let items = MailTextLibrary.read("Signatures", accountID: id)
+        let value = (signatureAccountID == id ? items.first { $0.id == appliedSignatureID } : nil)?.body ?? items.first?.body ?? ""
         return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : value
     }
     private func updateSignature() {
@@ -381,6 +410,8 @@ struct ComposeView: View {
             draft.body = MailSignature.insert(next, in: draft.body)
         }
         appliedSignature = next.isEmpty ? nil : next
+        appliedSignatureID = MailTextLibrary.read("Signatures", accountID: draft.accountID).first { $0.body == next }?.id
+        signatureAccountID = draft.accountID
     }
     private func prepareSuggestions() {
         let own = Set(accounts.map { $0.email.lowercased() })
@@ -421,7 +452,10 @@ struct ComposeView: View {
 
     @discardableResult private func checkpoint() -> Bool {
         guard !working, !sendUnconfirmed, !finished, let editor else { return false }
-        do { try editor.checkpoint(draft, session: session); saveError = nil; return true }
+        if let rich = draft.richBody, rich.text != draft.body { draft.richBody = rich.replacingText(with: draft.body) }
+        var snapshot = draft
+        if !hasCompositionContent { snapshot.body = ""; snapshot.richBody = nil }
+        do { try editor.checkpoint(snapshot, session: session); saveError = nil; return true }
         catch { saveError = error.localizedDescription; return false }
     }
 
@@ -435,10 +469,10 @@ struct ComposeView: View {
     }
 
     private func queueSend(at date: Date) {
-        guard validRecipients, let repository = runtime.repository, let editor else { return }
+        guard validRecipients, let repository = runtime.repository else { return }
         autosaveTask?.cancel()
+        guard checkpoint() else { return }
         do {
-            try editor.checkpoint(draft, session: session)
             try repository.schedule(draft, at: date)
             finished = true
             try? session.reloadDrafts()

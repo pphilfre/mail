@@ -23,14 +23,11 @@ struct SecurityInspectorView: View {
     @State private var confirmAuthentication = false
     @State private var authenticationBusy = false
     @State private var authenticationTask: Task<Void, Never>?
+    @State private var inspecting = false
+    @State private var observations = MailSecurityObservations(html: "", text: "")
+    @State private var links: [MailSecurityObservations.Link] = []
     private var authenticationFindings: [SecurityFinding] { verifiedAuthentication ?? MailAuthentication.findings(headers: headers) }
     private var html: String { message.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
-    private var observations: MailSecurityObservations { MailSecurityObservations(html: html, text: message.plainTextBody ?? message.snippet) }
-    private var links: [MailSecurityObservations.Link] {
-        let qr = MailSecurityObservations(html: "", text: (embeddedQR + inspections.values.flatMap(\.qrLinks)).joined(separator: "\n"))
-        var seen = Set<String>()
-        return (observations.links + qr.links).filter { seen.insert($0.destination).inserted }
-    }
     private var identityFindings: [SecurityFinding] { SenderSecurity.findings(sender: message.sender, replyTo: message.replyTo, history: history) }
     private var linkFinding: SecurityFinding {
         let known = Set(history.filter { !$0.spam }.map { SenderSecurity.domain($0.email) })
@@ -61,6 +58,7 @@ struct SecurityInspectorView: View {
                     return [SecurityFinding(id: file.id.uuidString, title: file.filename, verdict: .unknown, explanation: "Not inspected")]
                 })
                 Text("Unknown checks do not establish safety.").font(.caption).foregroundStyle(.secondary)
+                if inspecting { HStack { ProgressView(); Text("Inspecting downloaded content…").font(.caption).foregroundStyle(.secondary) } }
             }
             Section { DisclosureGroup("Authentication & identity") {
                 LabeledContent("Sender", value: message.senderEmail).textSelection(.enabled)
@@ -170,6 +168,8 @@ struct SecurityInspectorView: View {
         catch { reputations[target.sharedValue] = SecurityFinding(id: target.sharedValue, title: "VirusTotal reputation", verdict: .unknown, explanation: error.localizedDescription) }
     }
     private func inspect() async {
+        inspecting = true
+        defer { inspecting = false }
         authenticationTask?.cancel(); verifiedAuthentication = nil
         storageChecks = await Task.detached(priority: .utility) {
             [LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch"), title: "Email and draft file protection"),
@@ -185,15 +185,26 @@ struct SecurityInspectorView: View {
             catch { inspectionErrors[file.id] = error.localizedDescription }
         }
         let content = html
-        let result = await Task.detached(priority: .utility) {
+        let plain = message.plainTextBody ?? message.snippet
+        let attachmentQR = inspections.values.flatMap(\.qrLinks)
+        let work = Task.detached(priority: .utility) {
             let images = QRCodeSecurity.embeddedImages(content)
             var values: [String] = []; var failures = 0
-            for data in images { do { values += try QRCodeSecurity.payloads(data) } catch { failures += 1 } }
-            return (values, images.count, failures)
-        }.value
+            for data in images {
+                if Task.isCancelled { break }
+                do { values += try QRCodeSecurity.payloads(data) } catch { failures += 1 }
+            }
+            let observations = MailSecurityObservations(html: content, text: plain)
+            let qr = MailSecurityObservations(html: "", text: (values + attachmentQR).joined(separator: "\n"))
+            var seen = Set<String>()
+            let links = (observations.links + qr.links).filter { seen.insert($0.destination).inserted }
+            return (values, images.count, failures, observations, links)
+        }
+        let result = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
         guard !Task.isCancelled else { return }
         embeddedQR = result.0
         qrFinding = QRCodeSecurity.embeddedFinding(result.0, imageCount: result.1, failures: result.2)
+        observations = result.3; links = result.4
     }
     private func verifyAuthentication() async {
         authenticationBusy = true; defer { authenticationBusy = false }

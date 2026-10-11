@@ -155,6 +155,7 @@ struct MailHTMLView: UIViewRepresentable {
     static func take() -> WKWebView {
         views.popLast() ?? WKWebView(frame: .zero, configuration: MailHTMLView.configuration())
     }
+    static func trimCache() { views.forEach { $0.stopLoading() }; views.removeAll() }
     static func put(_ view: WKWebView) {
         view.loadHTMLString("<html><body></body></html>", baseURL: nil)
         view.configuration.websiteDataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
@@ -169,6 +170,7 @@ struct MailHTMLView: UIViewRepresentable {
         cache.countLimit = 64; cache.totalCostLimit = 2_000_000
         return cache
     }()
+    static func clearCache() { cache.removeAllObjects() }
     static func linked(_ text: String) -> AttributedString {
         let key = text as NSString
         let value: NSAttributedString

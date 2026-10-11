@@ -83,7 +83,7 @@ enum LocalMailAnalysis {
         tokenizer.enumerateTokens(in: bounded.startIndex..<bounded.endIndex) { range, _ in
             let sentence = String(bounded[range]).trimmingCharacters(in: .whitespacesAndNewlines)
             if !sentence.isEmpty && !sentence.hasPrefix(">") { result.append(sentence) }
-            return result.count < 100
+            return !Task.isCancelled
         }
         return result
     }
@@ -96,15 +96,16 @@ enum LocalMailAnalysis {
         var ranked: [(offset: Int, score: Int)] = []
         for (offset, line) in lines.enumerated() {
             let tokens = Set(words(line))
-            let action = !tokens.intersection(["please", "due", "deadline", "confirm", "review", "reply"]).isEmpty
-            var score = hints.intersection(tokens).count * 2
-            if action { score += 3 }
+            let action = !tokens.intersection(["please", "due", "deadline", "confirm", "review", "reply", "submit", "approve", "agreed", "decision", "cancelled", "required"]).isEmpty
+            var score = min(3, hints.intersection(tokens).count)
+            if action { score += 8 }
+            if !tokens.intersection(["due", "deadline", "expires", "submit"]).isEmpty { score += 4 }
             if offset == 0 { score += 1 }
             ranked.append((offset: offset, score: score))
         }
         ranked.sort { $0.score == $1.score ? $0.offset < $1.offset : $0.score > $1.score }
         let offsets: [Int] = ranked.prefix(limit).map { $0.offset }.sorted()
-        return offsets.map { String(lines[$0].prefix(600)) }
+        return offsets.map { lines[$0] }
     }
 
     /// NSDataDetector's relative dates are wall-clock dependent. Keep explicit year-bearing dates
@@ -152,8 +153,9 @@ enum LocalMailAnalysis {
     }
 
     static func catchUp(_ mails: [IntelligenceMail], accountID: UUID?) -> [IntelligenceMail] {
-        let ranked = mails.filter { $0.unread && (accountID == nil || $0.accountID == accountID) && importance($0) > 0 }
-            .sorted { importance($0) == importance($1) ? $0.receivedAt > $1.receivedAt : importance($0) > importance($1) }
+        let ranked = mails.filter { $0.unread && (accountID == nil || $0.accountID == accountID) }
+            .map { (mail: $0, score: importance($0)) }.filter { $0.score > 0 }
+            .sorted { $0.score == $1.score ? $0.mail.receivedAt > $1.mail.receivedAt : $0.score > $1.score }.map(\.mail)
         var threads = Set<String>()
         return ranked.filter {
             threads.insert("\($0.accountID):\($0.threadID.isEmpty ? $0.id.uuidString : $0.threadID)").inserted

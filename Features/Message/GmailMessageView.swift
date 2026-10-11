@@ -61,6 +61,8 @@ struct GmailMessageView: View {
     @State private var confirmingDraftDeletion = false
     @State private var loadingThread = false
     @State private var focusedMessage = false
+    @State private var actionMessageID: UUID?
+    private var actionMessage: MailMessage { thread.first { $0.id == actionMessageID } ?? message }
     @State private var forwardingMessage: MailMessage?
     @State private var preparingForward = false
     private var editingTask: MailTask? {
@@ -117,7 +119,8 @@ struct GmailMessageView: View {
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
                         attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
                         onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) },
-                        account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) }, onLoadImages: { loadImagesOnce = true })
+                        account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) },
+                        onLoadImages: { loadImagesOnce = true }, onFocus: { actionMessageID = row.id })
                         .id(row.id)
                 }
                 if message.isDraft {
@@ -169,13 +172,13 @@ struct GmailMessageView: View {
         .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
+                ShareLink(item: MessageUtilities.readableCopy(actionMessage)) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
-                    Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(message) }.labelStyle(.iconOnly)
+                    Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(actionMessage) }.labelStyle(.iconOnly)
                     Menu("Reply", systemImage: "arrowshape.turn.up.left") {
-                        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(message, all: false) }
-                        Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); reply(message, all: true) }
+                        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(actionMessage, all: false) }
+                        Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); reply(actionMessage, all: true) }
                     }.labelStyle(.iconOnly)
                 }
             }
@@ -285,9 +288,9 @@ struct GmailMessageView: View {
         pendingAction = nil
         do {
             switch action {
-            case .reply: reply(message, all: false)
-            case .replyAll: reply(message, all: true)
-            case .forward: forward(message)
+            case .reply: reply(actionMessage, all: false)
+            case .replyAll: reply(actionMessage, all: true)
+            case .forward: forward(actionMessage)
             case .triage(let kind):
                 triage(kind)
                 if ["archive", "trash", "spam"].contains(kind) || kind.hasPrefix("move:") { dismiss() }

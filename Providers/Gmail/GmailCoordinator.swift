@@ -180,13 +180,16 @@ final class GmailCoordinator {
         }
     }
     func loadThread(_ message: MailMessage, force: Bool = false) async throws {
-        let cacheKey = message.accountID.uuidString + ":" + message.remoteThreadID
+        let cacheKey = message.accountID.uuidString + ":" + (message.remoteThreadID.isEmpty ? message.remoteID : message.remoteThreadID)
         if !force, let date = threadRefreshes[cacheKey], Date().timeIntervalSince(date) < 30 { return }
         do {
             let api = try client(message.accountID)
-            let thread = try await api.thread(message.remoteThreadID)
-            try repository.apply(thread.messages ?? [], accountID: message.accountID)
-            for dto in thread.messages ?? [] {
+            var dtos: [GmailMessageDTO]
+            if message.remoteThreadID.isEmpty { dtos = [try await api.message(message.remoteID)] }
+            else { dtos = try await api.thread(message.remoteThreadID).messages ?? [] }
+            for index in dtos.indices { dtos[index].payload = try await api.hydrateMailBody(dtos[index].payload, messageID: dtos[index].id) }
+            try repository.apply(dtos, accountID: message.accountID)
+            for dto in dtos {
                 var html = MailMIME.content(dto.payload).html
                 guard html.localizedCaseInsensitiveContains("cid:") else { continue }
                 var budget = 10_000_000

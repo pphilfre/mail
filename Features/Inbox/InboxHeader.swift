@@ -18,6 +18,8 @@ struct InboxHeader: View {
     let selecting: Bool
     let search: () -> Void
     let select: () -> Void
+    var updating = false
+    var waitingUntil: Date?
 
     var body: some View {
         VStack(spacing: 4) {
@@ -50,6 +52,8 @@ struct InboxHeader: View {
                     .accessibilityIdentifier("inboxFilterMenu").accessibilityValue(scopeTitle)
             }
             Spacer(minLength: 0)
+            if updating { ProgressView().controlSize(.small).accessibilityLabel("Updating mail").accessibilityIdentifier("mailSyncSpinner") }
+            else if let waitingUntil { GmailWaitStatus(deadline: waitingUntil).font(.caption) }
             if canSelect {
                 Button(action: select) {
                     Image(systemName: selecting ? "xmark" : "checkmark.circle").frame(width: 44, height: 44).contentShape(.rect)

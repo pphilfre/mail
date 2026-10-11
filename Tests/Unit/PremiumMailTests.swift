@@ -94,4 +94,39 @@ import XCTest
         XCTAssertEqual(changes, 1)
         XCTAssertTrue((view.textStorage.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.fontDescriptor.symbolicTraits.contains(.traitItalic) == true)
     }
+    func testWritingRangeExcludesSignaturesAndQuotedConversation() {
+        let body = "Please review this.\n\n-- \nFreddie\n\nOn Monday, Alex wrote:\n> Old text."
+        XCTAssertEqual(String(body[MailSignature.authoredRange(in: body)]), "Please review this.")
+        XCTAssertTrue(MailSignature.authoredRange(in: "\n\nOn Monday, Alex wrote:\n> Old text.").isEmpty)
+    }
+    func testSignatureReplacementPreservesFormattingAndEmoji() throws {
+        let old = RichMailBody(text: "😀 Important\n\n-- \nOld", runs: [.init(location: 3, length: 9, bold: true)])
+        let next = old.replacingText(with: "😀 Important\n\n-- \nNew signature")
+        XCTAssertTrue(try XCTUnwrap(next.html(matching: next.text)).contains("<strong>Important</strong>"))
+        let emoji = RichMailBody(text: "😀 Same", runs: [.init(location: 3, length: 4, bold: true)]).replacingText(with: "😃 Same")
+        XCTAssertTrue(try XCTUnwrap(emoji.html(matching: emoji.text)).contains("😃 <strong>Same</strong>"))
+    }
+    func testLargeBodyPartsAreDownloadedWithoutFetchingAttachments() async throws {
+        let body = "<p>All the details</p><p>Final paragraph.</p>"
+        let transport = FixtureTransport([HTTPReply(data: Data("{\"data\":\"\(Base64URL.encode(Data(body.utf8)))\"}".utf8), status: 200)])
+        let api = GmailAPI(transport: transport, pause: { _ in }) { _ in "test-token" }
+        let part = GmailPart(mimeType: "multipart/mixed", parts: [
+            GmailPart(mimeType: "text/html", body: GmailBody(attachmentId: "body", size: body.utf8.count)),
+            GmailPart(mimeType: "application/pdf", filename: "file.pdf", body: GmailBody(attachmentId: "file", size: 1_000))
+        ])
+        let hydrated = try await api.hydrateMailBody(part, messageID: "message")
+        XCTAssertTrue(MailMIME.content(hydrated).html.contains("Final paragraph."))
+        let requests = await transport.captured()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertTrue(requests[0].url?.path.hasSuffix("attachments/body") == true)
+        let oversized = GmailPart(mimeType: "text/html", body: GmailBody(attachmentId: "large", size: 20_000_001))
+        do { _ = try await api.hydrateMailBody(oversized, messageID: "message"); XCTFail("Oversized body was fetched") }
+        catch { XCTAssertTrue(error is MailBodyDownloadError) }
+    }
+    func testExtractiveSummaryFindsActionsAfterManyOpeningSentences() {
+        let body = String(repeating: "Here is the project update. ", count: 180) + "Please submit the signed proposal by 12 October."
+        let result = LocalMailAnalysis.summary(body, subject: "Project update", limit: 1)
+        XCTAssertEqual(result, ["Please submit the signed proposal by 12 October."])
+        XCTAssertEqual(MailMIME.readableHTML("<table><tr><td>Amount</td><td>&pound;24.00</td></tr></table>"), "Amount\n£24.00")
+    }
 }

@@ -49,6 +49,41 @@ struct GmailHistoryPage: Decodable, Sendable {
     var deletedIDs: Set<String> { Set((history ?? []).flatMap { $0.messagesDeleted ?? [] }.map(\.message.id)) }
 }
 
+extension GmailAPI {
+    /// Gmail stores large text/html MIME bodies behind attachment IDs too. They are message bodies, not user attachments.
+    func hydrateMailBody(_ payload: GmailPart?, messageID: String) async throws -> GmailPart? {
+        guard let payload else { return nil }
+        return try await hydrateTextParts(payload, messageID: messageID, budget: 20_000_000, depth: 0).0
+    }
+    private func hydrateTextParts(_ input: GmailPart, messageID: String, budget: Int, depth: Int) async throws -> (GmailPart, Int) {
+        try Task.checkCancellation()
+        guard depth < 40, (input.filename ?? "").isEmpty,
+              !(input.header("Content-Disposition") ?? "").lowercased().hasPrefix("attachment") else { return (input, budget) }
+        var part = input, remaining = budget
+        if ["text/plain", "text/html"].contains(part.mimeType?.lowercased() ?? ""),
+           part.body?.data == nil, let id = part.body?.attachmentId {
+            guard (part.body?.size ?? 0) >= 0, (part.body?.size ?? 0) <= remaining else { throw MailBodyDownloadError.tooLarge }
+            let bytes = try await attachment(messageID: messageID, attachmentID: id)
+            guard bytes.count <= remaining else { throw MailBodyDownloadError.tooLarge }
+            part.body?.data = Base64URL.encode(bytes); remaining -= bytes.count
+        }
+        if let children = part.parts {
+            var hydrated: [GmailPart] = []
+            for child in children {
+                let result = try await hydrateTextParts(child, messageID: messageID, budget: remaining, depth: depth + 1)
+                hydrated.append(result.0); remaining = result.1
+            }
+            part.parts = hydrated
+        }
+        return (part, remaining)
+    }
+}
+
+enum MailBodyDownloadError: LocalizedError {
+    case tooLarge
+    var errorDescription: String? { "This message’s text and HTML bodies exceed the 20 MB reader limit. Open it in Gmail to read the original." }
+}
+
 /// Only value types cross this actor boundary. Errors omit server bodies and tokens.
 actor GmailAPI {
     let transport: any MailHTTPTransport

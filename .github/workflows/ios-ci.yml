@@ -23,7 +23,7 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v5
       - name: Generate project with XcodeGen
@@ -49,4 +49,34 @@ jobs:
             build/Tests.xcresult
             build/screenshots/
           retention-days: 14
+          if-no-files-found: warn
+
+  device-ipa:
+    needs: build-and-test
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generate device project
+        run: bash scripts/prepare-macos.sh
+      - name: Build and package unsigned device IPA
+        run: |
+          version="$(sed -n 's/.*MARKETING_VERSION: "\([^"]*\)"/\1/p' project.yml | head -n 1)"
+          bash scripts/package-ipa.sh "v${version}"
+      - name: Save IPA and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dispatch-device-IPA-${{ github.run_id }}
+          path: |
+            build/Dispatch-*.ipa
+            build/Dispatch-*.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Save device build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-build-${{ github.run_id }}
+          path: build/release-build.log
           if-no-files-found: warn

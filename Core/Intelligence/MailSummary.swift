@@ -55,6 +55,7 @@ struct MailSummaryResult: Sendable {
         let prepared = await withTaskCancellationHandler { await preparation.value } onCancel: { preparation.cancel() }
         try Task.checkCancellation()
         guard !prepared.isEmpty else { throw MailSummaryError.missingBody }
+        guard prepared.reduce(0, { $0 + $1.2.utf8.count }) <= 2_000_000 else { throw MailSummaryError.tooLarge }
         let full = prepared.map { "From: \($0.0)\nSubject: \($0.1)\n\($0.2)" }.joined(separator: "\n\n")
         // Extraction is reliable on older hardware; the 0.6B model is unsuitable for factual summaries.
         if Self.systemAvailable, full.count <= 100_000 {
@@ -74,11 +75,15 @@ struct MailSummaryResult: Sendable {
             catch { /* Context limits, language availability, or guardrails: show source evidence instead. */ }
         }
         let work = Task.detached(priority: .userInitiated) {
-            prepared.flatMap { sender, subject, body in
-                MailSummaryPreparation.chunks(body, maximum: 12_000).flatMap {
-                    LocalMailAnalysis.summary($0, subject: subject, limit: 2).map { sender + ": " + $0 }
+            var excerpts: [String] = []
+            for (sender, subject, body) in prepared {
+                if Task.isCancelled { break }
+                for chunk in MailSummaryPreparation.chunks(body, maximum: 12_000) {
+                    if Task.isCancelled { break }
+                    excerpts += LocalMailAnalysis.summary(chunk, subject: subject, limit: 2).map { sender + ": " + $0 }
                 }
             }
+            return excerpts
         }
         let excerpts = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
         try Task.checkCancellation()
@@ -87,6 +92,11 @@ struct MailSummaryResult: Sendable {
 }
 
 enum MailSummaryError: LocalizedError {
-    case missingBody
-    var errorDescription: String? { "The message body isn’t downloaded yet. Refresh the conversation and try again." }
+    case missingBody, tooLarge
+    var errorDescription: String? {
+        switch self {
+        case .missingBody: "The message body isn’t downloaded yet. Refresh the conversation and try again."
+        case .tooLarge: "This conversation exceeds the 2 MB summary limit. Read the full messages below."
+        }
+    }
 }

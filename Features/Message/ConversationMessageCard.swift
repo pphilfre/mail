@@ -11,14 +11,16 @@ struct ConversationMessageCard: View {
     let account: MailAccount?
     let onSecurity: () -> Void
     let onLoadImages: () -> Void
+    let onFocus: () -> Void
     @State private var expanded: Bool
 
     init(message: MailMessage, initiallyExpanded: Bool, attachments: [MailAttachment], remoteImages: Bool,
-         onSender: @escaping () -> Void, account: MailAccount? = nil, onSecurity: @escaping () -> Void = {}, onLoadImages: @escaping () -> Void = {}) {
+         onSender: @escaping () -> Void, account: MailAccount? = nil, onSecurity: @escaping () -> Void = {}, onLoadImages: @escaping () -> Void = {}, onFocus: @escaping () -> Void = {}) {
         self.message = message; self.attachments = attachments; self.remoteImages = remoteImages
         self.onSender = onSender
         self.account = account; self.onSecurity = onSecurity
         self.onLoadImages = onLoadImages
+        self.onFocus = onFocus
         _expanded = State(initialValue: initiallyExpanded)
     }
     private var bodyText: String {
@@ -38,7 +40,7 @@ struct ConversationMessageCard: View {
                 .accessibilityIdentifier("openSenderProfile-\(message.remoteID)")
             Button {
                 feedback.select()
-                withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }
+                withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle(); if expanded { onFocus() } }
             } label: {
                 HStack(alignment: .top, spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {

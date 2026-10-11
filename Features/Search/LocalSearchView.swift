@@ -80,6 +80,7 @@ private struct SearchResultsView: View {
     let samplesByID: [UUID: SampleMessage]
     let documents: [MailSearchDocument]
     let dismissible: Bool
+    let initialAccountID: UUID?
     @State private var semanticEngine = MailSemanticSearch()
     @State private var semanticIDs: [UUID]?
     @State private var resultIDs: [UUID] = []
@@ -112,6 +113,7 @@ private struct SearchResultsView: View {
         _accountID = State(initialValue: initialAccountID)
         self.documents = documents
         self.dismissible = dismissible
+        self.initialAccountID = initialAccountID
     }
 
     var body: some View {
@@ -267,6 +269,7 @@ private struct SearchResultsView: View {
         .onChange(of: accounts.map(\.id)) { _, ids in
             if let selected = accountID, !ids.contains(selected) { accountID = nil }
         }
+        .onChange(of: initialAccountID) { _, value in accountID = value }
         .onChange(of: keepHistory) { _, enabled in if !enabled { recentRaw = "[]" } }
         .alert("Sender", isPresented: $showingSenderFilter) {
             TextField("Name or email", text: $senderText).textInputAutocapitalization(.never)

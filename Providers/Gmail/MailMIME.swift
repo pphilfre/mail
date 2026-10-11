@@ -107,9 +107,11 @@ enum MailMIME {
     /// Native text only: no web view, JavaScript, navigation or remote-image loading.
     static func readableHTML(_ html: String) -> String {
         var text = html.replacingOccurrences(of: "(?is)<(script|style|head)\\b[^>]*>.*?</\\1\\s*>", with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: "(?i)<(?:br|/p|/div|/tr|/li|/h[1-6])\\b[^>]*>", with: "\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: "(?i)<(?:br|/p|/div|/tr|/td|/th|/li|/section|/blockquote|/h[1-6])\\b[^>]*>", with: "\n", options: .regularExpression)
         text = text.replacingOccurrences(of: "(?s)<[^>]*>", with: "", options: .regularExpression)
-        for (entity, replacement) in ["&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&amp;": "&"] {
+        for (entity, replacement) in ["&nbsp;": " ", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'",
+            "&ndash;": "–", "&mdash;": "—", "&hellip;": "…", "&lsquo;": "‘", "&rsquo;": "’", "&ldquo;": "“", "&rdquo;": "”",
+            "&bull;": "•", "&euro;": "€", "&pound;": "£", "&copy;": "©", "&reg;": "®", "&amp;": "&"] {
             text = text.replacingOccurrences(of: entity, with: replacement)
         }
         if let regex = try? NSRegularExpression(pattern: "&#(x[0-9a-fA-F]+|[0-9]+);") {

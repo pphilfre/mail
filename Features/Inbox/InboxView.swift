@@ -399,14 +399,17 @@ struct InboxView: View {
     }
     private var inboxHeader: some View {
         InboxHeader(
-            filter: activeFilter, mailbox: Binding(get: { mailbox }, set: { labelFilter = nil; quickFilter = .all; mailbox = $0 }),
+            filter: activeFilter, mailbox: Binding(get: { labelFilter == nil ? mailbox : "Custom" }, set: { value in
+                guard value != "Custom" else { return }
+                labelFilter = nil; quickFilter = .all; mailbox = value
+            }),
             scopeTitle: mailboxTitle, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
             canSelect: !accounts.isEmpty && !["Drafts", "Catch Up"].contains(mailbox), selecting: selecting,
             search: { feedback.select(); showingSearch = true },
             select: {
                 feedback.select()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { selecting.toggle(); selectedIDs.removeAll() }
-            })
+            }, updating: refreshing || selectedAccounts.contains { runtime.gmail?.syncing.contains($0.id) == true }, waitingUntil: waitingUntil)
     }
     private var profileMenu: some View {
         Button { feedback.select(); showingAccounts = true } label: {
@@ -417,39 +420,6 @@ struct InboxView: View {
         }
         .accessibilityLabel("Accounts")
         .accessibilityIdentifier("profileMenuButton")
-    }
-    private var composeDock: some View {
-        HStack(alignment: .center) {
-            HStack(spacing: 0) {
-                Button { feedback.select(); labelFilter = nil; quickFilter = .all; mailbox = "Inbox" } label: {
-                    Label("Emails", systemImage: "envelope").frame(height: 56).padding(.horizontal, 14).contentShape(.rect)
-                }.accessibilityIdentifier("dockEmailsButton")
-                Divider().frame(height: 18)
-                Button { feedback.select(); showingTasks = true } label: {
-                    Label("Tasks \(openTaskCount)", systemImage: "checklist").frame(height: 56).padding(.horizontal, 14).contentShape(.rect)
-                }.accessibilityIdentifier("dockTasksButton")
-            }.font(.subheadline.weight(.medium)).buttonStyle(.plain)
-                .glassEffect(.regular, in: .capsule)
-            Spacer(minLength: 12)
-            Button {
-                feedback.select(); showingCompose = true
-            } label: {
-                Image(systemName: "square.and.pencil").font(.system(size: 22, weight: .medium))
-                    .frame(width: 56, height: 56).contentShape(.circle)
-            }
-            .buttonStyle(.plain).foregroundStyle(.white)
-            .glassEffect(.regular.tint(MailStyle.accent).interactive(), in: .circle)
-            .accessibilityLabel("Compose").accessibilityIdentifier("composeButton")
-        }
-        .overlay(alignment: .topLeading) {
-            if refreshing || selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
-                ProgressView().frame(width: 32, height: 32).glassEffect(.regular, in: .circle)
-                    .offset(y: -40).accessibilityLabel("Updating mail").accessibilityIdentifier("mailSyncSpinner")
-            } else if let deadline = waitingUntil {
-                GmailWaitStatus(deadline: deadline).font(.caption).padding(8).glassEffect(.regular, in: .capsule).offset(y: -40)
-            }
-        }
-        .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 8)
     }
     private func presentDestination() {
         switch sheetDestination {

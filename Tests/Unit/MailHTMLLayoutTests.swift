@@ -4,6 +4,25 @@ import WebKit
 
 @MainActor
 final class MailHTMLLayoutTests: XCTestCase {
+    func testOverflowingLowerSectionsAreIncludedInReportedHeight() async throws {
+        let configuration = MailHTMLView.configuration()
+        let heights = HTMLHeightObserver()
+        configuration.userContentController.add(heights, contentWorld: .defaultClient, name: "mailLayout")
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 800), configuration: configuration)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 800))
+        let controller = UIViewController(); window.rootViewController = controller
+        controller.view.addSubview(web); window.makeKeyAndVisible()
+        defer { web.stopLoading(); window.isHidden = true }
+        web.loadHTMLString(MailHTMLView.document("""
+            <div style="height:40px">Opening section</div>
+            <div style="position:absolute;top:10000px;height:200px">Final section of a long message</div>
+            """, remoteImages: false), baseURL: nil)
+        for _ in 0..<150 {
+            if heights.height >= 10_200 { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertGreaterThanOrEqual(heights.height, 10_200, "The measured wrapper must include overflowing lower sections, not only its 40-point layout box")
+    }
     func testFixedWidthHTMLFitsAndRefitsWhileEmailScriptsStayDisabled() async throws {
         let configuration = MailHTMLView.configuration()
         let heightObserver = HTMLHeightObserver()
