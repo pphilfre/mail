@@ -3,11 +3,11 @@ set -euo pipefail
 shard="${1:?Pass shard index}"
 scope="${DISPATCH_TEST_SCOPE:-full}"
 mkdir -p build/DerivedData/Build
-simulator_id="$(python3 scripts/select-simulator.py)"
+simulator_id="${DISPATCH_SIMULATOR_ID:-$(python3 scripts/select-simulator.py)}"
 (
   xcrun simctl boot "$simulator_id" || xcrun simctl list devices booted | grep -F "$simulator_id"
   xcrun simctl bootstatus "$simulator_id" -b
-) > build/simulator-boot.log 2>&1 &
+) >> build/simulator-boot.log 2>&1 &
 boot_pid=$!
 trap 'kill "$boot_pid" 2>/dev/null || true' EXIT
 tar -C build/DerivedData/Build -xzf build/test-products.tar.gz

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Partition every discovered UI test exactly once across separate simulators."""
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -11,15 +12,8 @@ SMOKE = {
     "testGroupedBulkArchiveCanBeUndoneWithoutProviderAccess",
     "testRedesignedReaderActionsAndHonestSecurityInspector",
 }
-# Seconds measured in run 38049387073; new tests use a conservative default.
-SECONDS = {
-    "testAttachmentLibrarySearchAndSourceConversation": 84,
-    "testAttachedDraftReopensAndRemovalPersistsAfterRelaunch": 50,
-    "testCollectionCreatedFromReaderIncludesThreadFilesAndCanRemoveMembership": 50,
-    "testMailTaskCanBeCreatedCompletedAndReopenedWithConversationLink": 44,
-    "testCompactInboxAndPreviewSettingReduceActualRowHeight": 33,
-    "testPeopleProfileCanSaveNicknameAndShowSenderFiles": 32,
-}
+# Seconds measured in full release run 38054443359; new tests use a conservative default.
+SECONDS = json.loads(Path(__file__).with_name("ui-test-durations.json").read_text())
 
 
 def partition(scope="full"):
@@ -30,12 +24,12 @@ def partition(scope="full"):
         raise ValueError(f"Smoke selectors missing from source: {SMOKE - set(methods)}")
     if scope == "smoke":
         return [sorted(SMOKE)]
-    shards, costs = [[], []], [0, 0]
+    shards, costs = [[], [], []], [15, 0, 0]  # Include the unit suite's measured cost.
     for method in sorted(methods, key=lambda name: (-SECONDS.get(name, 25), name)):
-        index = min(range(2), key=lambda i: costs[i])
+        index = min(range(len(shards)), key=lambda i: costs[i])
         shards[index].append(method)
         costs[index] += SECONDS.get(method, 25)
-    assert sorted(shards[0] + shards[1]) == sorted(methods)
+    assert sorted(method for shard in shards for method in shard) == sorted(methods)
     return shards
 
 

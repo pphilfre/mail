@@ -1,4 +1,12 @@
-Dispatch v0.8.0 consolidates mail productivity, local intelligence and security improvements.
+Dispatch v0.8.1 retains the consolidated v0.8.0 functionality and further reduces release validation time.
+
+- Starts simulator migration alongside compilation and balances the complete UI suite
+  across three isolated runners using measured durations. Publication still requires
+  every test and IPA check to pass.
+- Retains the compact-layout regression assertion while waiting for native switch state
+  to settle on hosted simulators.
+
+Included from v0.8.0: consolidated mail productivity, local intelligence and security improvements.
 
 - Native mail navigation, advanced search dropdowns and saved-search smart folders.
 - Device-local scheduled delivery with cancellation and Undo; organisation rules,

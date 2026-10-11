@@ -4,7 +4,7 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-The consolidated v0.8.0 tree includes [productivity workflows](docs/productivity-workflows.md), [local intelligence and iOS integrations](docs/ios-local-intelligence.md), and [mail security checks](docs/security-and-livecontainer.md), alongside tasks, receipts, composer attachments and the compact native UI. See [release notes](docs/release-notes.md), [CI performance](docs/ci-performance.md) and the [signed device checklist](docs/oauth-setup.md).
+The consolidated v0.8.1 tree includes [productivity workflows](docs/productivity-workflows.md), [local intelligence and iOS integrations](docs/ios-local-intelligence.md), and [mail security checks](docs/security-and-livecontainer.md), alongside tasks, receipts, composer attachments and the compact native UI. See [release notes](docs/release-notes.md), [CI performance](docs/ci-performance.md) and the [signed device checklist](docs/oauth-setup.md).
 
 Earlier releases remain available at their tags. Sender profiles, attachment library, project collections and subscriptions are included. Further proposals are in the [feature ideas](docs/feature-ideas.md).
 
@@ -35,7 +35,7 @@ git tag v0.2.1
 git push origin v0.2.1
 ```
 
-The release workflow runs the full iOS CI suite alongside the physical-device build, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release only after both succeed. The simulator app/test bundles compile once and run on two separate test runners. Package downloads and compatible incremental compiler outputs are cached. Tags must use `vMAJOR.MINOR.PATCH`. Manual runs save artifacts; enable their publish input to publish the validated commit as a release. The historical `v0.1.0` tag predates the Dispatch rename.
+The release workflow runs the full iOS CI suite alongside the physical-device build, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release only after both succeed. The simulator app/test bundles compile once and run on three separate test runners. Package downloads and compatible incremental compiler outputs are cached. Tags must use `vMAJOR.MINOR.PATCH`. Manual runs save artifacts; enable their publish input to publish the validated commit as a release. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 
@@ -80,3 +80,4 @@ bash scripts/package-ipa.sh v0.2.0
 - [XcodeGen project specification](https://github.com/yonaskolb/XcodeGen/blob/master/Docs/ProjectSpec.md).
 - [GitHub macOS 26 runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md).
 - [Apple required-reason API declarations](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype).
+

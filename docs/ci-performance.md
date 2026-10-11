@@ -25,7 +25,7 @@ and warm runs of the consolidated tree; do not present the estimated improvement
 
 - Device compilation and simulator validation start independently. An Ubuntu publish
   job requires both to succeed, verifies the IPA SHA-256 and refuses asset overwrite.
-- Compile the app and tests once. Transfer only tarred Build/Products to two macOS
+- Compile the app and tests once. Transfer only tarred Build/Products to three macOS
   runners, preserving executable permissions and symlinks. `test-without-building`
   uses the relocatable xctestrun; it never resolves packages or recompiles.
 - Split all discovered UI methods exactly once using measured longer-test weights.
@@ -63,7 +63,7 @@ outputs, so those stages cannot safely begin together.
 
 Record cold and warm run URLs, elapsed time, compilation time and each shard's duration
 after validation. Runner queues and simulator migration can dominate variance. Rebalance
-weights with consolidated-tree timings; consider three shards only if concurrency/cost
+weights with consolidated-tree timings; consider more shards only if concurrency/cost
 permits. Update the dependency lock explicitly when changing package constraints.
 Benchmark larger macOS runners
 or a maintained self-hosted Mac before committing to their cost. Device login, sideloading,
@@ -71,3 +71,4 @@ notifications and real Gmail delivery still need signed-device validation.
 
 Cache mechanics follow [GitHub's dependency caching reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching).
 Build-once testing follows [Apple's command-line Xcode guidance](https://developer.apple.com/library/archive/technotes/tn2339/_index.html).
+

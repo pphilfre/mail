@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ios-ci-${{ github.workflow }}-${{ github.ref }}
@@ -59,7 +60,7 @@ jobs:
           fi
           echo "scope=$scope" >> "$GITHUB_OUTPUT"
           if [[ "$scope" == full && -z "$TEST_FILTER" ]]; then
-            echo 'shards=[0,1]' >> "$GITHUB_OUTPUT"
+            echo 'shards=[0,1,2]' >> "$GITHUB_OUTPUT"
           else
             echo 'shards=[0]' >> "$GITHUB_OUTPUT"
           fi
@@ -95,17 +96,30 @@ jobs:
             Dispatch.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
           retention-days: 7
   test:
-    needs: [plan, compile]
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - name: Select pinned Xcode
         run: sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+      - name: Boot simulator while compilation runs
+        run: |
+          mkdir -p build
+          simulator_id="$(python3 scripts/select-simulator.py)"
+          echo "DISPATCH_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          (
+            xcrun simctl boot "$simulator_id" || xcrun simctl list devices booted | grep -F "$simulator_id"
+            xcrun simctl bootstatus "$simulator_id" -b
+          ) > build/simulator-boot.log 2>&1
+      - name: Wait for this run's compiled tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/wait-test-products.py
       - uses: actions/download-artifact@v4
         with:
           name: simulator-test-products
