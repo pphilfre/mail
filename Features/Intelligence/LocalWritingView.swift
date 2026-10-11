@@ -28,6 +28,7 @@ struct LocalWritingView: View {
                     Label("Enable Apple Intelligence or download the writing model in Privacy & Intelligence.", systemImage: "arrow.down.circle")
                         .font(.callout).foregroundStyle(.secondary)
                     NavigationLink { MailIntegrationSettings() } label: { Label("Set up writing tools", systemImage: "sparkles") }
+                        .accessibilityIdentifier("writingSetupButton")
                 } else if running {
                     HStack { ProgressView(); Text("Polishing on this device…").foregroundStyle(.secondary) }
                 }

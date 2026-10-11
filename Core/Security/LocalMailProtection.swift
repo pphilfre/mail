@@ -69,7 +69,8 @@ enum LocalMailProtection {
             let files = try entries(directory)
             for file in files {
                 let value = try FileManager.default.attributesOfItem(atPath: file.path)[.protectionKey]
-                guard matches(value, protection) || isComplete(value) else { throw CocoaError(.fileReadNoPermission) }
+                let expected = protectionForEntry(file, storage: protection, preservingDraftAttachments: true)
+                guard matches(value, expected) || isComplete(value) else { throw CocoaError(.fileReadNoPermission) }
             }
             return SecurityFinding(id: directory.path, title: title, verdict: .checked,
                 explanation: "iOS Data Protection attributes confirmed on this directory and \(files.count) existing entries. " + (protection == .complete ? "Files require an unlocked device." : "Background mail storage remains available after the first unlock; draft attachment files retain Complete protection.") + " Future files and actual device lock behaviour require device testing.")

@@ -148,7 +148,17 @@ final class DispatchUITests: XCTestCase {
         app.buttons["polishWritingButton"].tap()
         XCTAssertTrue(app.navigationBars["Polish writing"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Share text"].exists)
-        app.buttons["Set up writing tools"].tap()
+        let setup = app.descendants(matching: .any)["writingSetupButton"].firstMatch
+        if setup.waitForExistence(timeout: 2) {
+            setup.tap()
+        } else {
+            // Availability varies with the runner's system assets. Privacy must remain reachable in either state.
+            app.buttons["Done"].tap()
+            app.buttons["saveDraftButton"].tap()
+            app.buttons["mailboxDrawerButton"].tap()
+            revealMailbox("mailboxSettingsButton", app: app).tap()
+            revealMailbox("privacyIntelligenceSettingsLink", app: app).tap()
+        }
         XCTAssertTrue(app.navigationBars["Privacy & Intelligence"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.switches["mailAppLockToggle"].exists)
         attachScreenshot("Privacy and intelligence in dark mode with large text", app: app)
