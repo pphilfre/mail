@@ -153,7 +153,7 @@ final class DispatchUITests: XCTestCase {
             setup.tap()
         } else {
             // Availability varies with the runner's system assets. Privacy must remain reachable in either state.
-            app.buttons["Done"].tap()
+            app.buttons["writingDoneButton"].tap()
             app.buttons["saveDraftButton"].tap()
             app.buttons["mailboxDrawerButton"].tap()
             revealMailbox("mailboxSettingsButton", app: app).tap()

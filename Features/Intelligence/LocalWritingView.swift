@@ -55,7 +55,9 @@ struct LocalWritingView: View {
         .background(MailStyle.paper)
         .navigationTitle("Polish writing").navigationBarTitleDisplayMode(.inline)
         .animation(MailStyle.motion(reduced: reduceMotion), value: showingOriginal)
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        .toolbar { ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { dismiss() }.accessibilityIdentifier("writingDoneButton")
+        } }
         .task(id: "\(selected.id)-\(request)-\(runtime.localModel.canWrite)") {
             guard runtime.localModel.canWrite, !text.isEmpty else { return }
             running = true; error = nil; output = ""
