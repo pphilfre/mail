@@ -57,10 +57,14 @@ struct MailIntegrationSettings: View {
                 }.font(.caption).foregroundStyle(.secondary)
             } footer: { Text("Writing and summarisation run on your device.") }
             Section {
-                Toggle(isOn: $backgroundRefresh) { feature("Background refresh", "arrow.trianglehead.2.clockwise.rotate.90", .teal) }
-                    .onChange(of: backgroundRefresh) { _, enabled in
-                        if enabled { runtime.nativeServices.scheduleRefresh() } else { runtime.nativeServices.cancelRefresh() }
+                Toggle(isOn: Binding(get: { backgroundRefresh }, set: { enabled in
+                    Task {
+                        do { try await runtime.configureBackgroundRefresh(enabled) }
+                        catch { runtime.nativeServices.error = error.localizedDescription }
                     }
+                })) { feature("Background refresh", "arrow.trianglehead.2.clockwise.rotate.90", .teal) }
+                    .disabled(runtime.nativeServices.configuringStorage || (!backgroundRefresh && !runtime.nativeServices.refreshAvailable))
+                if runtime.nativeServices.configuringStorage { ProgressView("Updating storage protection…").font(.caption) }
                 Toggle(isOn: Binding(get: { notifications && runtime.nativeServices.notificationsEnabled }, set: { enabled in
                     notifications = enabled
                     if enabled { Task { await runtime.nativeServices.enableNotifications() } }
@@ -73,6 +77,7 @@ struct MailIntegrationSettings: View {
                 if let error = runtime.nativeServices.error { Text(error).font(.caption).foregroundStyle(.secondary) }
                 DisclosureGroup("Delivery details") {
                     Text("iOS chooses when background refresh runs. New mail alerts appear after a successful refresh and hide sender and subject. App lock pauses background access. This is periodic fetch, not real-time push.")
+                    Text("Enabling refresh keeps encrypted mail storage accessible to Dispatch after the first device unlock, including while the phone is locked. Draft attachment files retain protection while locked.")
                     Text("Scheduled mail can send during a granted refresh while unlocked, or when Dispatch is open. iOS does not guarantee the scheduled time.")
                 }.font(.caption).foregroundStyle(.secondary)
             }

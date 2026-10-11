@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftData
+import UIKit
 
 @MainActor
 @Observable
@@ -52,7 +53,7 @@ final class AppRuntime {
             #else
             let readerFixture = false
             #endif
-            if !readerFixture {
+            if !readerFixture && UIApplication.shared.isProtectedDataAvailable {
                 try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Mail/Attachments"))
                 try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Dispatch/DraftAttachments"))
                 try AttachmentPreviewStore.cleanExpired()

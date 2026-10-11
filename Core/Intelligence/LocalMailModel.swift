@@ -27,7 +27,7 @@ enum LocalWritingTask: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var instruction: String {
         switch self {
-        case .summary: "Summarise the supplied email bodies in up to three concise bullets: the main update or decision, requested actions and who should act, and explicit deadlines. Include concrete details from the body, not just the subject. Preserve names, amounts and dates exactly. Distinguish requests from completed actions and proposals from agreed decisions. Omit greetings, signatures and repeated quoted history. Never infer missing facts. Return only the bullets."
+        case .summary: "Summarise the supplied email bodies in up to three concise bullets: the main update or decision, requested actions and who should act, and explicit deadlines. Include concrete details from the body, not just the subject. Preserve names, amounts and dates exactly. Anchor relative dates to the supplied received date, never today; keep the relative wording if no received date is supplied. Distinguish requests from completed actions and proposals from agreed decisions. Prefer newest updates over explicitly superseded requests. Omit greetings, signatures and repeated quoted history. Never infer missing facts. Return only the bullets."
         case .reply: "Draft a short neutral reply to the supplied email. Do not agree to commitments, invent details, or claim actions were taken."
         case .polish: "Improve the clarity and grammar of the supplied draft. Preserve its meaning, facts and tone. Return only the revised draft."
         case .shorten: "Shorten the supplied draft. Preserve its facts and requests. Return only the revised draft."

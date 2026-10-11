@@ -34,6 +34,7 @@ struct InlineMailSummary: View {
                         .font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     Text(result.text).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     if result.generated { Text("Review details in the message.").font(.caption).foregroundStyle(.secondary) }
+                    if result.missingBodies > 0 { Text("\(result.missingBodies) messages have no downloaded text body.").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.leading, 12)
                     .overlay(alignment: .leading) { RoundedRectangle(cornerRadius: 2).fill(MailIntelligenceStyle.gradient).frame(width: 3) }
                     .transition(.opacity.combined(with: .move(edge: .top)))

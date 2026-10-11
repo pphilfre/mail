@@ -142,7 +142,6 @@ struct ComposeView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") {
                     if sendUnconfirmed { finished = true; dismiss() }
-                    else if !hasCompositionContent { discard() }
                     else { save() }
                 }.accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
                     .disabled(working || importingAttachments)
@@ -433,7 +432,8 @@ struct ComposeView: View {
     private func save() {
         autosaveTask?.cancel()
         guard checkpoint() else { return }
-        feedback.show("Draft saved", detail: "Ready when you are", symbol: "square.and.pencil")
+        if hasCompositionContent { feedback.show("Draft saved", detail: "Ready when you are", symbol: "square.and.pencil") }
+        else if openedSavedDraft { feedback.show("Empty draft removed", symbol: "trash") }
         finished = true; dismiss()
     }
 

@@ -173,8 +173,9 @@ struct SecurityInspectorView: View {
         inspecting = true
         defer { inspecting = false }
         authenticationTask?.cancel(); verifiedAuthentication = nil
+        let protection = LocalMailProtection.storageProtection(backgroundRefresh: UserDefaults.standard.bool(forKey: "backgroundMailRefresh"))
         storageChecks = await Task.detached(priority: .utility) {
-            [LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch"), title: "Email and draft file protection"),
+            [LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Dispatch"), title: "Email and draft file protection", protection: protection),
              LocalMailProtection.finding(for: URL.applicationSupportDirectory.appending(path: "Mail/Attachments"), title: "Received attachment file protection")]
         }.value
         headers = (try? runtime.repository?.securityHeaders(message.id)) ?? []

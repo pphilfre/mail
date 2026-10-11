@@ -135,4 +135,14 @@ import XCTest
         XCTAssertEqual(result, ["Please submit the signed proposal by 12 October."])
         XCTAssertEqual(MailMIME.readableHTML("<table><tr><td>Amount</td><td>&pound;24.00</td></tr></table>"), "Amount\n£24.00")
     }
+    func testBackgroundStorageKeepsSensitiveDraftAttachmentsProtectedWhenLocked() {
+        let root = URL(fileURLWithPath: "/private/Dispatch")
+        let mode = LocalMailProtection.storageProtection(backgroundRefresh: true)
+        let bodyBlob = root.appending(path: "mail.sqlite_SUPPORT/External/blob")
+        let attachment = root.appending(path: "DraftAttachments/draft/file.pdf")
+        XCTAssertEqual(LocalMailProtection.protectionForEntry(bodyBlob, storage: mode, preservingDraftAttachments: true), .completeUntilFirstUserAuthentication)
+        XCTAssertEqual(LocalMailProtection.protectionForEntry(attachment, storage: mode, preservingDraftAttachments: true), .complete)
+        XCTAssertEqual(LocalMailProtection.protectionForEntry(root.appending(path: "DraftAttachments"), storage: mode, preservingDraftAttachments: true), .complete)
+        XCTAssertEqual(LocalMailProtection.storageProtection(backgroundRefresh: false), .complete)
+    }
 }

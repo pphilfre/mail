@@ -106,7 +106,7 @@ struct GmailMessageView: View {
                     .padding(.horizontal, 4).padding(.vertical, 8)
                 InlineMailSummary(sources: thread.map {
                     MailSummarySource(sender: $0.sender.displayName, subject: $0.subject,
-                        text: $0.plainTextBody, html: $0.cachedHTML.flatMap { String(data: $0, encoding: .utf8) })
+                        text: $0.plainTextBody, html: $0.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, receivedAt: $0.receivedAt)
                 }, loadingBody: loadingThread)
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {

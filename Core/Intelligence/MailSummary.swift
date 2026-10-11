@@ -5,6 +5,7 @@ struct MailSummarySource: Sendable, Equatable {
     let subject: String
     let text: String?
     let html: String?
+    var receivedAt: Date? = nil
 }
 
 enum MailSummaryPreparation {
@@ -50,51 +51,58 @@ enum MailSummaryPreparation {
 struct MailSummaryResult: Sendable {
     let text: String
     let generated: Bool
+    var missingBodies = 0
 }
 
 @MainActor extension LocalMailModel {
     func summarise(_ sources: [MailSummarySource]) async throws -> MailSummaryResult {
         let preparation = Task.detached(priority: .userInitiated) {
             sources.map { source in
-                (source.sender, source.subject, MailSummaryPreparation.body(source, includeQuotedHistory: sources.count == 1))
+                (source.sender, source.subject, MailSummaryPreparation.body(source, includeQuotedHistory: sources.count == 1), source.receivedAt)
             }.filter { !$0.2.isEmpty }
         }
         let prepared = await withTaskCancellationHandler { await preparation.value } onCancel: { preparation.cancel() }
         try Task.checkCancellation()
         guard !prepared.isEmpty else { throw MailSummaryError.missingBody }
+        let missing = sources.count - prepared.count
         guard prepared.reduce(0, { $0 + $1.2.utf8.count }) <= 2_000_000 else { throw MailSummaryError.tooLarge }
-        let full = prepared.map { "From: \($0.0)\nSubject: \($0.1)\n\($0.2)" }.joined(separator: "\n\n")
+        let totalCharacters = prepared.reduce(0) { $0 + $1.2.count }
         // Extraction is reliable on older hardware; the 0.6B model is unsuitable for factual summaries.
-        if Self.systemAvailable, full.count <= 100_000 {
+        if Self.systemAvailable, totalCharacters <= 100_000 {
             do {
-                let chunks = MailSummaryPreparation.chunks(full)
+                let chunks = prepared.flatMap { sender, subject, body, received in
+                    let date = received.map { "\nReceived: " + $0.formatted(date: .complete, time: .shortened) } ?? ""
+                    let header = "From: \(sender)\nSubject: \(subject)\(date)\n"
+                    return MailSummaryPreparation.chunks(body, maximum: 4_500).map { header + $0 }
+                }
                 var partial: [String] = []
                 for chunk in chunks {
                     try Task.checkCancellation()
                     partial.append(try await generate(.summary, text: chunk))
                 }
                 let combined = partial.joined(separator: "\n")
-                if chunks.count == 1 { return MailSummaryResult(text: combined, generated: true) }
+                if chunks.count == 1 { return MailSummaryResult(text: combined, generated: true, missingBodies: missing) }
                 if combined.count <= 6_000 {
-                    return MailSummaryResult(text: try await generate(.summary, text: combined), generated: true)
+                    return MailSummaryResult(text: try await generate(.summary, text: combined), generated: true, missingBodies: missing)
                 }
             } catch is CancellationError { throw CancellationError() }
             catch { /* Context limits, language availability, or guardrails: show source evidence instead. */ }
         }
         let work = Task.detached(priority: .userInitiated) {
             var excerpts: [String] = []
-            for (sender, subject, body) in prepared {
+            for (sender, subject, body, received) in prepared {
                 if Task.isCancelled { break }
                 for chunk in MailSummaryPreparation.chunks(body, maximum: 12_000) {
                     if Task.isCancelled { break }
-                    excerpts += LocalMailAnalysis.summary(chunk, subject: subject, limit: 2).map { sender + ": " + $0 }
+                    let date = received.map { " (received " + $0.formatted(date: .abbreviated, time: .omitted) + ")" } ?? ""
+                    excerpts += LocalMailAnalysis.summary(chunk, subject: subject, limit: 2).map { sender + ": " + $0 + date }
                 }
             }
             return excerpts
         }
         let excerpts = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
         try Task.checkCancellation()
-        return MailSummaryResult(text: excerpts.map { "• " + $0 }.joined(separator: "\n"), generated: false)
+        return MailSummaryResult(text: excerpts.map { "• " + $0 }.joined(separator: "\n"), generated: false, missingBodies: missing)
     }
 }
 

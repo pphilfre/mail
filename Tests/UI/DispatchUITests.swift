@@ -130,7 +130,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(label.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Latest sender: Latest message body")).firstMatch.exists)
         XCTAssertTrue(app.navigationBars["Conversation"].exists)
-        XCTAssertFalse(app.tabBars.firstMatch.isHittable)
+        XCTAssertFalse(app.tabBars.firstMatch.exists && app.tabBars.firstMatch.isHittable)
         attachScreenshot("Inline body summary", app: app)
         button.tap()
         XCTAssertTrue(label.waitForNonExistence(timeout: 5))

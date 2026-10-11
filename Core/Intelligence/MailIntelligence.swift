@@ -153,9 +153,12 @@ enum LocalMailAnalysis {
     }
 
     static func catchUp(_ mails: [IntelligenceMail], accountID: UUID?) -> [IntelligenceMail] {
-        let ranked = mails.filter { $0.unread && (accountID == nil || $0.accountID == accountID) }
-            .map { (mail: $0, score: importance($0)) }.filter { $0.score > 0 }
-            .sorted { $0.score == $1.score ? $0.mail.receivedAt > $1.mail.receivedAt : $0.score > $1.score }.map(\.mail)
+        let candidates = mails.filter { $0.unread && (accountID == nil || $0.accountID == accountID) }
+        let scored: [(mail: IntelligenceMail, score: Int)] = candidates.map { (mail: $0, score: importance($0)) }
+        let ranked = scored.filter { $0.score > 0 }.sorted { left, right in
+            if left.score != right.score { return left.score > right.score }
+            return left.mail.receivedAt > right.mail.receivedAt
+        }.map { $0.mail }
         var threads = Set<String>()
         return ranked.filter {
             threads.insert("\($0.accountID):\($0.threadID.isEmpty ? $0.id.uuidString : $0.threadID)").inserted

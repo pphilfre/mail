@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UIKit
 
 struct ScheduledDelivery: Codable, Equatable, Sendable {
     let id: UUID
@@ -47,7 +48,8 @@ struct ScheduledDelivery: Codable, Equatable, Sendable {
 
 @MainActor extension AppRuntime {
     func deliverScheduledMail() async {
-        guard appLock.unlocked, connectivity.isConnected == true, let repository, let gmail else { return }
+        guard appLock.unlocked, UIApplication.shared.isProtectedDataAvailable,
+              connectivity.isConnected == true, let repository, let gmail else { return }
         do {
             let due = try repository.scheduledDue()
             guard !due.isEmpty else { return }

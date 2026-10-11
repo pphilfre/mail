@@ -7,6 +7,7 @@ import Observation
     static let refreshIdentifier = "dev.freddiephilpot.dispatch.refresh"
     private(set) var notificationStatus: UNAuthorizationStatus = .notDetermined
     var error: String?
+    var configuringStorage = false
     var refreshAvailable: Bool { UIApplication.shared.backgroundRefreshStatus == .available }
     var notificationsEnabled: Bool { [.authorized, .provisional, .ephemeral].contains(notificationStatus) }
 
@@ -41,6 +42,28 @@ import Observation
 }
 
 @MainActor extension AppRuntime {
+    func configureBackgroundRefresh(_ enabled: Bool) async throws {
+        guard !nativeServices.configuringStorage else { throw BackgroundMailStorageError.busy }
+        nativeServices.configuringStorage = true; nativeServices.error = nil
+        defer { nativeServices.configuringStorage = false }
+        let root = URL.applicationSupportDirectory.appending(path: "Dispatch", directoryHint: .isDirectory)
+        let protection = LocalMailProtection.storageProtection(backgroundRefresh: enabled)
+        let previous = LocalMailProtection.storageProtection(backgroundRefresh: UserDefaults.standard.bool(forKey: "backgroundMailRefresh"))
+        do {
+            try await Task.detached(priority: .utility) {
+                try LocalMailProtection.protectTree(root, protection: protection, preservingDraftAttachments: true)
+            }.value
+        } catch {
+            do {
+                try await Task.detached(priority: .utility) {
+                    try LocalMailProtection.protectTree(root, protection: previous, preservingDraftAttachments: true)
+                }.value
+            } catch { throw BackgroundMailStorageError.rollbackFailed }
+            throw error
+        }
+        UserDefaults.standard.set(enabled, forKey: "backgroundMailRefresh")
+        if enabled { nativeServices.scheduleRefresh() } else { nativeServices.cancelRefresh() }
+    }
     func refreshInBackground() async {
         defer { nativeServices.scheduleRefresh() }
         guard UserDefaults.standard.bool(forKey: "backgroundMailRefresh"), !storageFailed,
@@ -58,5 +81,15 @@ import Observation
             // Queued sends retain existing uncertain-send safeguards and respect app lock.
             await deliverScheduledMail()
         } catch { if !Task.isCancelled { nativeServices.error = error.localizedDescription } }
+    }
+}
+
+enum BackgroundMailStorageError: LocalizedError {
+    case busy, rollbackFailed
+    var errorDescription: String? {
+        switch self {
+        case .busy: "Storage protection is already being updated."
+        case .rollbackFailed: "Storage protection could not be fully updated or restored. Background refresh preferences were kept. Review Device Storage in Security Inspector and retry while your device is unlocked."
+        }
     }
 }
