@@ -330,7 +330,8 @@ struct ComposeView: View {
                 showingWriting = true
             } label: {
                 Image(systemName: "sparkles").foregroundStyle(MailIntelligenceStyle.gradient).frame(width: 44, height: 44)
-            }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton").disabled(draft.body.isEmpty)
+            }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton")
+                .disabled(MailSignature.authoredRange(in: draft.body).isEmpty && !richEditor.hasSelection)
             Button { showingFormatting.toggle() } label: {
                 Image(systemName: "textformat").frame(width: 44, height: 44).contentShape(.rect)
             }.foregroundStyle(showingFormatting ? MailStyle.accent : .primary).accessibilityLabel("Formatting")

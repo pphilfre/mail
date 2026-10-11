@@ -28,6 +28,12 @@ import XCTest
         XCTAssertTrue(html.contains("<ul><li>First</li><li>Second</li></ul>"))
         XCTAssertTrue(html.contains("<ol><li>One</li><li>Two</li></ol>"))
     }
+    func testNumberedListsKeepTheirStartingNumberAndQuotesAreSemantic() throws {
+        let body = RichMailBody(text: "7. Seven\n9. Nine\n> Quoted", runs: [])
+        let html = try XCTUnwrap(body.html(matching: body.text))
+        XCTAssertTrue(html.contains("<ol start=\"7\"><li>Seven</li><li value=\"9\">Nine</li></ol>"))
+        XCTAssertTrue(html.contains("<blockquote><div>Quoted</div></blockquote>"))
+    }
     func testFormattingSurvivesStoreReopenAndDiscardWithoutSchemaChange() throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

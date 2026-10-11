@@ -27,6 +27,7 @@ struct LocalWritingView: View {
                 if !runtime.localModel.canWrite {
                     Label("Enable Apple Intelligence or download the writing model in Privacy & Intelligence.", systemImage: "arrow.down.circle")
                         .font(.callout).foregroundStyle(.secondary)
+                    NavigationLink("Set up writing tools", systemImage: "sparkles") { MailIntegrationSettings() }
                 } else if running {
                     HStack { ProgressView(); Text("Polishing on this device…").foregroundStyle(.secondary) }
                 }
@@ -54,7 +55,7 @@ struct LocalWritingView: View {
         .navigationTitle("Polish writing").navigationBarTitleDisplayMode(.inline)
         .animation(MailStyle.motion(reduced: reduceMotion), value: showingOriginal)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        .task(id: "\(selected.id)-\(request)") {
+        .task(id: "\(selected.id)-\(request)-\(runtime.localModel.canWrite)") {
             guard runtime.localModel.canWrite, !text.isEmpty else { return }
             running = true; error = nil; output = ""
             defer { running = false }

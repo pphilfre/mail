@@ -117,6 +117,42 @@ final class DispatchUITests: XCTestCase {
         openReaderActions(app: app)
         XCTAssertTrue(revealAction("readerReadButton", app: app).exists)
     }
+    func testSummaryExpandsInlineFromDownloadedBodies() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launch()
+        let row = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
+        let button = app.buttons["inlineSummaryButton"]
+        XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+        let label = app.staticTexts["Key passages · from message bodies"]
+        XCTAssertTrue(label.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Latest sender: Latest message body")).firstMatch.exists)
+        XCTAssertTrue(app.navigationBars["Conversation"].exists)
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable)
+        attachScreenshot("Inline body summary", app: app)
+        button.tap()
+        XCTAssertTrue(label.waitForNonExistence(timeout: 5))
+    }
+
+    func testWritingSetupAndPrivacyInDarkModeWithLargeText() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchEnvironment["DISPATCH_UI_TEST_READER"] = "YES"
+        app.launchArguments += ["-appearance", "dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
+        app.launch()
+        app.buttons["composeButton"].tap()
+        let body = app.textViews["composeBody"]
+        XCTAssertTrue(body.waitForExistence(timeout: 5)); body.tap(); body.typeText("Please review this draft.")
+        app.buttons["polishWritingButton"].tap()
+        XCTAssertTrue(app.navigationBars["Polish writing"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Share text"].exists)
+        app.buttons["Set up writing tools"].tap()
+        XCTAssertTrue(app.navigationBars["Privacy & Intelligence"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["mailAppLockToggle"].exists)
+        attachScreenshot("Privacy and intelligence in dark mode with large text", app: app)
+    }
 
     func testAttachmentLibrarySearchAndSourceConversation() {
         let app = XCUIApplication()

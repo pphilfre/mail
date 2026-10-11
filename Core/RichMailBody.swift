@@ -65,6 +65,7 @@ struct RichMailBody: Codable, Equatable, Sendable {
         var offset = 0
         var paragraphs: [String] = []
         var list: String?
+        var expectedOrdinal: Int?
         let ordered = runs.enumerated().filter { _, run in
             run.location >= 0 && run.length > 0 && run.location <= source.length && run.length <= source.length - run.location
         }.sorted { $0.element.location < $1.element.location }
@@ -74,15 +75,19 @@ struct RichMailBody: Codable, Equatable, Sendable {
             let length = (line as NSString).length
             var prefix = 0
             var kind: String?
+            var ordinal: Int?
             if line.hasPrefix("• ") { prefix = 2; kind = "ul" }
             else if line.hasPrefix("> ") { prefix = 2; kind = "blockquote" }
-            else if let range = line.range(of: #"^\d+\. "#, options: .regularExpression) {
-                prefix = (String(line[range]) as NSString).length; kind = "ol"
+            else if let range = line.range(of: #"^\d+\. "#, options: .regularExpression), let number = Int(line[range].dropLast(2)) {
+                prefix = (String(line[range]) as NSString).length; kind = "ol"; ordinal = number
             }
             if kind != list {
                 if let list { paragraphs.append("</\(list)>") }
-                if let kind { paragraphs.append("<\(kind)>") }
+                if let kind {
+                    paragraphs.append(kind == "ol" && ordinal != 1 ? "<ol start=\"\(ordinal ?? 1)\">" : "<\(kind)>")
+                }
                 list = kind
+                expectedOrdinal = ordinal
             }
             let start = offset + prefix, end = offset + length
             var boundaries = Set([start, end])
@@ -110,7 +115,9 @@ struct RichMailBody: Codable, Equatable, Sendable {
                 }
                 content += value
             }
-            paragraphs.append(kind == nil || kind == "blockquote" ? "<div>\(content.isEmpty ? "<br>" : content)</div>" : "<li>\(content)</li>")
+            let item = kind == "ol" && ordinal != expectedOrdinal ? "<li value=\"\(ordinal ?? 1)\">\(content)</li>" : "<li>\(content)</li>"
+            paragraphs.append(kind == nil || kind == "blockquote" ? "<div>\(content.isEmpty ? "<br>" : content)</div>" : item)
+            if let ordinal { let next = ordinal.addingReportingOverflow(1); expectedOrdinal = next.overflow ? nil : next.partialValue }
             offset += length + 1
         }
         if let list { paragraphs.append("</\(list)>") }

@@ -8,6 +8,7 @@ import Observation
     var bold = false
     var italic = false
     var underline = false
+    var hasSelection = false
 
     func checkpointUndo(_ title: String) {
         guard let view else { return }
@@ -28,6 +29,7 @@ import Observation
 
     func refresh() {
         guard let view else { return }
+        hasSelection = view.selectedRange.length > 0
         let attributes = view.selectedRange.length > 0 && view.selectedRange.location < view.textStorage.length
             ? view.textStorage.attributes(at: view.selectedRange.location, effectiveRange: nil) : view.typingAttributes
         let traits = (attributes[.font] as? UIFont)?.fontDescriptor.symbolicTraits ?? []
