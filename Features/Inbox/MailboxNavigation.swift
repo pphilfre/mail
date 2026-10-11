@@ -1,5 +1,36 @@
 import SwiftUI
 
+/// A full-window presentation supplies modal focus; only the side panel animates.
+struct MailSidebarPresentation<Content: View>: View {
+    let dismiss: () -> Void
+    @ViewBuilder let content: (@escaping () -> Void) -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
+    @State private var closing = false
+    var body: some View {
+        GeometryReader { geometry in
+            let width = min(360, geometry.size.width * 0.88)
+            ZStack(alignment: .leading) {
+                Color.black.opacity(visible ? 0.22 : 0).ignoresSafeArea()
+                    .onTapGesture(perform: close).accessibilityLabel("Close mailboxes").accessibilityAddTraits(.isButton)
+                content(close).frame(width: width)
+                    .background(MailStyle.paper).shadow(color: .black.opacity(0.15), radius: 16, x: 6)
+                    .offset(x: visible ? 0 : -width - 20)
+                    .opacity(reduceMotion && !visible ? 0 : 1)
+                    .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
+                        if value.translation.width < -60 && abs(value.translation.width) > abs(value.translation.height) { close() }
+                    })
+            }
+        }
+        .task { await Task.yield(); withAnimation(MailStyle.motion(reduced: reduceMotion)) { visible = true } }
+        .accessibilityAction(.escape, close)
+    }
+    private func close() {
+        guard !closing else { return }; closing = true
+        withAnimation(MailStyle.motion(reduced: reduceMotion), completionCriteria: .logicallyComplete) { visible = false } completion: { dismiss() }
+    }
+}
+
 struct MailboxPanel: View {
     @Environment(MailFeedback.self) private var feedback
     let accounts: [MailAccount]

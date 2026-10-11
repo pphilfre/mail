@@ -523,8 +523,8 @@ final class DispatchUITests: XCTestCase {
         XCTAssertFalse(app.buttons["closeMailboxesButton"].exists)
         app.buttons["Done"].tap()
         app.buttons["mailboxDrawerButton"].tap(); revealMailbox("mailbox-Unread", app: app).tap()
-        XCTAssertTrue(app.buttons["inboxFilterMenu"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["inboxFilterMenu"].value as? String, "Unread")
+        XCTAssertTrue(app.buttons["inboxFilter-Unread"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["inboxFilter-Unread"].isSelected)
         XCTAssertTrue(app.navigationBars["Unread"].exists)
         app.tabBars.buttons["Emails"].tap()
         app.segmentedControls["mailboxSelector"].buttons["Inbox"].tap()
@@ -541,7 +541,6 @@ final class DispatchUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
         app.launch()
-        app.buttons["inboxFilterMenu"].tap()
         let unreadOption = app.buttons["inboxFilter-Unread"]
         XCTAssertTrue(unreadOption.waitForExistence(timeout: 5)); unreadOption.tap()
         XCTAssertTrue(app.navigationBars["Unread"].waitForExistence(timeout: 5))
@@ -554,7 +553,7 @@ final class DispatchUITests: XCTestCase {
         attachScreenshot("Reader redesign", app: app)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForNonExistence(timeout: 5))
-        app.buttons["inboxFilterMenu"].tap(); app.buttons["inboxFilter-All"].tap()
+        app.buttons["inboxFilter-All"].tap()
         XCTAssertTrue(app.navigationBars["Inbox"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Re: Saturday plans"].waitForExistence(timeout: 5))
@@ -675,6 +674,54 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
         app.staticTexts[title].tap()
         XCTAssertEqual(app.textFields["composeSubject"].value as? String, title)
+    }
+
+    func testDraftLocationsAndConfirmedDeletionSurviveRelaunch() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        app.buttons["composeButton"].tap()
+        let subject = app.textFields["composeSubject"]
+        XCTAssertTrue(subject.waitForExistence(timeout: 5))
+        let title = "Delete draft \(UUID().uuidString.prefix(8))"
+        subject.tap(); subject.typeText(title)
+        app.buttons["saveDraftButton"].tap()
+        app.buttons["mailboxDrawerButton"].tap()
+        revealMailbox("mailbox-Drafts", app: app).tap()
+        let picker = app.segmentedControls["draftLocationPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.buttons["In Gmail"].tap()
+        XCTAssertFalse(app.staticTexts[title].exists)
+        picker.buttons["On this device"].tap()
+        let row = app.staticTexts[title]
+        XCTAssertTrue(row.waitForExistence(timeout: 5)); row.swipeLeft()
+        app.buttons["Delete local copy"].firstMatch.tap()
+        let confirm = app.buttons["Delete local copy"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5)); confirm.tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+        app.terminate(); app.launch()
+        XCTAssertFalse(app.staticTexts[title].exists)
+    }
+
+    func testSearchFocusCloseAndSwipeHaveDistinctNavigation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launch()
+        app.tabBars.buttons["Tasks"].tap()
+        app.tabBars.buttons["Search"].tap()
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        // Drag the sheet's navigation bar, rather than dismissing only the keyboard.
+        let bar = app.navigationBars["Search"]
+        bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)))
+        XCTAssertTrue(app.buttons["closeSearchButton"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Tasks"].isSelected)
+        app.tabBars.buttons["Search"].tap()
+        XCTAssertTrue(app.buttons["closeSearchButton"].waitForExistence(timeout: 5))
+        app.buttons["closeSearchButton"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Emails"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Emails"].isSelected)
     }
 
     func testConversationStartsWithOpenedMessageExpandedAndCanRevealEarlierMail() {

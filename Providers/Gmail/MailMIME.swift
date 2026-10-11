@@ -92,7 +92,7 @@ enum MailMIME {
                 output.attachments.append(part); return
             }
             if let data = part.body?.data.flatMap(Base64URL.decode) {
-                let header = part.header("Content-Type") ?? ""
+                let header = (part.header("Content-Type") ?? "").lowercased()
                 let charset = header.components(separatedBy: "charset=").dropFirst().first?.components(separatedBy: ";").first?
                     .trimmingCharacters(in: CharacterSet(charactersIn: " \""))
                 let text = decodeText(data, charset: charset) ?? ""

@@ -136,8 +136,8 @@ actor LocalModelWorker {
 
     private func run(_ task: LocalWritingTask, text: String) async throws -> String {
         try Task.checkCancellation()
-        let container = try await LLMModelFactory.shared.loadContainer(configuration: .init(directory: Self.root))
         guard text.count <= 4_000 else { throw LocalModelError.tooLong }
+        let container = try await LLMModelFactory.shared.loadContainer(configuration: .init(directory: Self.root))
         let bounded = text
         return try await container.perform { context in
             let input = UserInput(chat: [

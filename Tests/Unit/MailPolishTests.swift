@@ -25,7 +25,7 @@ import UIKit
         XCTAssertTrue(inputs[0].contains("12 October"))
         XCTAssertTrue(inputs[1].contains("15 October"))
         XCTAssertFalse(inputs[1].contains("12 October"))
-        XCTAssertFalse(inputs.joined().contains("Subject must not replace body"))
+        XCTAssertTrue(inputs[0].contains("Subject must not replace body"), "Subjects supply context, but never replace missing bodies")
         XCTAssertFalse(inputs.joined().contains("Received:"))
         let single = try MailSummaryPreparation.inputs([second], maximum: 2_600)
         XCTAssertTrue(single.joined().contains("12 October"), "Keep context when the earlier message is absent")

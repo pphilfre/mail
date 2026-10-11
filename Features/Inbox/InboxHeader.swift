@@ -34,22 +34,23 @@ struct InboxHeader: View {
                 Image(systemName: "magnifyingglass").frame(width: 44, height: 44).contentShape(.rect)
             }.buttonStyle(.plain).accessibilityLabel("Search your mail").accessibilityIdentifier("searchButton")
             if showFilters {
-                Menu {
-                    ForEach(InboxQuickFilter.allCases.filter { allowStarred || $0 != .starred }) { value in
-                        Button {
-                            feedback.select()
-                            withAnimation(MailStyle.motion(reduced: reduceMotion)) { filter = value }
-                        } label: {
-                            Label(value == .all ? "All messages" : value.rawValue,
-                                  systemImage: filter == value ? "checkmark" : value.symbol)
-                        }.accessibilityIdentifier("inboxFilter-\(value.id)")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 18) {
+                        ForEach(InboxQuickFilter.allCases.filter { allowStarred || $0 != .starred }) { value in
+                            Button {
+                                feedback.select()
+                                withAnimation(MailStyle.motion(reduced: reduceMotion)) { filter = value }
+                            } label: {
+                                Text(value.rawValue).font(.subheadline.weight(filter == value ? .semibold : .regular))
+                                    .foregroundStyle(filter == value ? MailStyle.accent : .secondary).frame(minHeight: 44)
+                                    .overlay(alignment: .bottom) {
+                                        if filter == value { Capsule().fill(MailStyle.accent).frame(height: 2).padding(.bottom, 3) }
+                                    }
+                            }.buttonStyle(.plain).accessibilityIdentifier("inboxFilter-\(value.id)")
+                                .accessibilityAddTraits(filter == value ? [.isSelected] : [])
+                        }
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Label(filter == .all ? "Filter" : filter.rawValue, systemImage: "line.3.horizontal.decrease").lineLimit(1)
-                    }.font(.subheadline.weight(.medium)).padding(.horizontal, 14).frame(minHeight: 44)
-                }.buttonStyle(.plain).foregroundStyle(filter == .all ? .secondary : MailStyle.accent)
-                    .accessibilityIdentifier("inboxFilterMenu").accessibilityValue(scopeTitle)
+                }.accessibilityIdentifier("inboxFilterBar")
             }
             Spacer(minLength: 0)
             if updating { ProgressView().controlSize(.small).accessibilityLabel("Updating mail").accessibilityIdentifier("mailSyncSpinner") }

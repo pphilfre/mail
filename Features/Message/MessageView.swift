@@ -6,9 +6,9 @@ struct MessageView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(message.subject).font(.largeTitle.weight(.bold)).tracking(-0.8).textSelection(.enabled)
-                VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(message.subject).font(.title3.weight(.semibold)).textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top, spacing: 12) {
                         SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false)
                         VStack(alignment: .leading, spacing: 5) {
@@ -20,20 +20,22 @@ struct MessageView: View {
                     }
                     Divider()
                     MailBodyView(html: nil, text: message.body, remoteImages: false)
-                }.padding(.vertical, 16)
+                }.padding(.vertical, 8)
                 Label("Sample message", systemImage: "info.circle")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            .padding(MailStyle.contentPadding)
+            .padding(16)
             .frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
         }
         .background(MailStyle.paper)
-        .navigationTitle("Message")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: message.subject + "\n\n" + message.body) { Image(systemName: "square.and.arrow.up") }
+                ShareLink(item: message.subject + "\n\n" + message.body) {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 19, weight: .medium)).frame(width: 44, height: 44)
+                }.labelStyle(.iconOnly).buttonBorderShape(.circle)
                     .accessibilityLabel("Share sample message")
             }
         }

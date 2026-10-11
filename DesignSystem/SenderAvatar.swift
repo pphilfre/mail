@@ -60,6 +60,7 @@ private actor CompanyIconStore {
     private let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = URLCache(memoryCapacity: 4_000_000, diskCapacity: 20_000_000, diskPath: "DispatchSenderIcons")
         return URLSession(configuration: configuration)
@@ -84,6 +85,9 @@ private actor CompanyIconStore {
             } catch { return nil }
             // Decode before caching. HTML error pages and broken icons must fall through to the root domain.
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int,
+                  width > 1, height > 1, width <= 4096, height <= 4096,
                   let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceThumbnailMaxPixelSize: 96,

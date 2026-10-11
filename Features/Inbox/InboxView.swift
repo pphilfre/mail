@@ -161,7 +161,6 @@ struct InboxView: View {
             organisationNow = Date()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(showingDrawer ? .hidden : .visible, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 if mailbox == "Drafts" && labelFilter == nil { DraftLocationPicker(selection: $draftLocation) }
@@ -182,40 +181,7 @@ struct InboxView: View {
                     .disabled(showingDrawer)
             }
         }
-        .overlay {
-          if showingDrawer {
-            GeometryReader { geometry in
-              ZStack(alignment: .leading) {
-                Color.black.opacity(0.22).ignoresSafeArea()
-                    .onTapGesture { showingDrawer = false }
-                    .accessibilityLabel("Close mailboxes").accessibilityAddTraits(.isButton)
-                MailboxPanel(accounts: accounts, folders: folders,
-                counts: Dictionary(uniqueKeysWithValues: mailboxes.map { name in
-                    (name, name == "Drafts" ? draftCount : accounts.isEmpty && showSamples ? sampleUnread(name) : cachedUnread(accountID: accountFilter, mailbox: name))
-                }), accountCounts: accountUnreadCounts, labelCounts: labelUnreadCounts,
-                account: $accountFilterRaw, mailbox: $mailbox, label: $labelFilter,
-                openAccounts: { sheetDestination = .accounts; showingDrawer = false },
-                openSettings: { sheetDestination = .settings; showingDrawer = false },
-                openTasks: { sheetDestination = .tasks; showingDrawer = false },
-                openReceipts: { sheetDestination = .receipts; showingDrawer = false },
-                openAttachments: { sheetDestination = .attachments; showingDrawer = false },
-                openPeople: { sheetDestination = .people; showingDrawer = false },
-                openCollections: { sheetDestination = .collections; showingDrawer = false },
-                openSearch: { showingDrawer = false; sheetDestination = .search },
-                openSubscriptions: { sheetDestination = .subscriptions; showingDrawer = false },
-                close: { showingDrawer = false })
-                  .frame(width: min(360, geometry.size.width * 0.88))
-                  .shadow(color: .black.opacity(0.15), radius: 16, x: 6)
-                  .transition(.move(edge: .leading))
-                  .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { value in
-                      if value.translation.width < -60 && abs(value.translation.width) > abs(value.translation.height) { showingDrawer = false }
-                  })
-              }
-            }.transition(.opacity).zIndex(10)
-          }
-        }
-        .animation(MailStyle.motion(reduced: reduceMotion), value: showingDrawer)
-        .onChange(of: showingDrawer) { _, open in if !open { presentDestination() } }
+        .fullScreenCover(isPresented: $showingDrawer, onDismiss: presentDestination) { mailboxPanel }
         .sheet(isPresented: $showingAccounts) {
             NavigationStack { AccountsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingAccounts = false } } } }
                 .modifier(MailFeedbackOverlay(playsHaptics: false))
@@ -447,6 +413,25 @@ struct InboxView: View {
         .accessibilityLabel("Accounts")
         .accessibilityIdentifier("profileMenuButton")
     }
+    private var mailboxPanel: some View {
+    MailSidebarPresentation(dismiss: { setDrawer(false) }) { close in
+        MailboxPanel(accounts: accounts, folders: folders,
+            counts: Dictionary(uniqueKeysWithValues: mailboxes.map { name in
+                (name, name == "Drafts" ? draftCount : accounts.isEmpty && showSamples ? sampleUnread(name) : cachedUnread(accountID: accountFilter, mailbox: name))
+            }), accountCounts: accountUnreadCounts, labelCounts: labelUnreadCounts,
+            account: $accountFilterRaw, mailbox: $mailbox, label: $labelFilter,
+            openAccounts: { sheetDestination = .accounts; close() },
+            openSettings: { sheetDestination = .settings; close() },
+            openTasks: { sheetDestination = .tasks; close() },
+            openReceipts: { sheetDestination = .receipts; close() },
+            openAttachments: { sheetDestination = .attachments; close() },
+            openPeople: { sheetDestination = .people; close() },
+            openCollections: { sheetDestination = .collections; close() },
+            openSearch: { sheetDestination = .search; close() },
+            openSubscriptions: { sheetDestination = .subscriptions; close() },
+            close: close)
+    }.presentationBackground(.clear)
+    }
     private func presentDestination() {
         switch sheetDestination {
         case .search: showingSearch = true
@@ -466,7 +451,12 @@ struct InboxView: View {
         ["Inbox", "All Mail", "Unread"].contains(name) ? session.sampleMessages.filter { !$0.isRead }.count : 0
     }
     private func toggleDrawer() {
-        feedback.select(); showingDrawer.toggle()
+        feedback.select(); setDrawer(!showingDrawer)
+    }
+    private func setDrawer(_ visible: Bool) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { showingDrawer = visible }
     }
     private func loadMailbox() {
         selecting = false; selectedIDs.removeAll()

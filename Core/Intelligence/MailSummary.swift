@@ -71,11 +71,12 @@ enum MailSummaryPreparation {
             // Preserve quoted history when its source message hasn't been downloaded.
             let authored = body(source)
             let hasEarlierCopy = previousBodies.contains { $0.count > 20 && complete.contains($0) }
-            let body = hasEarlierCopy && !authored.isEmpty ? authored : complete
+            let preparedBody = hasEarlierCopy && !authored.isEmpty ? authored : complete
             previousBodies.append(authored)
-            let header = "Message \(index + 1), from \(String(source.sender.prefix(120))):\n"
-            inputs += chunks(body, maximum: max(100, maximum - header.count)).map { header + $0 }
+            let header = "Message \(index + 1), from \(String(source.sender.prefix(120)))\nSubject: \(String(source.subject.prefix(240)))\nBody:\n"
+            inputs += chunks(preparedBody, maximum: max(100, maximum - header.count)).map { header + $0 }
         }
+        guard inputs.count <= 40 else { throw MailSummaryError.tooLarge }
         return inputs
     }
 

@@ -24,10 +24,15 @@ struct DraftsView: View {
 
 struct DraftLocationPicker: View {
     @Binding var selection: DraftLocation
+    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
-        Picker("Draft location", selection: $selection) {
-            ForEach(DraftLocation.allCases) { Text($0.rawValue).tag($0) }
-        }.pickerStyle(.segmented).accessibilityIdentifier("draftLocationPicker")
+        Group {
+            if typeSize.isAccessibilitySize { picker.pickerStyle(.menu) }
+            else { picker.pickerStyle(.segmented) }
+        }.accessibilityIdentifier("draftLocationPicker")
+    }
+    private var picker: some View {
+        Picker("Draft location", selection: $selection) { ForEach(DraftLocation.allCases) { Text($0.rawValue).tag($0) } }
     }
 }
 
@@ -131,20 +136,17 @@ struct DraftSections: View {
         }
         .confirmationDialog("Delete the local copy?", isPresented: Binding(
             get: { deletingDraft != nil }, set: { if !$0 { deletingDraft = nil } }
-        ), titleVisibility: .visible) {
+        ), titleVisibility: .visible, presenting: deletingDraft) { draft in
             Button("Delete local copy", role: .destructive) {
-                if let draft = deletingDraft {
-                    do { try session.deleteDraft(id: draft.id) }
-                    catch { errorMessage = error.localizedDescription }
-                }
+                do { try session.deleteDraft(id: draft.id) }
+                catch { errorMessage = error.localizedDescription }
                 deletingDraft = nil
             }
-        } message: { Text("Any copy saved in Gmail will remain there.") }
+        } message: { _ in Text("Any copy saved in Gmail will remain there.") }
         .confirmationDialog("Delete this Gmail draft?", isPresented: Binding(
             get: { deletingRemote != nil }, set: { if !$0 { deletingRemote = nil } }
-        ), titleVisibility: .visible) {
+        ), titleVisibility: .visible, presenting: deletingRemote) { message in
             Button("Delete Gmail draft", role: .destructive) {
-                guard let message = deletingRemote else { return }
                 deletingRemote = nil; deleting = true; errorMessage = nil
                 Task {
                     defer { deleting = false }
@@ -155,7 +157,7 @@ struct DraftSections: View {
                     } catch { errorMessage = error.localizedDescription }
                 }
             }
-        } message: { Text("The Gmail draft and any linked local edits will be deleted. This cannot be undone.") }
+        } message: { _ in Text("The Gmail draft and any linked local edits will be deleted. This cannot be undone.") }
         .task(id: accountID) { await refresh() }
     }
     private func refresh() async {
