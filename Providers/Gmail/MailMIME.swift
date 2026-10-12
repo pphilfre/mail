@@ -60,6 +60,12 @@ enum MailMIME {
         }
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
+    static func charset(in contentType: String) -> String? {
+        guard let pattern = try? NSRegularExpression(pattern: #"(?i)(?:^|;)\s*charset\s*=\s*["']?([^;"'\s]+)"#),
+              let match = pattern.firstMatch(in: contentType, range: NSRange(contentType.startIndex..., in: contentType)),
+              let range = Range(match.range(at: 1), in: contentType) else { return nil }
+        return String(contentType[range])
+    }
     struct Content: Sendable { var text = ""; var html = ""; var attachments: [GmailPart] = [] }
     /// Until rich composing exists, never replace a remote draft whose content we cannot round-trip.
     static func canEditDraft(_ part: GmailPart?, depth: Int = 0) -> Bool {
@@ -92,10 +98,9 @@ enum MailMIME {
                 output.attachments.append(part); return
             }
             if let data = part.body?.data.flatMap(Base64URL.decode) {
-                let header = (part.header("Content-Type") ?? "").lowercased()
-                let charset = header.components(separatedBy: "charset=").dropFirst().first?.components(separatedBy: ";").first?
-                    .trimmingCharacters(in: CharacterSet(charactersIn: " \""))
-                let text = decodeText(data, charset: charset) ?? ""
+                let encoding = charset(in: part.header("Content-Type") ?? "")
+                // Gmail's body.data already contains transfer-decoded bytes, wrapped in base64url.
+                let text = decodeText(data, charset: encoding) ?? ""
                 if part.mimeType?.lowercased() == "text/plain" { output.text += text + "\n" }
                 if part.mimeType?.lowercased() == "text/html" { output.html += text + "\n" }
             }

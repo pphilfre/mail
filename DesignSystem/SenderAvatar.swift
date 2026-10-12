@@ -10,6 +10,7 @@ struct SenderAvatar: View {
     var context = ""
     @AppStorage("senderPictures") private var senderPictures = true
     @State private var icon: UIImage?
+    @State private var resolvedKey = ""
     private var requestKey: String { "\(allowsRemoteIcon && senderPictures)-\(email.lowercased())" }
     private var category: LocalMailCategory { SenderIdentity.category(email: email, context: context) }
     private var appearance: (String, Color) {
@@ -25,7 +26,7 @@ struct SenderAvatar: View {
     }
     var body: some View {
         Group {
-            if let icon {
+            if let icon, resolvedKey == requestKey {
                 Image(uiImage: icon).resizable().scaledToFit().padding(max(3, size * 0.1)).background(MailStyle.paper)
             } else {
                 Image(systemName: appearance.0).font(.system(size: size * 0.48, weight: .regular))
@@ -37,7 +38,8 @@ struct SenderAvatar: View {
         .clipShape(.rect(cornerRadius: 11))
         .accessibilityHidden(true)
         .task(id: requestKey) {
-            icon = nil
+            icon = nil; resolvedKey = ""
+            let key = requestKey
             guard allowsRemoteIcon, senderPictures else { return }
             // Domain parsing and resource loading happen off the UI actor.
             let senderEmail = email
@@ -45,7 +47,7 @@ struct SenderAvatar: View {
             for domain in domains {
                 guard !Task.isCancelled, let url = URL(string: "https://\(domain)/favicon.ico") else { return }
                 if let data = await CompanyIconStore.shared.data(for: url), !Task.isCancelled,
-                   let image = UIImage(data: data) { icon = image; return }
+                   let image = UIImage(data: data) { resolvedKey = key; icon = image; return }
             }
         }
     }

@@ -238,6 +238,7 @@ private struct SearchResultsView: View {
         .searchable(text: $query, isPresented: $searchPresented,
                     placement: .navigationBarDrawer(displayMode: .always), prompt: "Search mail")
         .searchFocused($searchFocused)
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
         .task { await Task.yield(); searchPresented = true; searchFocused = true }
         .onSubmit(of: .search) { rememberQuery() }
         .onDisappear { rememberQuery() }

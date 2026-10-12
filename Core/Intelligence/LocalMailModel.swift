@@ -182,8 +182,13 @@ final class LocalMailModel {
     private(set) var busy = false
     private(set) var downloadProgress: Double?
     static var systemAvailable: Bool {
+        #if targetEnvironment(simulator)
+        // Simulator availability can report ready even without a usable model service.
+        return false
+        #else
         if case .available = SystemLanguageModel.default.availability { return true }
         return false
+        #endif
     }
     var canWrite: Bool { Self.systemAvailable || (installed && LocalModelWorker.supported) }
     var unavailableReason: String? {

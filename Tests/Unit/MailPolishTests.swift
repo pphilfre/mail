@@ -3,6 +3,15 @@ import UIKit
 @testable import DispatchMail
 
 @MainActor final class MailPolishTests: XCTestCase {
+    func testGmailBodyDecodesMixedCaseSpacedCharsetWithoutDoubleDecoding() {
+        let part = GmailPart(mimeType: "text/plain", headers: [
+            GmailHeader(name: "Content-Type", value: "text/plain; CHARSET = 'windows-1252'; format=flowed"),
+            GmailHeader(name: "Content-Transfer-Encoding", value: "quoted-printable")
+        ], body: GmailBody(data: Base64URL.encode(Data([0x80, 0x32, 0x34]))))
+        XCTAssertEqual(MailMIME.content(part).text.trimmingCharacters(in: .whitespacesAndNewlines), "€24")
+        let literal = GmailPart(mimeType: "text/plain", body: GmailBody(data: Base64URL.encode(Data("Keep =20 as typed".utf8))))
+        XCTAssertTrue(MailMIME.content(literal).text.contains("=20"))
+    }
     func testRegistrableDomainRespectsCountryPrivateWildcardAndExceptionRules() {
         let list = MailPublicSuffixes(text: "com\nuk\nco.uk\nio\ngithub.io\n*.ck\n!www.ck")
         XCTAssertEqual(list.registrableDomain("news.example.co.uk"), "example.co.uk")
@@ -40,6 +49,14 @@ import UIKit
         XCTAssertTrue(inputs.last?.contains("£245 by 15 October") == true)
         XCTAssertFalse(inputs.joined().contains("Tracking preheader"))
         XCTAssertThrowsError(try MailSummaryPreparation.inputs([.init(sender: "Alex", subject: "Only metadata", text: nil, html: nil)], maximum: 2_600))
+    }
+
+    func testEmbeddedImagesDoNotExhaustReadableBodyBudget() throws {
+        let html = "<img src=\"data:image/png;base64," + String(repeating: "a", count: 2_100_000) + "\"><p>Please approve £45.</p>"
+        let htmlOnly = MailSummarySource(sender: "Alex", subject: "Approval", text: nil, html: html)
+        XCTAssertTrue(try MailSummaryPreparation.inputs([htmlOnly], maximum: 2_600).joined().contains("Please approve £45."))
+        let plain = MailSummarySource(sender: "Alex", subject: "Approval", text: "Please approve £45.", html: html)
+        XCTAssertEqual(try MailSummaryPreparation.inputs([plain], maximum: 2_600).count, 1)
     }
 
     func testSummaryReductionConsumesEveryChunkAndReturnsOneParagraph() async throws {

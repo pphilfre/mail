@@ -96,13 +96,12 @@ struct AddToCollectionView: View {
                 } label: { Label(collection.name, systemImage: included ? "checkmark.circle.fill" : "folder") }
                     .disabled(included)
             }
-            Button("New collection", systemImage: "folder.badge.plus") { creating = true }
+            NavigationLink {
+                CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
+            } label: { Label("New collection", systemImage: "folder.badge.plus") }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .navigationTitle("Add to collection").navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $creating) {
-            CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
-        }
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
     }
 }

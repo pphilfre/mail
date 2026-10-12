@@ -3,7 +3,7 @@ import SwiftUI
 struct InlineMailSummary: View {
     let sources: [MailSummarySource]
     var loadingBody = false
-    var securitySymbol: String = "questionmark.shield"
+    var securitySymbol: String = "shield"
     var securityColor: Color = .secondary
     var securityLabel = "Security Inspector, analysis incomplete"
     var securityIdentifier = "summarySecurityInspector"
@@ -21,7 +21,7 @@ struct InlineMailSummary: View {
             HStack {
                 if let onSecurity {
                     Button(action: onSecurity) {
-                        Image(systemName: securitySymbol).font(.system(size: 19)).foregroundStyle(securityColor).frame(width: 44, height: 44)
+                        Image(systemName: securitySymbol).font(.system(size: 19)).foregroundStyle(securityColor).frame(width: 44, height: 44).contentShape(.rect)
                     }.buttonStyle(.plain).accessibilityLabel(securityLabel).accessibilityIdentifier(securityIdentifier)
                 }
                 Button(running ? "Summarising…" : expanded ? "Hide summary" : "Summarise") {

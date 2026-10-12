@@ -65,6 +65,7 @@ struct DraftSections: View {
 
     var body: some View {
         Group {
+            deletionPresenter
             if location == .device && !local.isEmpty {
               Section {
                 ForEach(local) { draft in
@@ -89,7 +90,7 @@ struct DraftSections: View {
                     }
                 }
                 .accessibilityIdentifier("localDraft-\(draft.id.uuidString)")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     Button("Delete local copy", role: .destructive) { deletingDraft = draft }
                 }
                 .contextMenu { Button("Delete local copy", systemImage: "trash", role: .destructive) { deletingDraft = draft } }
@@ -111,7 +112,7 @@ struct DraftSections: View {
                                 Text(accountName(message.accountID)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
-                        .swipeActions { Button("Delete Gmail draft", role: .destructive) { deletingRemote = message } }
+                        .swipeActions(allowsFullSwipe: false) { Button("Delete Gmail draft", role: .destructive) { deletingRemote = message } }
                         .contextMenu { Button("Delete Gmail draft", systemImage: "trash", role: .destructive) { deletingRemote = message } }
                         .disabled(deleting)
                     }
@@ -134,6 +135,11 @@ struct DraftSections: View {
                 }
             }
         }
+        .task(id: accountID) { await refresh() }
+    }
+    // A single stable presenter avoids duplicating dialogs across the Group’s list rows.
+    private var deletionPresenter: some View {
+        Color.clear.frame(height: 0).listRowInsets(EdgeInsets()).listRowSeparator(.hidden)
         .confirmationDialog("Delete the local copy?", isPresented: Binding(
             get: { deletingDraft != nil }, set: { if !$0 { deletingDraft = nil } }
         ), titleVisibility: .visible, presenting: deletingDraft) { draft in
@@ -158,7 +164,6 @@ struct DraftSections: View {
                 }
             }
         } message: { _ in Text("The Gmail draft and any linked local edits will be deleted. This cannot be undone.") }
-        .task(id: accountID) { await refresh() }
     }
     private func refresh() async {
         guard !refreshing, let gmail = runtime.gmail else { return }

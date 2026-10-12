@@ -11,7 +11,7 @@ enum MailSecurityStatus: Equatable {
         switch self { case .unknown: .secondary; case .lowRisk: .green; case .uncertain: .orange; case .suspicious: .red }
     }
     var symbol: String {
-        switch self { case .unknown: "questionmark.shield"; case .lowRisk: "checkmark.shield"; case .uncertain: "exclamationmark.shield"; case .suspicious: "xmark.shield" }
+        switch self { case .unknown: "shield"; case .lowRisk: "checkmark.shield"; case .uncertain: "exclamationmark.shield"; case .suspicious: "xmark.shield" }
     }
     var label: String {
         switch self { case .unknown: "Analysis incomplete"; case .lowRisk: "Low observed risk"; case .uncertain: "Review concerns"; case .suspicious: "Suspicious" }

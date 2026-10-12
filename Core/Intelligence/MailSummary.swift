@@ -12,12 +12,17 @@ enum MailSummaryPreparation {
     /// Never substitute the subject or inbox preview for a missing body.
     static func body(_ source: MailSummarySource, includeQuotedHistory: Bool = false) -> String {
         let plain = source.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        var html = source.html ?? ""
-        if !includeQuotedHistory {
-            html = html.replacingOccurrences(of: #"(?is)<blockquote\b[^>]*>.*?</blockquote\s*>"#, with: "", options: .regularExpression)
+        let extracted: String
+        if plain.isEmpty {
+            var html = source.html ?? ""
+            if !includeQuotedHistory {
+                html = html.replacingOccurrences(of: #"(?is)<blockquote\b[^>]*>.*?</blockquote\s*>"#, with: "", options: .regularExpression)
+            }
+            html = html.replacingOccurrences(of: #"(?is)<(div|span)\b[^>]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*>.*?</\1\s*>"#, with: "", options: .regularExpression)
+            extracted = MailMIME.readableHTML(html)
+        } else {
+            extracted = plain
         }
-        html = html.replacingOccurrences(of: #"(?is)<(div|span)\b[^>]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^>]*>.*?</\1\s*>"#, with: "", options: .regularExpression)
-        let extracted = plain.isEmpty ? MailMIME.readableHTML(html) : plain
         var lines: [String] = []
         var signature = false
         for line in extracted.components(separatedBy: .newlines) {
@@ -57,17 +62,24 @@ enum MailSummaryPreparation {
 
     static func inputs(_ sources: [MailSummarySource], maximum: Int) throws -> [String] {
         guard !sources.isEmpty else { throw MailSummaryError.missingBody }
-        guard sources.reduce(0, { $0 + ($1.text?.utf8.count ?? 0) + ($1.html?.utf8.count ?? 0) }) <= 2_000_000 else { throw MailSummaryError.tooLarge }
+        let rawBytes = sources.reduce(0) { total, source in
+            let plain = source.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return total + (plain.isEmpty ? source.html?.utf8.count ?? 0 : plain.utf8.count)
+        }
+        guard rawBytes <= 20_000_000 else { throw MailSummaryError.tooLarge }
         let ordered = sources.enumerated().sorted {
             let left = $0.element.receivedAt ?? .distantPast, right = $1.element.receivedAt ?? .distantPast
             return left == right ? $0.offset < $1.offset : left < right
         }.map(\.element)
         var previousBodies: [String] = []
         var inputs: [String] = []
+        var readableBytes = 0
         for (index, source) in ordered.enumerated() {
             try Task.checkCancellation()
             let complete = body(source, includeQuotedHistory: true)
             guard !complete.isEmpty else { throw MailSummaryError.missingBody }
+            readableBytes += complete.utf8.count
+            guard readableBytes <= 2_000_000 else { throw MailSummaryError.tooLarge }
             // Preserve quoted history when its source message hasn't been downloaded.
             let authored = body(source)
             let hasEarlierCopy = previousBodies.contains { $0.count > 20 && complete.contains($0) }

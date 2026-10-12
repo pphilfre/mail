@@ -93,6 +93,15 @@ struct GmailMessageView: View {
     private var organisation: MailLocalOrganisation { MailLocalOrganisation.values(metadata)[MailLocalOrganisation.key(message)] ?? MailLocalOrganisation() }
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.isEmpty ? [message] : allMessages }
+    private var summarySources: [MailSummarySource] {
+        thread.map { row in
+            let plain = row.plainTextBody
+            let needsHTML = plain?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            return MailSummarySource(sender: row.sender.displayName, subject: row.subject,
+                text: plain, html: needsHTML ? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } : nil,
+                receivedAt: row.receivedAt)
+        }
+    }
     private var securityStatus: MailSecurityStatus {
         guard let saved = runtime.securityReports[actionMessage.id], saved.fingerprint == MailSecurityContent.fingerprint(actionMessage, attachments: filesFor(actionMessage)) else { return .unknown }
         return MailSecurityStatus(report: saved.report)
@@ -108,10 +117,7 @@ struct GmailMessageView: View {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)
                     .font(.title3.weight(.semibold)).textSelection(.enabled)
                     .padding(.top, 4)
-                InlineMailSummary(sources: thread.map {
-                    MailSummarySource(sender: $0.sender.displayName, subject: $0.subject,
-                        text: $0.plainTextBody, html: $0.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }, receivedAt: $0.receivedAt)
-                }, loadingBody: loadingThread, securitySymbol: securityStatus.symbol, securityColor: securityStatus.color,
+                InlineMailSummary(sources: summarySources, loadingBody: loadingThread, securitySymbol: securityStatus.symbol, securityColor: securityStatus.color,
                    securityLabel: "Security Inspector, " + securityStatus.label, securityIdentifier: "securityInspector-\(actionMessage.remoteID)",
                    onSecurity: { readerPresentation = .security(actionMessage) })
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
