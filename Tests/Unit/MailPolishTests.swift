@@ -98,6 +98,9 @@ import UIKit
     }
 
     func testSecurityUnknownDoesNotBecomeGreen() {
+        for status in [MailSecurityStatus.unknown, .lowRisk, .uncertain, .suspicious] {
+            XCTAssertNotNil(UIImage(systemName: status.symbol), "Every security status needs a visible symbol")
+        }
         XCTAssertEqual(MailSecurityStatus(report: nil), .unknown)
         XCTAssertEqual(MailSecurityStatus(report: SecurityReport(findings: [])), .unknown)
         XCTAssertEqual(MailSecurityStatus(report: SecurityReport(findings: [.init(id: "dkim", title: "DKIM", verdict: .unknown, explanation: "Not analysed")])), .unknown)

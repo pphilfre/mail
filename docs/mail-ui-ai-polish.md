@@ -22,6 +22,8 @@ Every bounded chunk reaches generation. Long threads use ordered hierarchical re
 
 Regression tests cover registrable domains, missing/HTML/long bodies, chronology and duplicate quotes, complete reduction input, error propagation, stale composer suggestions, UTF-16 selections and retained formatting, and unknown security status. UI coverage exercises draft switching/deletion, search focus and close versus swipe, compact reader actions and inline composer availability in dark mode with large text.
 
+The first macOS run compiled successfully and passed 176 unit tests and 28 of 33 UI tests. Its screenshots and accessibility trees exposed a missing SF Symbol/hit target, hidden search toolbar controls, an unstable draft-confirmation presenter, and collection navigation that did not open. These were corrected. Simulator model availability now explicitly reports unsupported instead of attempting an unusable Foundation Models service.
+
 The Windows tree-sitter check is supplementary syntax checking, not Swift SDK type checking. The macOS GitHub Actions build and XCTest results are recorded below when complete. Deterministic summary tests validate the input/reduction/output contract; they do not measure model factuality. Real Qwen quality, latency, thermal behavior, memory use and keyboard gestures still need a signed iPhone 14 Pro Max run with the downloaded model. The small local model can make mistakes; this change does not claim parity with a larger model.
 
 Gmail authentication, account storage and database schema remain unchanged. Zoho is a documented future-provider boundary in this repository, not a working integration to replace. No new entitlements are introduced.
@@ -32,3 +34,5 @@ Gmail authentication, account storage and database schema remain unchanged. Zoho
 - [Outlook iOS favourites](https://support.microsoft.com/en-us/outlook/how-do-i-add-a-folder-to-my-favorites)
 - [Apple's native SwiftUI design](https://developer.apple.com/videos/play/wwdc2025/323/)
 - [Mozilla Public Suffix List](https://publicsuffix.org/list/), bundled snapshot `2026-10-07_07-28-19_UTC`, MPL 2.0 (license notice retained in the resource).
+
+- [SwiftUI search toolbar visibility](https://developer.apple.com/documentation/swiftui/view/searchpresentationtoolbarbehavior(_:)), used to keep the explicit Close action available while search has keyboard focus.

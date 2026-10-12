@@ -137,7 +137,7 @@ struct DraftSections: View {
         }
         .task(id: accountID) { await refresh() }
     }
-    // A single stable presenter avoids duplicating dialogs across the Group’s list rows.
+    // A single stable presenter avoids duplicating dialogs across the Group's list rows.
     private var deletionPresenter: some View {
         Color.clear.frame(height: 0).listRowInsets(EdgeInsets()).listRowSeparator(.hidden)
         .confirmationDialog("Delete the local copy?", isPresented: Binding(
