@@ -81,7 +81,10 @@ struct MessageActionsSheet: View {
                 row("Create Reminder", "checklist", .task, identifier: "makeMailTaskButton")
                 row("Add Calendar Event", "calendar.badge.plus", .calendar)
                 if !message.isDraft {
-                    row("Add to collection", "folder.badge.plus", .collection, identifier: "addToCollectionButton")
+                    NavigationLink {
+                        AddToCollectionView(message: message, onDone: { dismiss() })
+                    } label: { actionLabel("Add to collection", "folder.badge.plus") }
+                        .accessibilityIdentifier("addToCollectionButton")
                     row("Save receipt", "receipt", .receipt, identifier: "makeReceiptButton")
                 }
             } header: { Text("Tools") }

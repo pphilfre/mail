@@ -227,6 +227,7 @@ final class DispatchUITests: XCTestCase {
         let latest = app.descendants(matching: .any)["cachedMessage-latest"].firstMatch
         XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
         openReaderActions(app: app); revealAction("addToCollectionButton", app: app).tap()
+        XCTAssertTrue(app.navigationBars["Add to collection"].waitForExistence(timeout: 5))
         app.buttons["New collection"].tap()
         let name = app.textFields["collectionNameField"]
         XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("House move")
@@ -655,8 +656,9 @@ final class DispatchUITests: XCTestCase {
         app.launch()
         app.buttons["mailboxDrawerButton"].tap()
         revealMailbox("mailbox-Unread", app: app).tap()
+        XCTAssertTrue(app.buttons["mailbox-Unread"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["A quieter inbox"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["Re: Saturday plans"].exists)
+        XCTAssertTrue(app.staticTexts["Re: Saturday plans"].waitForNonExistence(timeout: 5))
     }
 
     func testDraftsMailboxShowsLocalDraftAndOpensComposer() {

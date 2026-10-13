@@ -84,6 +84,7 @@ struct MailboxPanel: View {
                                     Text(name).font(.subheadline.weight(.medium))
                                 }.foregroundStyle(.primary).padding(12).frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
                                     .background(mailbox == name && label == nil ? MailStyle.accent.opacity(0.1) : MailStyle.tile, in: .rect(cornerRadius: 12))
+                                    .contentShape(.rect)
                             }.buttonStyle(.plain).accessibilityIdentifier("mailbox-\(name)")
                                 .accessibilityAddTraits(mailbox == name && label == nil ? [.isSelected] : [])
                         }

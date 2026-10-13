@@ -74,11 +74,11 @@ struct CollectionEditor: View {
 
 struct AddToCollectionView: View {
     let message: MailMessage
+    var onDone: (() -> Void)? = nil
     @Query private var metadata: [StoreMetadata]
     @Environment(AppRuntime.self) private var runtime
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
-    @State private var creating = false
     private var collections: [MailCollection] {
         metadata.filter { $0.key.hasPrefix(MailCollection.prefix) }.compactMap { try? MailCollection.decode($0) }.sorted { $0.name < $1.name }
     }
@@ -91,17 +91,21 @@ struct AddToCollectionView: View {
                     do {
                         guard let repository = runtime.repository else { throw GmailError.reconnect }
                         var updated = collection
-                        updated.links.append(MailCollectionLink(message)); try repository.saveCollection(updated); dismiss()
+                        updated.links.append(MailCollectionLink(message)); try repository.saveCollection(updated); finish()
                     } catch { errorMessage = error.localizedDescription }
                 } label: { Label(collection.name, systemImage: included ? "checkmark.circle.fill" : "folder") }
                     .disabled(included)
             }
             NavigationLink {
                 CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
-            } label: { Label("New collection", systemImage: "folder.badge.plus") }
+            } label: {
+                Label("New collection", systemImage: "folder.badge.plus")
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
+            }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .navigationTitle("Add to collection").navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: finish) } }
     }
+    private func finish() { if let onDone { onDone() } else { dismiss() } }
 }

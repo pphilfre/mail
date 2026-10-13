@@ -34,5 +34,4 @@ Gmail authentication, account storage and database schema remain unchanged. Zoho
 - [Outlook iOS favourites](https://support.microsoft.com/en-us/outlook/how-do-i-add-a-folder-to-my-favorites)
 - [Apple's native SwiftUI design](https://developer.apple.com/videos/play/wwdc2025/323/)
 - [Mozilla Public Suffix List](https://publicsuffix.org/list/), bundled snapshot `2026-10-07_07-28-19_UTC`, MPL 2.0 (license notice retained in the resource).
-
 - [SwiftUI search toolbar visibility](https://developer.apple.com/documentation/swiftui/view/searchpresentationtoolbarbehavior(_:)), used to keep the explicit Close action available while search has keyboard focus.
