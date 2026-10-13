@@ -7,7 +7,7 @@ enum DraftLinks {
     @MainActor static func hiddenMessageIDs(outgoing: [OutgoingMessage], links: [StoreMetadata], accountID: UUID?) -> Set<String> {
         let byKey = Dictionary(uniqueKeysWithValues: links.map { ($0.key, $0.value) })
         // A pending/unconfirmed send must not reappear as an editable Gmail copy.
-        return Set(outgoing.filter { ["draft", "sending", "sendUnconfirmed", "sent"].contains($0.stateRaw) &&
+        return Set(outgoing.filter { ["draft", "scheduled", "sendFailed", "sending", "sendUnconfirmed", "sent"].contains($0.stateRaw) &&
             (accountID == nil || $0.accountID == accountID) }.compactMap { row in
             guard let id = row.accountID, let remote = row.remoteDraftID, let messageID = byKey[key(id, remote)] else { return nil }
             return "\(id.uuidString):\(messageID)"

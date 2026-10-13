@@ -9,6 +9,9 @@ enum DraftAttachments {
 @MainActor extension MailRepository {
     func localDraft(_ row: OutgoingMessage) throws -> LocalDraft {
         var draft = row.localDraft
+        if let value = try metadata("draft-rich-body:\(row.id.uuidString)")?.value {
+            draft.richBody = try JSONDecoder().decode(RichMailBody.self, from: Data(value.utf8))
+        }
         if let value = try metadata(DraftAttachments.key(row.id))?.value {
             draft.attachments = try JSONDecoder().decode([DraftAttachment].self, from: Data(value.utf8))
         }
@@ -25,11 +28,14 @@ enum DraftAttachments {
         } else if let existing { context.delete(existing) }
     }
     func saveAttachments(_ draft: LocalDraft) throws {
+        let rich = try draft.richBody.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
+        try setMetadata("draft-rich-body:\(draft.id.uuidString)", value: rich)
         try DraftAttachmentStore.validate(draft.attachments)
         let value = draft.attachments.isEmpty ? nil : String(decoding: try JSONEncoder().encode(draft.attachments), as: UTF8.self)
         try setMetadata(DraftAttachments.key(draft.id), value: value)
     }
     func removeDraftMetadata(_ id: UUID) throws {
+        try setMetadata("draft-rich-body:\(id.uuidString)", value: nil)
         try setMetadata(DraftAttachments.key(id), value: nil)
         try setMetadata(DraftAttachments.revisionKey(id), value: nil)
     }

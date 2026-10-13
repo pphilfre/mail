@@ -43,7 +43,7 @@ struct MessageActionsSheet: View {
             }
             Section {
                 row(message.isStarred ? "Unflag" : "Flag", "flag", .triage(message.isStarred ? "unstar" : "star"))
-                NavigationLink { folderPicker(move: false) } label: { Label("Tag", systemImage: "tag") }
+                NavigationLink { folderPicker(move: false) } label: { actionLabel("Tag", "tag") }
                     .disabled(folders.filter { $0.kindRaw == "user" }.isEmpty)
                 row(organisation.pinned ? "Unpin" : "Pin", "pin", .pin(!organisation.pinned))
                 if organisation.isSnoozed(at: Date()) { row(message.isInbox ? "Return to inbox" : "Stop snoozing", "clock.arrow.circlepath", .unsnooze) }
@@ -52,12 +52,12 @@ struct MessageActionsSheet: View {
                         Button("In one hour") { select(.snooze(Date().addingTimeInterval(3600))) }
                         Button("Tomorrow morning") { select(.snooze(Self.tomorrowMorning())) }
                         Button("In one week") { select(.snooze(Date().addingTimeInterval(7 * 86400))) }
-                    } label: { Label("Snooze", systemImage: "clock") }
+                    } label: { actionLabel("Snooze", "clock") }
                 }
                 row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"), identifier: "readerReadButton")
             } header: { Text("Organisation") }
             Section("Management") {
-                NavigationLink { folderPicker(move: true) } label: { Label("Move", systemImage: "folder") }
+                NavigationLink { folderPicker(move: true) } label: { actionLabel("Move", "folder") }
                     .disabled(message.isTrash || message.isSpam || message.isDraft)
                 row("Archive", "archivebox", .triage("archive")).disabled(!message.isInbox || message.isDraft)
                 if message.isTrash { row("Restore", "arrow.uturn.backward", .triage("restore")) }
@@ -81,7 +81,10 @@ struct MessageActionsSheet: View {
                 row("Create Reminder", "checklist", .task, identifier: "makeMailTaskButton")
                 row("Add Calendar Event", "calendar.badge.plus", .calendar)
                 if !message.isDraft {
-                    row("Add to collection", "folder.badge.plus", .collection, identifier: "addToCollectionButton")
+                    NavigationLink {
+                        AddToCollectionView(message: message, onDone: { dismiss() })
+                    } label: { actionLabel("Add to collection", "folder.badge.plus") }
+                        .accessibilityIdentifier("addToCollectionButton")
                     row("Save receipt", "receipt", .receipt, identifier: "makeReceiptButton")
                 }
             } header: { Text("Tools") }
@@ -89,6 +92,9 @@ struct MessageActionsSheet: View {
             Section("Security") { row("Open Security Inspector", "checkmark.shield", .security) }
         }
         .listStyle(.plain)
+        .tint(.primary)
+        .scrollContentBackground(.hidden).background(MailStyle.paper)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listSectionSpacing(.compact)
         .environment(\.defaultMinListRowHeight, 44)
         .navigationTitle("Message actions").navigationBarTitleDisplayMode(.inline)
@@ -98,11 +104,18 @@ struct MessageActionsSheet: View {
     private func select(_ action: MessageSheetAction) { feedback.select(); choose(action) }
     private func row(_ title: String, _ symbol: String, _ action: MessageSheetAction, destructive: Bool = false, identifier: String? = nil) -> some View {
         Button(role: destructive ? .destructive : nil) { select(action) } label: {
-            Label(title, systemImage: symbol).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
+            actionLabel(title, symbol, destructive: destructive)
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .accessibilityIdentifier(identifier ?? title).accessibilityLabel(title)
         .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.primary)
+    }
+    private func actionLabel(_ title: String, _ symbol: String, destructive: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol).font(.system(size: 18)).frame(width: 24)
+            Text(title).font(.body)
+        }.foregroundStyle(destructive ? Color.red : Color.primary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
     }
     private func quick(_ title: String, _ symbol: String, _ action: MessageSheetAction) -> some View {
         Button { select(action) } label: {

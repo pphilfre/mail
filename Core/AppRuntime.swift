@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftData
+import UIKit
 
 @MainActor
 @Observable
@@ -13,6 +14,7 @@ final class AppRuntime {
     var securityReports: [UUID: (fingerprint: String, report: SecurityReport)] = [:]
     let appLock = MailAppLock()
     let localModel = LocalMailModel()
+    let nativeServices = MailNativeServices()
     var sharedDraft: LocalDraft?
     var shareError: String?
     @ObservationIgnored private var pendingShares: [URL] = []
@@ -51,7 +53,7 @@ final class AppRuntime {
             #else
             let readerFixture = false
             #endif
-            if !readerFixture {
+            if !readerFixture && UIApplication.shared.isProtectedDataAvailable {
                 try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Mail/Attachments"))
                 try LocalMailProtection.protectTree(URL.applicationSupportDirectory.appending(path: "Dispatch/DraftAttachments"))
                 try AttachmentPreviewStore.cleanExpired()

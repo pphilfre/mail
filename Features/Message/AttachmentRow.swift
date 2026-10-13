@@ -11,11 +11,11 @@ struct AttachmentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Image(systemName: "doc").foregroundStyle(.secondary)
+                Image(systemName: "doc").font(MailStyle.icon).foregroundStyle(MailStyle.secondaryInk).frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(attachment.filename).font(.subheadline).lineLimit(2)
                     Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.byteCount), countStyle: .file))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(MailStyle.secondaryInk)
                 }
                 Spacer()
                 if loading { ProgressView().accessibilityLabel("Downloading attachment") }
@@ -31,9 +31,10 @@ struct AttachmentRow: View {
                         .labelStyle(.iconOnly).accessibilityLabel("Download \(attachment.filename)")
                 }
             }
-            if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(.secondary) }
+            if let errorMessage { Text(errorMessage).font(.caption).foregroundStyle(MailStyle.secondaryInk) }
         }
-        .padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 12).background(MailStyle.paper)
+        .overlay(alignment: .top) { MailRule() }
         .buttonStyle(.borderless)
         .quickLookPreview($previewURL)
         .task(id: attachment.cachedRelativePath) {

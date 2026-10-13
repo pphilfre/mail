@@ -3,7 +3,7 @@ import SwiftData
 import Translation
 
 private enum ReaderPresentation: Identifiable {
-    case actions, move, contact, calendar, collection, insights
+    case actions, move, contact, calendar, collection
     case security(MailMessage), compose(LocalDraft), task(MailTask), receipt(ReceiptEditContext)
     case sender(SenderProfileRequest), pdf(MessageExport)
     var id: String {
@@ -13,7 +13,6 @@ private enum ReaderPresentation: Identifiable {
         case .contact: "contact"
         case .calendar: "calendar"
         case .collection: "collection"
-        case .insights: "insights"
         case .security(let row): "security-\(row.id)"
         case .compose(let draft): "compose-\(draft.id)"
         case .task(let task): "task-\(task.id)"
@@ -53,7 +52,7 @@ struct GmailMessageView: View {
         _folders = Query(filter: #Predicate<MailFolder> { $0.accountID == accountID }, sort: \MailFolder.name)
     }
     @AppStorage("remoteImages") private var remoteImages = false
-    @State private var loadImagesOnce = false
+    @State private var loadedImageIDs = Set<UUID>()
     private var composing: LocalDraft? {
         get { guard case .compose(let draft)? = readerPresentation else { return nil }; return draft }
         nonmutating set { readerPresentation = newValue.map(ReaderPresentation.compose) }
@@ -62,6 +61,8 @@ struct GmailMessageView: View {
     @State private var confirmingDraftDeletion = false
     @State private var loadingThread = false
     @State private var focusedMessage = false
+    @State private var actionMessageID: UUID?
+    private var actionMessage: MailMessage { thread.first { $0.id == actionMessageID } ?? message }
     @State private var forwardingMessage: MailMessage?
     @State private var preparingForward = false
     private var editingTask: MailTask? {
@@ -92,6 +93,19 @@ struct GmailMessageView: View {
     private var organisation: MailLocalOrganisation { MailLocalOrganisation.values(metadata)[MailLocalOrganisation.key(message)] ?? MailLocalOrganisation() }
     private var readerError: String? { localError ?? accounts.first(where: { $0.id == message.accountID })?.lastSyncError }
     private var thread: [MailMessage] { allMessages.isEmpty ? [message] : allMessages }
+    private var summarySources: [MailSummarySource] {
+        thread.map { row in
+            let plain = row.plainTextBody
+            let needsHTML = plain?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            return MailSummarySource(sender: row.sender.displayName, subject: row.subject,
+                text: plain, html: needsHTML ? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } : nil,
+                receivedAt: row.receivedAt)
+        }
+    }
+    private var securityStatus: MailSecurityStatus {
+        guard let saved = runtime.securityReports[actionMessage.id], saved.fingerprint == MailSecurityContent.fingerprint(actionMessage, attachments: filesFor(actionMessage)) else { return .unknown }
+        return MailSecurityStatus(report: saved.report)
+    }
     private func bodyText(_ row: MailMessage) -> String {
         row.plainTextBody ?? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }.map(MailMIME.readableHTML) ?? row.snippet
     }
@@ -101,21 +115,24 @@ struct GmailMessageView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)
-                    .font(.title2.weight(.bold)).textSelection(.enabled)
-                    .padding(.horizontal, 4).padding(.vertical, 8)
+                    .font(MailStyle.readerTitle).foregroundStyle(MailStyle.ink).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 20)
+                InlineMailSummary(sources: summarySources, loadingBody: loadingThread, securitySymbol: securityStatus.symbol, securityColor: securityStatus.color,
+                   securityLabel: "Security Inspector, " + securityStatus.label, securityIdentifier: "securityInspector-\(actionMessage.remoteID)",
+                   onSecurity: { readerPresentation = .security(actionMessage) })
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(error).font(.callout).foregroundStyle(.secondary)
+                        Text(error).font(.callout).foregroundStyle(MailStyle.secondaryInk)
                         Button("Retry") { Task { await refreshThread(syncFirst: true) } }.disabled(loadingThread)
                     }
                 }
                 ForEach(thread) { row in
                     ConversationMessageCard(message: row, initiallyExpanded: row.id == message.id,
-                        attachments: files[row.id] ?? [], remoteImages: remoteImages || loadImagesOnce,
-                        onReply: { reply(row, all: false) }, onReplyAll: { reply(row, all: true) }, onForward: { forward(row) },
+                        attachments: files[row.id] ?? [], remoteImages: remoteImages || loadedImageIDs.contains(row.id),
                         onSender: { senderProfile = SenderProfileRequest(email: row.senderEmail, name: row.sender.displayName, accountID: row.accountID) },
-                        account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) }, onLoadImages: { loadImagesOnce = true })
+                        account: accounts.first { $0.id == row.accountID }, onSecurity: { readerPresentation = .security(row) },
+                        onLoadImages: { loadedImageIDs.insert(row.id) }, onFocus: { actionMessageID = row.id })
                         .id(row.id)
                 }
                 if message.isDraft {
@@ -132,7 +149,8 @@ struct GmailMessageView: View {
                         confirmingDraftDeletion = true
                     }
                 }
-            }.padding(20).frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
+            }.padding(.horizontal, MailStyle.contentPadding).padding(.bottom, 24)
+                .frame(maxWidth: MailStyle.readingWidth, alignment: .leading).frame(maxWidth: .infinity)
         }
         .task(id: thread.map(\.id)) {
             guard !focusedMessage, thread.contains(where: { $0.id == message.id }) else { return }
@@ -145,6 +163,7 @@ struct GmailMessageView: View {
     private var readerChrome: some View {
         conversationContent
         .background(MailStyle.paper)
+        .foregroundStyle(MailStyle.ink)
         .confirmationDialog("Unsubscribe from \(message.sender.displayName)?", isPresented: $confirmingUnsubscribe, titleVisibility: .visible) {
             if let unsubscribe {
                 if unsubscribe.oneClick {
@@ -164,16 +183,21 @@ struct GmailMessageView: View {
                 }
             }
         }
-        .navigationTitle("Conversation").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Local insights", systemImage: "text.magnifyingglass") { readerPresentation = .insights }
-                    .labelStyle(.iconOnly).accessibilityIdentifier("localInsightsButton")
-                ShareLink(item: MessageUtilities.readableCopy(message)) { Image(systemName: "square.and.arrow.up") }
+                ShareLink(item: MessageUtilities.readableCopy(actionMessage)) {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 19, weight: .medium))
+                        .frame(width: 44, height: 44).contentShape(.circle)
+                }.labelStyle(.iconOnly).buttonBorderShape(.circle)
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
-                    Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(message) }.labelStyle(.iconOnly)
-                    Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(message, all: false) }.labelStyle(.iconOnly)
+                    Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(actionMessage) }.labelStyle(.iconOnly)
+                    Menu("Reply", systemImage: "arrowshape.turn.up.left") {
+                        Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(actionMessage, all: false) }
+                        Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); reply(actionMessage, all: true) }
+                    }.labelStyle(.iconOnly)
                 }
             }
         }
@@ -189,7 +213,7 @@ struct GmailMessageView: View {
                         }.disabled(message.isDraft)
                         dockButton("Archive", "archivebox") { triage("archive"); dismiss() }
                             .disabled(!message.isInbox || message.isDraft)
-                    }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
+                    }.padding(4).modifier(MailControlSurface())
                     Spacer(minLength: 0)
                     MailGlassButton(title: "More", symbol: "ellipsis") { readerPresentation = .actions }
                         .accessibilityIdentifier("readerMoreButton")
@@ -257,7 +281,7 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { readerPresentation = nil } } }
             }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         case .security(let row):
-            NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadImagesOnce) }
+            NavigationStack { SecurityInspectorView(message: row, attachments: filesFor(row), imagesAllowed: remoteImages || loadedImageIDs.contains(row.id)) }
         case .compose(let draft): NavigationStack { ComposeView(draft: draft) }
         case .task(let task): NavigationStack { MailTaskEditor(task: task) }
         case .receipt(let context): NavigationStack { ReceiptEditor(context: context) }
@@ -267,7 +291,6 @@ struct GmailMessageView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { readerPresentation = nil } } }
             }
         case .collection: NavigationStack { AddToCollectionView(message: message) }
-        case .insights: NavigationStack { MailInsightsView(mails: thread.suffix(30).map { IntelligenceMail($0) }) }
         case .contact: SenderContactEditor(name: message.sender.displayName, email: message.senderEmail).ignoresSafeArea()
         case .calendar: MessageCalendarEditor(subject: message.subject, notes: MessageUtilities.readableCopy(message)).ignoresSafeArea()
         case .pdf(let file): MessageShareSheet(url: file.url)
@@ -283,9 +306,9 @@ struct GmailMessageView: View {
         pendingAction = nil
         do {
             switch action {
-            case .reply: reply(message, all: false)
-            case .replyAll: reply(message, all: true)
-            case .forward: forward(message)
+            case .reply: reply(actionMessage, all: false)
+            case .replyAll: reply(actionMessage, all: true)
+            case .forward: forward(actionMessage)
             case .triage(let kind):
                 triage(kind)
                 if ["archive", "trash", "spam"].contains(kind) || kind.hasPrefix("move:") { dismiss() }

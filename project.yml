@@ -46,6 +46,8 @@ targets:
       path: App/GeneratedInfo.plist
       properties:
         NSFaceIDUsageDescription: Unlock your mail with Face ID when app lock is enabled.
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [dev.freddiephilpot.dispatch.refresh]
         CFBundleDocumentTypes:
           - CFBundleTypeName: Files to email
             CFBundleTypeRole: Viewer

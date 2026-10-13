@@ -62,6 +62,14 @@ struct RecipientSuggestion: Identifiable, Sendable {
 }
 
 enum MailSignature {
+    static func authoredRange(in body: String) -> Range<String.Index> {
+        let quote = quoteBoundary(in: body) ?? body.endIndex
+        let footer = body[..<quote].range(of: "\n\n-- \n", options: .backwards)?.lowerBound ?? quote
+        var start = body.startIndex, end = footer
+        while start < end && body[start].isWhitespace { start = body.index(after: start) }
+        while end > start && body[body.index(before: end)].isWhitespace { end = body.index(before: end) }
+        return start..<end
+    }
     static func key(_ accountID: UUID) -> String { "signature-\(accountID.uuidString)" }
     static func insert(_ signature: String, in body: String) -> String {
         guard !signature.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return body }

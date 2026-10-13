@@ -4,7 +4,11 @@ A native SwiftUI mail app for **iOS 26+**, maintained from Windows using XcodeGe
 
 ## Current status
 
-The consolidated v0.8.1 tree includes [productivity workflows](docs/productivity-workflows.md), [local intelligence and iOS integrations](docs/ios-local-intelligence.md), and [mail security checks](docs/security-and-livecontainer.md), alongside tasks, receipts, composer attachments and the compact native UI. See [release notes](docs/release-notes.md), [CI performance](docs/ci-performance.md) and the [signed device checklist](docs/oauth-setup.md).
+The latest working changes are described in [Mail UI and AI polish](docs/mail-ui-ai-polish.md): separate draft locations, a sliding mailbox panel, focused search and horizontal filters, domain-aware sender icons, compact reader controls, and inline on-device writing assistance. Validation results for this change are tracked there separately from the earlier audit.
+
+The current working tree implements the [premium native mail audit](docs/premium-native-mail-audit.md): native tabs, inline body summaries, rich-text composing/sending, compact privacy/security screens, and standalone iOS background refresh and local alerts. Build/device validation status and provisioning limits are documented there; existing accounts, Keychain storage and the SwiftData database path are retained.
+
+The released v0.4.0 app passed its full macOS CI gate and device IPA build. The next release, v0.5.0, adds [email tasks and a receipt organiser](docs/mail-productivity.md) plus [compose and forward attachments](docs/composer-attachments.md), with all builds and tests running on GitHub Actions. See the [everyday feature wave](docs/feature-wave.md) and [signed device checklist](docs/oauth-setup.md).
 
 Earlier releases remain available at their tags. Sender profiles, attachment library, project collections and subscriptions are included. Further proposals are in the [feature ideas](docs/feature-ideas.md).
 
@@ -80,4 +84,3 @@ bash scripts/package-ipa.sh v0.2.0
 - [XcodeGen project specification](https://github.com/yonaskolb/XcodeGen/blob/master/Docs/ProjectSpec.md).
 - [GitHub macOS 26 runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md).
 - [Apple required-reason API declarations](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype).
-

@@ -74,6 +74,7 @@ struct CollectionEditor: View {
 
 struct AddToCollectionView: View {
     let message: MailMessage
+    var onDone: (() -> Void)? = nil
     @Query private var metadata: [StoreMetadata]
     @Environment(AppRuntime.self) private var runtime
     @Environment(\.dismiss) private var dismiss
@@ -91,13 +92,14 @@ struct AddToCollectionView: View {
                     do {
                         guard let repository = runtime.repository else { throw GmailError.reconnect }
                         var updated = collection
-                        updated.links.append(MailCollectionLink(message)); try repository.saveCollection(updated); dismiss()
+                        updated.links.append(MailCollectionLink(message)); try repository.saveCollection(updated); finish()
                     } catch { errorMessage = error.localizedDescription }
                 } label: { Label(collection.name, systemImage: included ? "checkmark.circle.fill" : "folder") }
                     .disabled(included)
             }
             Button { creating = true } label: {
                 Label("New collection", systemImage: "folder.badge.plus")
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
             }.accessibilityIdentifier("newReaderCollectionButton")
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
@@ -105,6 +107,7 @@ struct AddToCollectionView: View {
         .navigationDestination(isPresented: $creating) {
             CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
         }
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: finish) } }
     }
+    private func finish() { if let onDone { onDone() } else { dismiss() } }
 }

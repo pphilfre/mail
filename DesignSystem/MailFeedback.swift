@@ -59,7 +59,7 @@ struct MailFeedbackOverlay: ViewModifier {
         content
             .overlay(alignment: .bottom) {
                 if let confirmation = feedback.confirmation {
-                    ConfirmationToast(confirmation: confirmation, animated: animations && !reduceMotion) {
+                    ConfirmationToast(confirmation: confirmation) {
                         feedback.confirmation = nil
                     }
                     .id(confirmation.id)
@@ -91,31 +91,16 @@ struct MailFeedbackOverlay: ViewModifier {
 
 private struct ConfirmationToast: View {
     let confirmation: MailFeedback.Confirmation
-    let animated: Bool
     let close: () -> Void
-    @State private var arrived = false
     private var color: Color { confirmation.tone == .success ? MailStyle.success : confirmation.tone == .error ? .red : MailStyle.accent }
 
     var body: some View {
         HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(color.opacity(0.12)).frame(width: 38, height: 38)
-                Image(systemName: confirmation.symbol)
-                    .font(.system(size: 16, weight: .bold)).foregroundStyle(color)
-                    .scaleEffect(arrived ? 1 : 0.45)
-                    .rotationEffect(.degrees(arrived ? 0 : -20))
-                if confirmation.tone == .success && animated {
-                    ForEach(0..<5) { index in
-                        Circle().fill(color).frame(width: 3, height: 3)
-                            .offset(y: arrived ? -27 : -12)
-                            .rotationEffect(.degrees(Double(index) * 72))
-                            .opacity(arrived ? 0 : 1)
-                    }
-                }
-            }.accessibilityHidden(true)
+            Image(systemName: confirmation.symbol).font(MailStyle.icon).foregroundStyle(color)
+                .frame(width: 32, height: 38).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(confirmation.title).font(.subheadline.weight(.semibold)).accessibilityIdentifier("mailConfirmationTitle")
-                if let detail = confirmation.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                if let detail = confirmation.detail { Text(detail).font(.footnote).foregroundStyle(MailStyle.secondaryInk).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 0)
             if let undo = confirmation.undo {
@@ -131,9 +116,7 @@ private struct ConfirmationToast: View {
         }
         .padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 8)
         .frame(maxWidth: 460)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
-        .task {
-            withAnimation(animated ? .spring(duration: 0.42, bounce: 0.32) : nil) { arrived = true }
-        }
+        .foregroundStyle(MailStyle.ink)
+        .modifier(MailControlSurface(cornerRadius: 16))
     }
 }

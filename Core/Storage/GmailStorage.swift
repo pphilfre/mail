@@ -40,8 +40,14 @@ extension MailRepository {
                 for operation in pending where operation.targetRemoteID == dto.id { Self.overlay(operation.kindRaw, on: row) }
                 Self.flags(row)
                 let content = MailMIME.content(payload)
-                row.cachedText = content.text.isEmpty ? nil : Data(content.text.utf8)
-                row.cachedHTML = content.html.isEmpty ? nil : Data(content.html.utf8)
+                // Message IDs are immutable. A later metadata sync must not erase a previously hydrated large body.
+                if !content.text.isEmpty { row.cachedText = Data(content.text.utf8) }
+                else if row.isDraft { row.cachedText = nil }
+                if !content.html.isEmpty {
+                    let keepsInlineImages = content.html.localizedCaseInsensitiveContains("cid:")
+                        && row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) }?.contains("data:image/") == true
+                    if !keepsInlineImages { row.cachedHTML = Data(content.html.utf8) }
+                } else if row.isDraft { row.cachedHTML = nil }
                 let messageID = row.id
                 let existingAttachments = try context.fetch(FetchDescriptor<MailAttachment>(predicate: #Predicate { $0.messageID == messageID }))
                 var retained = Set<UUID>()

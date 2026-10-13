@@ -15,7 +15,10 @@ xctestruns=(build/DerivedData/Build/Products/*.xctestrun)
 [[ ${#xctestruns[@]} -eq 1 && -f "${xctestruns[0]}" ]]
 selectors=()
 if [[ -n "${DISPATCH_TEST_ONLY:-}" ]]; then
-  selectors+=(-only-testing:"$DISPATCH_TEST_ONLY")
+  IFS=',' read -r -a requested_selectors <<< "$DISPATCH_TEST_ONLY"
+  for selector in "${requested_selectors[@]}"; do
+    selectors+=(-only-testing:"$selector")
+  done
 else
   if [[ "$shard" == 0 ]]; then selectors+=(-only-testing:DispatchTests); fi
   python3 scripts/test-shards.py --scope "$scope" --shard "$shard" > build/test-selectors.txt
@@ -26,7 +29,8 @@ trap - EXIT
 xcodebuild test-without-building -xctestrun "${xctestruns[0]}" \
   -destination "platform=iOS Simulator,id=$simulator_id" -parallel-testing-enabled NO \
   -resultBundlePath build/Tests.xcresult "${selectors[@]}" 2>&1 | tee build/test.log
-if [[ "$shard" == 0 && -z "${DISPATCH_TEST_ONLY:-}" ]]; then
+if [[ "$shard" == 0 && ( -z "${DISPATCH_TEST_ONLY:-}" || ",${DISPATCH_TEST_ONLY}," == *",DispatchTests,"* ) ]]; then
   app_container="$(xcrun simctl get_app_container "$simulator_id" dev.freddiephilpot.dispatch data)"
   python3 scripts/verify-compose-mime.py "$app_container/Library/Application Support/Dispatch/compose-mime-fixture.eml"
+  python3 scripts/verify-rich-compose-mime.py "$app_container/Library/Application Support/Dispatch/rich-compose-mime-fixture.eml"
 fi

@@ -9,11 +9,11 @@ struct MailGlassButton: View {
     @Environment(MailFeedback.self) private var feedback
     var body: some View {
         Button { feedback.select(); action() } label: {
-            Image(systemName: symbol).font(.system(size: 19, weight: .medium))
+            Image(systemName: symbol).font(MailStyle.icon)
                 .frame(width: 44, height: 44).contentShape(.circle)
         }
-        .buttonStyle(.glass).buttonBorderShape(.circle)
-        .foregroundStyle(tint ?? .primary)
+        .buttonStyle(.plain).modifier(MailControlSurface())
+        .foregroundStyle(tint ?? MailStyle.ink)
         .accessibilityLabel(title)
     }
 }

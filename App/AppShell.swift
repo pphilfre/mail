@@ -8,6 +8,12 @@ struct AppShell: View {
     @Query(filter: #Predicate<StoreMetadata> { $0.key == "mail-triage-undo" }) private var undoMetadata: [StoreMetadata]
     @AppStorage("showSampleInbox") private var showSamples = false
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("selectedMailAccount") private var selectedAccount = ""
+    @State private var tab = MailTab.mail
+    @State private var showingSearch = false
+    @State private var mailNavigationID = UUID()
+    @AppStorage("selectedMailbox") private var selectedMailbox = "Inbox"
+    private enum MailTab { case mail, tasks, search }
     @State private var feedback = MailFeedback()
     private var undoRecord: MailUndoRecord? {
         undoMetadata.first.flatMap { try? JSONDecoder().decode(MailUndoRecord.self, from: Data($0.value.utf8)) }
@@ -19,15 +25,34 @@ struct AppShell: View {
             if accounts.isEmpty && !showSamples {
                 NavigationStack { WelcomeView() }
             } else {
-                NavigationStack {
-                    InboxView()
+                TabView(selection: $tab) {
+                    Tab("Emails", systemImage: "envelope.fill", value: MailTab.mail) {
+                        NavigationStack { InboxView() }.id(mailNavigationID)
+                    }
+                    Tab("Tasks", systemImage: "checklist", value: MailTab.tasks) {
+                        NavigationStack { MailTasksView(accountID: UUID(uuidString: selectedAccount)) }
+                    }
+                    Tab("Search", systemImage: "magnifyingglass", value: MailTab.search, role: .search) {
+                        Color.clear
+                    }
+                }
+                .onChange(of: tab) { old, new in
+                    if new == .search { tab = old; showingSearch = true }
                 }
             }
         }
         .tint(MailStyle.accent)
+        .foregroundStyle(MailStyle.ink)
         .modifier(MailFeedbackOverlay())
         .environment(feedback)
         .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
+        .sheet(isPresented: $showingSearch) {
+            NavigationStack {
+                LocalSearchView(initialAccountID: UUID(uuidString: selectedAccount), onClose: {
+                    selectedMailbox = "Inbox"; mailNavigationID = UUID(); tab = .mail; showingSearch = false
+                })
+            }.environment(feedback)
+        }
         .sheet(item: $runtime.sharedDraft, onDismiss: { Task { await runtime.importPendingShares() } }) { draft in
             NavigationStack { ComposeView(draft: draft) }.environment(feedback)
         }
@@ -44,7 +69,7 @@ struct AppShell: View {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
                 await runtime.deliverScheduledMail()
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -102,11 +127,8 @@ struct WelcomeView: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .background {
-            LinearGradient(colors: [MailStyle.accent.opacity(0.1), MailStyle.canvas, MailStyle.paper], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-        }
-        .task { withAnimation(reduceMotion ? nil : .spring(duration: 0.45, bounce: 0.12)) { arrived = true } }
+        .background(MailStyle.paper)
+        .task { withAnimation(MailStyle.motion(reduced: reduceMotion)) { arrived = true } }
         .navigationDestination(isPresented: $showingTasks) {
             MailTasksView(accountID: nil)
         }
@@ -117,12 +139,11 @@ struct WelcomeView: View {
                 .font(.title3.weight(.semibold)).padding(.top, 8)
             Spacer()
             WelcomeMailPreview()
-                .scaleEffect(arrived || reduceMotion ? 1 : 0.95)
                 .opacity(arrived || reduceMotion ? 1 : 0)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 12) {
-                Text("Welcome to Dispatch").font(.largeTitle.bold()).tracking(-1)
-                Text("A little more calm.\nA lot less inbox.").font(.title3).foregroundStyle(.secondary)
+                Text("Welcome to Dispatch").font(MailStyle.heading)
+                Text("A little more calm.\nA lot less inbox.").font(.title3).foregroundStyle(MailStyle.secondaryInk)
             }
             Spacer()
             VStack(spacing: 14) {
@@ -150,28 +171,25 @@ struct WelcomeView: View {
 
 private struct WelcomeMailPreview: View {
     var body: some View {
-        ZStack {
-            preview(sender: "Alex Morgan", initials: "AM", subject: "A quieter inbox", color: .blue)
-                .rotationEffect(.degrees(-6)).offset(x: -12, y: -65)
-            preview(sender: "Studio team", initials: "ST", subject: "Something worth opening", color: .purple)
-                .rotationEffect(.degrees(4)).offset(x: 12)
-            preview(sender: "Jamie Chen", initials: "JC", subject: "See you on Saturday", color: .teal)
-                .rotationEffect(.degrees(-2)).offset(x: -5, y: 65)
-        }.padding(.horizontal, 16).frame(height: 236)
+        VStack(spacing: 0) {
+            preview(sender: "Alex Morgan", initials: "AM", subject: "A quieter inbox")
+            MailRule()
+            preview(sender: "Studio team", initials: "ST", subject: "Something worth opening")
+            MailRule()
+            preview(sender: "Jamie Chen", initials: "JC", subject: "See you on Saturday")
+        }
     }
-    private func preview(sender: String, initials: String, subject: String, color: Color) -> some View {
+    private func preview(sender: String, initials: String, subject: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(initials).font(.system(.caption, design: .rounded, weight: .semibold)).foregroundStyle(color)
-                .frame(width: 36, height: 36).background(color.opacity(0.08), in: .rect(cornerRadius: 12))
+            Text(initials).font(.caption.weight(.semibold)).foregroundStyle(MailStyle.secondaryInk)
+                .frame(width: 36, height: 36).background(MailStyle.tile, in: .rect(cornerRadius: MailStyle.controlRadius))
             VStack(alignment: .leading, spacing: 5) {
                 Text(sender).font(.subheadline.weight(.semibold))
-                Text(subject).font(.subheadline).foregroundStyle(.secondary)
+                Text(subject).font(.body).foregroundStyle(MailStyle.ink)
             }
             Spacer(minLength: 0)
             Circle().fill(MailStyle.accent).frame(width: 6, height: 6).padding(.top, 5)
         }
-        .padding(18).frame(maxWidth: .infinity, alignment: .leading)
-        .background(MailStyle.paper, in: .rect(cornerRadius: 20))
-        .shadow(color: .black.opacity(0.05), radius: 14, y: 8)
+        .padding(.vertical, 18).frame(maxWidth: .infinity, alignment: .leading)
     }
 }

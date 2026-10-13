@@ -72,4 +72,3 @@ notifications and real Gmail delivery still need signed-device validation.
 
 Cache mechanics follow [GitHub's dependency caching reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching).
 Build-once testing follows [Apple's command-line Xcode guidance](https://developer.apple.com/library/archive/technotes/tn2339/_index.html).
-
