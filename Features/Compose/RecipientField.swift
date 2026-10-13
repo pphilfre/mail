@@ -18,7 +18,7 @@ struct RecipientField: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(title).font(.subheadline).foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
                 if !editing && !text.isEmpty {
                     Button { editing = true } label: {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum MailIntelligenceStyle {
-    static let foreground = MailStyle.accent
+    static let foreground = MailStyle.intelligence
 }
 
 struct IntelligenceAction: View {

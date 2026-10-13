@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import Charts
 
 struct ReceiptEditContext: Identifiable {
     var id: UUID { source.id }
@@ -35,19 +36,23 @@ struct ReceiptsView: View {
     private func correction(_ source: ReceiptSource) -> ReceiptOverride? {
         corrections[ReceiptOverride.prefix(source.accountID) + source.remoteID]
     }
-    private var receipts: [ReceiptSummary] {
+    private var allReceipts: [ReceiptSummary] {
         let overrides = corrections
         return sources.compactMap { source in
             let result: ReceiptSummary?
             if let value = overrides[ReceiptOverride.prefix(source.accountID) + source.remoteID] {
                 result = value.apply(to: source, detected: detected[source.id])
             } else { result = detected[source.id] }
-            guard let result else { return nil }
-            if thisMonth && !Calendar.current.isDate(result.receivedAt, equalTo: Date(), toGranularity: .month) { return nil }
+            return result
+        }
+    }
+    private var receipts: [ReceiptSummary] {
+        allReceipts.filter { result in
+            if thisMonth && !Calendar.current.isDate(result.receivedAt, equalTo: Date(), toGranularity: .month) { return false }
             let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
             if !search.isEmpty && ![result.merchant, result.subject, result.senderEmail, result.money?.display ?? ""]
-                .contains(where: { $0.localizedCaseInsensitiveContains(search) }) { return nil }
-            return result
+                .contains(where: { $0.localizedCaseInsensitiveContains(search) }) { return false }
+            return true
         }
     }
     private var months: [Date] {
@@ -57,16 +62,15 @@ struct ReceiptsView: View {
         let snapshot = sources
         List {
             Section {
+                ReceiptCashFlowView(receipts: allReceipts)
                 Toggle("This month", isOn: $thisMonth)
-                Text("\(receipts.count) receipts in downloaded mail").font(.caption).foregroundStyle(.secondary)
-                Text("Amounts and merchant names are detected from email text. Open a receipt to review them.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("\(receipts.count) transactions in downloaded mail").font(.caption).foregroundStyle(.secondary)
             }
             if scanning { ProgressView("Finding receipts…") }
             ForEach(months, id: \.self) { month in
                 Section(month.formatted(.dateTime.month(.wide).year())) {
                     ForEach(receipts.filter { Calendar.current.isDate($0.receivedAt, equalTo: month, toGranularity: .month) }) { receipt in
-                        NavigationLink { ReceiptDetailView(receipt: receipt, message: messages.first { $0.id == receipt.id }, onEdit: { edit(receipt) }) }
+                        NavigationLink { ReceiptDetailView(receipt: receipt, history: allReceipts, message: messages.first { $0.id == receipt.id }, onEdit: { edit(receipt) }) }
                         label: { receiptRow(receipt) }
                             .accessibilityIdentifier("receipt-\(receipt.remoteID)")
                             .contextMenu {
@@ -119,11 +123,11 @@ struct ReceiptsView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(receipt.merchant).font(.headline).lineLimit(1)
                     Spacer(minLength: 16)
-                    Text(receipt.money?.display ?? "Amount unknown").font(.system(.title3, design: .rounded, weight: .semibold)).monospacedDigit()
+                    Text(receipt.signedAmount).font(.system(.title3, design: .rounded, weight: .semibold)).monospacedDigit().foregroundStyle(receipt.flow.color)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(receipt.merchant).font(.headline)
-                    Text(receipt.money?.display ?? "Amount unknown").font(.title3.weight(.semibold)).monospacedDigit()
+                    Text(receipt.signedAmount).font(.title3.weight(.semibold)).monospacedDigit().foregroundStyle(receipt.flow.color)
                 }
             }
             Text(receipt.subject).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -150,6 +154,7 @@ struct ReceiptsView: View {
 
 private struct ReceiptDetailView: View {
     let receipt: ReceiptSummary
+    let history: [ReceiptSummary]
     let message: MailMessage?
     let onEdit: () -> Void
     @Query private var metadata: [StoreMetadata]
@@ -162,11 +167,26 @@ private struct ReceiptDetailView: View {
         let receipt = current
         Form {
             Section {
-                Text(receipt.merchant).font(.title2.bold())
-                Text(receipt.money?.display ?? "Amount unknown").font(.system(.largeTitle, design: .rounded, weight: .semibold)).monospacedDigit()
+                HStack(spacing: 12) {
+                    SenderAvatar(email: receipt.senderEmail, name: receipt.merchant, size: 48)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(receipt.merchant).font(.title2.weight(.semibold))
+                        Label(receipt.flow.title, systemImage: receipt.flow == .incoming ? "arrow.down.left" : receipt.flow == .outgoing ? "arrow.up.right" : "questionmark.circle")
+                            .font(.subheadline).foregroundStyle(receipt.flow.color)
+                    }
+                }
+                Text(receipt.signedAmount).font(.system(.largeTitle, design: .rounded, weight: .semibold)).monospacedDigit().foregroundStyle(receipt.flow.color)
                 LabeledContent("Type", value: receipt.kind)
                 LabeledContent("Received", value: receipt.receivedAt.formatted(date: .abbreviated, time: .shortened))
             } footer: { Text(receipt.reviewed ? "You reviewed these details in Dispatch." : "Detected from the email. Review against the original before using these details.") }
+            if !receipt.facts.isEmpty {
+                Section("Transaction details") {
+                    ForEach(receipt.facts) { fact in LabeledContent(fact.label, value: fact.value).textSelection(.enabled) }
+                }
+            }
+            Section("Activity with " + receipt.merchant) {
+                ReceiptCashFlowView(receipts: history.filter { $0.merchant == receipt.merchant }.map { $0.id == receipt.id ? receipt : $0 })
+            }
             Section("Source") {
                 Text(receipt.subject)
                 Text(receipt.senderEmail).font(.caption).foregroundStyle(.secondary)
@@ -188,6 +208,7 @@ struct ReceiptEditor: View {
     @State private var amount: String
     @State private var currency: String
     @State private var included: Bool
+    @State private var flow: ReceiptFlow
     @State private var errorMessage: String?
     init(context: ReceiptEditContext) {
         self.context = context
@@ -196,6 +217,7 @@ struct ReceiptEditor: View {
         _amount = State(initialValue: money.map { NSDecimalNumber(decimal: $0.amount).stringValue } ?? "")
         _currency = State(initialValue: money?.currency ?? "GBP")
         _included = State(initialValue: context.correction?.inclusion != "exclude")
+        _flow = State(initialValue: context.correction?.flow ?? context.detected?.flow ?? .unknown)
     }
     var body: some View {
         Form {
@@ -203,6 +225,7 @@ struct ReceiptEditor: View {
                 TextField("Merchant", text: $merchant).accessibilityIdentifier("receiptMerchant")
                 TextField("Amount", text: $amount).keyboardType(.decimalPad).accessibilityIdentifier("receiptAmount")
                 TextField("Currency", text: $currency).textInputAutocapitalization(.characters).autocorrectionDisabled()
+                Picker("Direction", selection: $flow) { ForEach(ReceiptFlow.allCases, id: \.self) { Text($0.title).tag($0) } }
                 Toggle("Include in Receipts", isOn: $included)
             } header: { Text("Receipt details") }
               footer: { Text("Leave the amount blank if it is unknown. Use a currency code such as GBP, EUR or USD. These changes stay on this device.") }
@@ -227,6 +250,7 @@ struct ReceiptEditor: View {
         value.merchant = merchant.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.merchant?.isEmpty == true { value.merchant = ReceiptDetector.merchant(context.source) }
         value.amountReviewed = true
+        value.flow = flow
         let input = amount.trimmingCharacters(in: .whitespacesAndNewlines)
         if !input.isEmpty {
             guard let decimal = ReceiptDetector.enteredAmount(input) else { errorMessage = ReceiptError.invalidAmount.localizedDescription; return }
@@ -255,8 +279,8 @@ enum ReceiptExport {
         let rows = receipts.map { receipt in
             [receipt.receivedAt.ISO8601Format(), accountNames[receipt.accountID] ?? "", receipt.merchant, receipt.kind,
              receipt.money.map { NSDecimalNumber(decimal: $0.amount).stringValue } ?? "",
-             receipt.money?.currency ?? "", receipt.subject, receipt.senderEmail, receipt.reviewed ? "Reviewed" : "Detected"].map(cell).joined(separator: ",")
+             receipt.money?.currency ?? "", receipt.subject, receipt.senderEmail, receipt.reviewed ? "Reviewed" : "Detected", receipt.flow.title].map(cell).joined(separator: ",")
         }
-        return (["Date,Account,Merchant,Type,Amount,Currency,Subject,Sender,Status"] + rows).joined(separator: "\r\n") + "\r\n"
+        return (["Date,Account,Merchant,Type,Amount,Currency,Subject,Sender,Status,Direction"] + rows).joined(separator: "\r\n") + "\r\n"
     }
 }

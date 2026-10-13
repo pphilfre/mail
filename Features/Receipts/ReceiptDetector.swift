@@ -35,6 +35,18 @@ struct ReceiptSource: Identifiable, Hashable, Sendable {
     }
 }
 
+enum ReceiptFlow: String, Codable, CaseIterable, Hashable, Sendable {
+    case incoming, outgoing, unknown
+    var title: String { self == .incoming ? "Money in" : self == .outgoing ? "Money out" : "Unconfirmed direction" }
+    var sign: String { self == .incoming ? "+" : self == .outgoing ? "−" : "" }
+}
+
+struct ReceiptFact: Identifiable, Equatable, Sendable {
+    let label: String
+    let value: String
+    var id: String { label }
+}
+
 struct ReceiptSummary: Identifiable, Equatable, Sendable {
     let id: UUID
     let accountID: UUID
@@ -46,6 +58,9 @@ struct ReceiptSummary: Identifiable, Equatable, Sendable {
     let senderEmail: String
     let receivedAt: Date
     var reviewed = false
+    var flow = ReceiptFlow.outgoing
+    var facts: [ReceiptFact] = []
+    var signedAmount: String { money.map { flow.sign + $0.display } ?? "Amount unknown" }
 }
 
 enum ReceiptDetector {
@@ -54,7 +69,7 @@ enum ReceiptDetector {
         let negative = #"\b(special offer|discount code|sale ends|abandoned cart|order cancel(?:led|ed)|payment (?:failed|declined)|unsubscribe confirmation)\b"#
         guard subject.range(of: negative, options: .regularExpression) == nil else { return nil }
         let body = source.bodyText
-        let positive = #"\b(receipt|invoice|order (?:confirmation|confirmed)|purchase confirmation|payment (?:received|confirmation|successful)|your order|thank(?:s| you) for your (?:order|purchase)|refund (?:confirmation|processed)|you paid|payment to)\b"#
+        let positive = #"\b(receipt|invoice|order (?:confirmation|confirmed)|purchase confirmation|payment (?:received|confirmation|successful)|your order|thank(?:s| you) for your (?:order|purchase)|refund (?:confirmation|processed|issued)|you (?:paid|sent|received)|payment (?:to|from)|money (?:sent|received)|transfer (?:complete|completed|sent|received))\b"#
         let subjectMatches = subject.range(of: positive, options: .regularExpression) != nil
         let bodyMatches = body.prefix(4000).lowercased().range(of: positive, options: .regularExpression) != nil
         let money = amount(in: source.text ?? "") ?? source.html.flatMap { amount(in: MailMIME.readableHTML($0)) }
@@ -62,20 +77,49 @@ enum ReceiptDetector {
         let transaction = #"\b(order (?:number|id|#)|transaction (?:id|number)|paid on|payment method|billing address)\b"#
         let hasTransaction = body.lowercased().range(of: transaction, options: .regularExpression) != nil
         guard subjectMatches || (money != nil && (bodyMatches || hasTransaction)) else { return nil }
-        let kind = subject.contains("refund") ? "Refund" : subject.contains("invoice") ? "Invoice" : "Receipt"
+        let context = subject + "\n" + String(body.prefix(4000)).lowercased()
+        let purchase = matches(#"\b(order (?:number|id|#|total|confirmation)|item|product|purchase|billing address|shipping address)\b"#, context)
+        let transfer = !purchase && matches(#"\b(transfer|you sent|money sent|money received|sent you|friends and family|payment from|you received)\b"#, context)
+        let refund = matches(#"\b(refund (?:confirmation|processed|issued|completed)|you(?:'ve| have)? been refunded|received a refund)\b"#, context)
+        let incoming = matches(#"\b(you(?:'ve| have)? received|money received|payment from|sent you|paid you|credited to your|deposited into your)\b"#, context)
+        let outgoing = matches(#"\b(you(?:'ve| have)? (?:paid|sent)|money sent|payment to|amount (?:paid|charged)|total paid|paid with|payment successful)\b"#, context)
+        let flow: ReceiptFlow = refund || incoming ? .incoming : outgoing || (purchase && !subject.contains("invoice")) ? .outgoing : .unknown
+        let kind = refund ? "Refund" : transfer ? "Transfer" : subject.contains("invoice") ? "Invoice" : incoming ? "Payment received" : "Purchase"
         return ReceiptSummary(id: source.id, accountID: source.accountID, remoteID: source.remoteID,
             merchant: merchant(source), kind: kind, money: money, subject: source.subject,
-            senderEmail: source.senderEmail, receivedAt: source.receivedAt)
+            senderEmail: source.senderEmail, receivedAt: source.receivedAt, flow: flow, facts: facts(in: body))
     }
     static func merchant(_ source: ReceiptSource) -> String {
+        if let merchant = field(#"(?:merchant|seller|paid to|payment to|payment from|purchase from)"#, in: source.bodyText),
+           !merchant.contains("@"), merchant.range(of: #"[£€$¥]"#, options: .regularExpression) == nil { return merchant }
         let name = source.senderName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.isEmpty ? source.senderEmail : name
+    }
+    private static func matches(_ pattern: String, _ text: String) -> Bool {
+        text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+    private static func field(_ label: String, in text: String) -> String? {
+        let pattern = #"(?im)^\s*"# + label + #"\s*[:#=–-]\s*([^\r\n]{1,120})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    static func facts(in text: String) -> [ReceiptFact] {
+        let labels: [(String, String)] = [
+            ("Order number", #"order (?:number|id|no\.?)"#), ("Transaction", #"transaction (?:id|number)"#),
+            ("Invoice", #"invoice (?:number|id|no\.?)"#), ("Payment method", #"(?:payment method|paid with)"#),
+            ("Item", #"(?:item|product|description)"#), ("Quantity", "quantity"),
+            ("Subtotal", "subtotal"), ("Tax", #"(?:tax|vat)"#), ("Delivery", #"(?:shipping|delivery)"#),
+            ("Transaction date", #"(?:transaction date|payment date|paid on)"#), ("Status", #"(?:payment status|order status)"#)
+        ]
+        return labels.compactMap { title, label in field(label, in: text).map { ReceiptFact(label: title, value: $0) } }
     }
     static func amount(in text: String) -> ReceiptMoney? {
         let text = String(text.prefix(65_536))
         // Strong total labels outrank line items, subtotal, shipping and tax.
         for label in [#"\b(?:grand total|order total|total paid|amount paid|amount charged|payment amount)\b"#, #"\b(?:total|amount due|paid)\b"#] {
-            guard let regex = try? NSRegularExpression(pattern: label + #"[ \t]*[:=–-]?[ \t]*([^\r\n]{1,100})"#, options: .caseInsensitive) else { continue }
+            guard let regex = try? NSRegularExpression(pattern: label + #"\s{0,30}[:=–-]?\s{0,30}([^\r\n]{1,100})"#, options: .caseInsensitive) else { continue }
             for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
                 if let range = Range(match.range(at: 1), in: text), let money = firstMoney(in: String(text[range])) { return money }
             }

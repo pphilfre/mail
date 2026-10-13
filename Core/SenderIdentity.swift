@@ -33,6 +33,41 @@ struct MailPublicSuffixes: Sendable {
 }
 
 enum SenderIdentity {
+    static func declaredIconURLs(html: String, page: URL, suffixes: MailPublicSuffixes = .bundled) -> [URL] {
+        guard let host = page.host, page.scheme == "https" else { return [] }
+        let root = suffixes.registrableDomain(host) ?? host
+        func attribute(_ name: String, tag: String) -> String? {
+            let pattern = #"(?i)\b"# + name + #"\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: tag, range: NSRange(tag.startIndex..., in: tag)) else { return nil }
+            for index in 1...3 {
+                if let range = Range(match.range(at: index), in: tag) { return String(tag[range]) }
+            }
+            return nil
+        }
+        guard let regex = try? NSRegularExpression(pattern: #"(?is)<link\b[^>]{0,2048}>"#) else { return [] }
+        var seen = Set<URL>()
+        return regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).compactMap { match in
+            guard let range = Range(match.range, in: html) else { return nil }
+            let tag = String(html[range])
+            guard let rel = attribute("rel", tag: tag)?.lowercased(),
+                  rel.split(whereSeparator: \.isWhitespace).contains(where: { ["icon", "apple-touch-icon", "apple-touch-icon-precomposed"].contains(String($0)) }),
+                  let href = attribute("href", tag: tag),
+                  let url = URL(string: href.replacingOccurrences(of: "&amp;", with: "&"), relativeTo: page)?.absoluteURL,
+                  url.scheme == "https", url.user == nil, url.password == nil, let iconHost = url.host,
+                  (suffixes.registrableDomain(iconHost) ?? iconHost) == root,
+                  !url.pathExtension.lowercased().contains("svg"), seen.insert(url).inserted else { return nil }
+            return url
+        }
+    }
+    static func iconURLs(email: String, suffixes: MailPublicSuffixes = .bundled) -> [URL] {
+        let domains = iconDomains(email: email, suffixes: suffixes)
+        guard let root = domains.last else { return [] }
+        let hosts = Array(domains.reversed()) + (root.hasPrefix("www.") ? [] : ["www." + root])
+        return hosts.flatMap { host in
+            ["favicon.ico", "apple-touch-icon.png", "favicon.png"].compactMap { URL(string: "https://\(host)/\($0)") }
+        }
+    }
     static func iconDomains(email: String, suffixes: MailPublicSuffixes = .bundled) -> [String] {
         let parts = email.split(separator: "@", omittingEmptySubsequences: false)
         guard parts.count == 2 else { return [] }

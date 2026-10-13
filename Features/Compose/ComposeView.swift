@@ -42,6 +42,7 @@ struct ComposeView: View {
     @State private var writingSource = ""
     @State private var writingSnapshot = ""
     @State private var writingRange = NSRange(location: 0, length: 0)
+    @State private var writingPreview: String?
     @State private var richEditor = RichMailEditorController()
     @State private var showingFormatting = false
     @State private var addingLink = false
@@ -97,29 +98,35 @@ struct ComposeView: View {
                             }
                     }
                     Spacer(minLength: 0)
-                }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)
+                }.font(.subheadline).frame(minHeight: 44).padding(.vertical, 4)
                 MailRule()
-                HStack(spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Subject").foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
-                    TextField("Subject", text: $draft.subject, axis: .vertical).font(.body.weight(.medium))
+                    TextField("Subject", text: $draft.subject).font(.body)
                     .accessibilityIdentifier("composeSubject")
                     .onChange(of: draft.subject) { _, _ in draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil }
-                }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)
+                }.font(.subheadline).frame(minHeight: 44).padding(.vertical, 4)
                 MailRule()
                 if !RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).isEmpty {
                     Text("Remove duplicate recipients: " + RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).sorted().joined(separator: ", "))
                         .font(.caption).foregroundStyle(.red).padding(.vertical, 8)
                 }
                 RichMailEditor(text: $draft.body, document: $draft.richBody, controller: richEditor)
-                    .frame(minHeight: 260)
-                if showingWriting {
-                    InlineWritingAssistant(source: writingSource, draftUnchanged: draft.body == writingSnapshot, apply: { suggestion in
-                        guard richEditor.applyRevision(suggestion, range: writingRange, expected: writingSnapshot) else {
-                            saveError = "The draft changed. Your current writing was kept."; return
+                    .frame(minHeight: writingPreview == nil ? 260 : 0, maxHeight: writingPreview == nil ? nil : 0)
+                    .opacity(writingPreview == nil ? 1 : 0).accessibilityHidden(writingPreview != nil)
+                if let writingPreview {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Added").foregroundStyle(.green)
+                            Text("Removed").foregroundStyle(.red).strikethrough()
+                        }.font(.caption)
+                        Text(previewText(writingPreview)).font(.body).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("composeWritingPreview")
+                        HStack {
+                            Button("Apply changes") { applyWriting(writingPreview) }.buttonStyle(.borderedProminent).tint(MailStyle.intelligence)
+                            Button("Keep original") { self.writingPreview = nil }.buttonStyle(.bordered)
                         }
-                        withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = false }
-                    }, close: { withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = false } })
-                        .id("writingAssistant").transition(.opacity).padding(.vertical, 8)
+                    }.padding(.vertical, 12)
                 }
                 ComposeAttachmentsView(draftID: draft.id, attachments: $draft.attachments, importing: $importingAttachments,
                     choosingFiles: $choosingFiles, photos: $photos) { attachmentError = $0 }
@@ -135,8 +142,6 @@ struct ComposeView: View {
                 }
             }.padding(.horizontal, MailStyle.contentPadding).padding(.top, 12).padding(.bottom, 24)
                 .frame(maxWidth: MailStyle.readingWidth).frame(maxWidth: .infinity)
-          }.onChange(of: showingWriting) { _, visible in
-              if visible { withAnimation(MailStyle.motion(reduced: reduceMotion)) { proxy.scrollTo("writingAssistant", anchor: .bottom) } }
           }
         }
     }
@@ -154,13 +159,19 @@ struct ComposeView: View {
         .modifier(MailFeedbackOverlay(playsHaptics: false))
         .navigationTitle("New message")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingWriting) {
+            InlineWritingAssistant(source: writingSource, draftUnchanged: draft.body == writingSnapshot,
+                apply: applyWriting, reviewInDraft: { writingPreview = $0; showingWriting = false }, close: { showingWriting = false })
+                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
         .toolbar {
             ToolbarItem(placement: .principal) { MailNavigationTitle(title: "New message") }
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") {
                     if sendUnconfirmed { finished = true; dismiss() }
                     else { save() }
-                }.accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
+                }.frame(width: 96, height: 44, alignment: .leading)
+                    .accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
                     .disabled(working || importingAttachments)
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -172,8 +183,10 @@ struct ComposeView: View {
                         .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                         .buttonStyle(.glassProminent)
                         .buttonBorderShape(.circle)
-                        .disabled(draft.accountID == nil || !validRecipients || working || sendUnconfirmed)
+                        .disabled(draft.accountID == nil || !validRecipients || working || sendUnconfirmed || writingPreview != nil)
                         .accessibilityIdentifier("sendButton")
+                } else {
+                    Color.clear.frame(width: 44, height: 44).allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -214,8 +227,8 @@ struct ComposeView: View {
                         Button("Edit account signature", systemImage: "pencil") { showingSignatureSettings = true }.disabled(sendingAccount == nil)
                     }
                     Button("Schedule send", systemImage: "clock") { showingSchedule = true }
-                        .disabled(!validRecipients || draft.accountID == nil || runtime.gmail == nil)
-                }.accessibilityIdentifier("composerOptionsButton")
+                        .disabled(!validRecipients || draft.accountID == nil || runtime.gmail == nil || writingPreview != nil)
+                }.labelStyle(.iconOnly).frame(width: 44, height: 44).accessibilityIdentifier("composerOptionsButton")
             }
         }
         .sheet(isPresented: $showingScanner) {
@@ -323,6 +336,19 @@ struct ComposeView: View {
         RecipientField(title: title, text: text, suggestions: suggestions,
             excluded: Set([draft.to, draft.cc, draft.bcc].flatMap(RecipientInput.tokens).compactMap { RecipientInput.address($0)?.email.lowercased() }))
     }
+    private func applyWriting(_ suggestion: String) {
+        guard richEditor.applyRevision(suggestion, range: writingRange, expected: writingSnapshot) else {
+            saveError = "The draft changed. Your current writing was kept."; writingPreview = nil; return
+        }
+        writingPreview = nil; showingWriting = false
+    }
+    private func previewText(_ revision: String) -> AttributedString {
+        let source = writingSnapshot as NSString
+        guard writingRange.location >= 0, NSMaxRange(writingRange) <= source.length else { return AttributedString(writingSnapshot) }
+        return AttributedString(source.substring(to: writingRange.location))
+            + LocalWritingView.comparison(original: writingSource, revised: revision)
+            + AttributedString(source.substring(from: NSMaxRange(writingRange)))
+    }
     private var composerDock: some View {
         HStack(spacing: 0) {
             Button {
@@ -334,10 +360,12 @@ struct ComposeView: View {
                     writingRange = selection
                 } else { writingRange = NSRange(MailSignature.authoredRange(in: draft.body), in: draft.body) }
                 writingSource = (draft.body as NSString).substring(with: writingRange)
+                writingPreview = nil; richEditor.view?.resignFirstResponder()
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = true }
             } label: {
-                Image(systemName: "sparkles").foregroundStyle(showingWriting ? MailStyle.accent : MailStyle.secondaryInk).frame(width: 44, height: 44)
-            }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton")
+                Image(systemName: "sparkles").foregroundStyle(MailStyle.intelligence).frame(width: 44, height: 44)
+                    .background(MailStyle.intelligence.opacity(0.12), in: .circle)
+            }.accessibilityLabel("Writing assistance").accessibilityIdentifier("polishWritingButton")
             Button { showingFormatting.toggle() } label: {
                 Image(systemName: "textformat").frame(width: 44, height: 44).contentShape(.rect)
             }.foregroundStyle(showingFormatting ? MailStyle.accent : .primary).accessibilityLabel("Formatting")
@@ -360,6 +388,7 @@ struct ComposeView: View {
         .padding(.horizontal, 14)
         .environment(\.defaultMinListRowHeight, 44)
         .modifier(MailControlSurface())
+        .contentShape(.capsule).onTapGesture { }
         .disabled(importingAttachments || working || sendUnconfirmed)
         .padding(.vertical, 10).frame(maxWidth: .infinity)
     }

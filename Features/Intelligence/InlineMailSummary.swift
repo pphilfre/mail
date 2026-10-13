@@ -7,6 +7,7 @@ struct InlineMailSummary: View {
     var securityColor: Color = .secondary
     var securityLabel = "Security Inspector, analysis incomplete"
     var securityIdentifier = "summarySecurityInspector"
+    var securityLoading = false
     var onSecurity: (() -> Void)? = nil
     @Environment(AppRuntime.self) private var runtime
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,8 +22,12 @@ struct InlineMailSummary: View {
             HStack {
                 if let onSecurity {
                     Button(action: onSecurity) {
-                        Image(systemName: securitySymbol).font(.system(size: 19)).foregroundStyle(securityColor).frame(width: 44, height: 44).contentShape(.rect)
-                    }.buttonStyle(.plain).accessibilityLabel(securityLabel).accessibilityIdentifier(securityIdentifier)
+                        Image(systemName: securityLoading ? "shield" : securitySymbol).font(MailStyle.icon)
+                            .foregroundStyle(securityColor).frame(width: 44, height: 44)
+                            .overlay(alignment: .bottomTrailing) {
+                                if securityLoading { ProgressView().controlSize(.mini).padding(3) }
+                            }.contentShape(.rect)
+                    }.buttonStyle(.plain).accessibilityLabel(securityLoading ? "Security Inspector, checking downloaded content" : securityLabel).accessibilityIdentifier(securityIdentifier)
                 }
                 Button(running ? "Summarising…" : expanded ? "Hide summary" : "Summarise") {
                     if result != nil { withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }; return }
@@ -36,10 +41,12 @@ struct InlineMailSummary: View {
                             withAnimation(MailStyle.motion(reduced: reduceMotion)) { result = value; expanded = true }
                         } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
                     }
-                }.buttonStyle(.plain).font(.subheadline.weight(.medium)).foregroundStyle(MailStyle.accent).frame(minHeight: 44)
+                }.buttonStyle(.plain).font(.subheadline.weight(.semibold)).foregroundStyle(MailStyle.intelligence)
+                    .padding(.horizontal, 14).frame(minHeight: 44)
+                    .background(MailStyle.intelligence.opacity(0.14), in: .capsule)
                     .disabled(loadingBody || (runtime.localModel.busy && !running) || running)
                     .accessibilityIdentifier("inlineSummaryButton")
-                if running { Button("Cancel") { job?.cancel() }.font(.caption) }
+                if running { MailCloseButton(title: "Cancel summary") { job?.cancel() } }
                 Spacer(minLength: 0)
             }
             if expanded, let result {

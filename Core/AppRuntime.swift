@@ -12,6 +12,7 @@ final class AppRuntime {
     let draftAttachments = DraftAttachmentStore()
     let reputation = VirusTotalReputation()
     var securityReports: [UUID: (fingerprint: String, report: SecurityReport)] = [:]
+    var securityInspecting = Set<UUID>()
     let appLock = MailAppLock()
     let localModel = LocalMailModel()
     let nativeServices = MailNativeServices()

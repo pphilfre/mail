@@ -9,6 +9,7 @@ struct ReceiptOverride: Codable, Equatable, Sendable {
     var merchant: String?
     var money: ReceiptMoney?
     var amountReviewed = false
+    var flow: ReceiptFlow?
     static func prefix(_ id: UUID) -> String { "receipt-override:\(id.uuidString):" }
     var key: String { Self.prefix(accountID) + remoteID }
     static func decode(_ row: StoreMetadata) throws -> ReceiptOverride {
@@ -20,9 +21,10 @@ struct ReceiptOverride: Codable, Equatable, Sendable {
         guard inclusion != "exclude" else { return nil }
         var result = detected ?? ReceiptSummary(id: source.id, accountID: source.accountID, remoteID: source.remoteID,
             merchant: ReceiptDetector.merchant(source), kind: "Receipt", money: nil, subject: source.subject,
-            senderEmail: source.senderEmail, receivedAt: source.receivedAt)
+            senderEmail: source.senderEmail, receivedAt: source.receivedAt, flow: .unknown, facts: ReceiptDetector.facts(in: source.bodyText))
         if let merchant { result.merchant = merchant }
         if amountReviewed { result.money = money }
+        if let flow { result.flow = flow }
         result.reviewed = true
         return result
     }

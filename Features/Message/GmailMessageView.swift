@@ -99,7 +99,7 @@ struct GmailMessageView: View {
             let needsHTML = plain?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
             return MailSummarySource(sender: row.sender.displayName, subject: row.subject,
                 text: plain, html: needsHTML ? row.cachedHTML.flatMap { String(data: $0, encoding: .utf8) } : nil,
-                receivedAt: row.receivedAt)
+                receivedAt: row.receivedAt, reader: accounts.first { $0.id == row.accountID }.map { $0.displayName + " <" + $0.email + ">" })
         }
     }
     private var securityStatus: MailSecurityStatus {
@@ -119,6 +119,7 @@ struct GmailMessageView: View {
                     .fixedSize(horizontal: false, vertical: true).padding(.top, 20)
                 InlineMailSummary(sources: summarySources, loadingBody: loadingThread, securitySymbol: securityStatus.symbol, securityColor: securityStatus.color,
                    securityLabel: "Security Inspector, " + securityStatus.label, securityIdentifier: "securityInspector-\(actionMessage.remoteID)",
+                   securityLoading: runtime.securityInspecting.contains(actionMessage.id),
                    onSecurity: { readerPresentation = .security(actionMessage) })
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
@@ -190,14 +191,16 @@ struct GmailMessageView: View {
                 ShareLink(item: MessageUtilities.readableCopy(actionMessage)) {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 19, weight: .medium))
                         .frame(width: 44, height: 44).contentShape(.circle)
-                }.labelStyle(.iconOnly).buttonBorderShape(.circle)
+                }.labelStyle(.iconOnly).buttonStyle(.plain).buttonBorderShape(.circle)
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
-                    Button("Forward", systemImage: "arrowshape.turn.up.right") { feedback.select(); forward(actionMessage) }.labelStyle(.iconOnly)
+                    Button { feedback.select(); forward(actionMessage) } label: {
+                        Image(systemName: "arrowshape.turn.up.right").font(MailStyle.icon).frame(width: 44, height: 44)
+                    }.buttonStyle(.plain).accessibilityLabel("Forward")
                     Menu("Reply", systemImage: "arrowshape.turn.up.left") {
                         Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(actionMessage, all: false) }
                         Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); reply(actionMessage, all: true) }
-                    }.labelStyle(.iconOnly)
+                    }.labelStyle(.iconOnly).font(MailStyle.icon).frame(width: 44, height: 44)
                 }
             }
         }
@@ -213,7 +216,7 @@ struct GmailMessageView: View {
                         }.disabled(message.isDraft)
                         dockButton("Archive", "archivebox") { triage("archive"); dismiss() }
                             .disabled(!message.isInbox || message.isDraft)
-                    }.padding(4).modifier(MailControlSurface())
+                    }.padding(4).modifier(MailControlSurface()).contentShape(.capsule).onTapGesture { }
                     Spacer(minLength: 0)
                     MailGlassButton(title: "More", symbol: "ellipsis") { readerPresentation = .actions }
                         .accessibilityIdentifier("readerMoreButton")
@@ -224,6 +227,9 @@ struct GmailMessageView: View {
             await Task.yield()
             if !message.isRead { runtime.gmail?.action("read", message: message) }
             await refreshThread()
+        }
+        .task(id: "\(actionMessage.id)-\(MailSecurityContent.fingerprint(actionMessage, attachments: filesFor(actionMessage)))") {
+            await runtime.inspectOpenedMail(actionMessage, attachments: filesFor(actionMessage))
         }
     }
     var body: some View {

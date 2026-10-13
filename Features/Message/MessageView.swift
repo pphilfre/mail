@@ -36,7 +36,7 @@ struct MessageView: View {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: message.subject + "\n\n" + message.body) {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 19, weight: .medium)).frame(width: 44, height: 44)
-                }.labelStyle(.iconOnly).buttonBorderShape(.circle)
+                }.labelStyle(.iconOnly).buttonStyle(.plain).buttonBorderShape(.circle)
                     .accessibilityLabel("Share sample message")
             }
         }

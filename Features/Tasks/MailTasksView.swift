@@ -13,12 +13,10 @@ struct MailTasksView: View {
     @State private var editing: MailTask?
     @State private var deleting: MailTask?
     @State private var errorMessage: String?
-    @State private var quickTitle = ""
     @State private var query = ""
     @State private var onlyInProgress = false
     @State private var onlyToday = false
     @State private var selectedList = ""
-    @FocusState private var quickFocused: Bool
     private var savedTasks: [MailTask] { taskRows.compactMap { try? MailTask.decode($0) } }
     private var taskRows: [StoreMetadata] {
         metadata.filter { row in
@@ -46,22 +44,6 @@ struct MailTasksView: View {
         let snapshot = tasks
         let grouped = Dictionary(grouping: snapshot, by: { $0.section(now: timeline.date) })
         List {
-            Section {
-                VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    TextField("Add a task", text: $quickTitle).submitLabel(.done).onSubmit(quickAdd)
-                        .focused($quickFocused)
-                        .accessibilityIdentifier("quickTaskTitle")
-                    Button(action: quickAdd) {
-                        Image(systemName: "plus").frame(width: 44, height: 44).contentShape(.rect)
-                    }.buttonStyle(.borderless).accessibilityLabel("Add task").accessibilityIdentifier("quickAddTaskButton")
-                        .disabled(quickTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                Picker("Tasks", selection: $status) {
-                    Text("Open").tag("Open"); Text("All").tag("All"); Text("Completed").tag("Completed")
-                }.pickerStyle(.segmented).accessibilityIdentifier("taskStatusFilter")
-                }.accessibilityElement(children: .contain)
-            }
                 ForEach(completed ? ["Completed"] : ["Overdue", "Today", "Upcoming", "No due date"] + (status == "All" ? ["Completed"] : []), id: \.self) { section in
                     let rows = grouped[section] ?? []
                     if !rows.isEmpty {
@@ -70,7 +52,7 @@ struct MailTasksView: View {
                 }
             if snapshot.isEmpty {
                 ContentUnavailableView(completed ? "No completed tasks" : "Your next step",
-                    systemImage: "checklist", description: Text(completed ? "Tasks you finish will appear here." : "Add a task above or turn a conversation into a task. Use the plus button for dates, priorities and checklists."))
+                    systemImage: "checklist", description: Text(completed ? "Tasks you finish will appear here." : "Tap plus to capture a next step. You can add details later."))
             }
             if taskRows.contains(where: { (try? MailTask.decode($0)) == nil }) {
                 Text(MailTaskError.invalidData.localizedDescription).font(.caption).foregroundStyle(.secondary)
@@ -78,7 +60,25 @@ struct MailTasksView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .listSectionSpacing(.compact)
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
+        .scrollContentBackground(.hidden).background(MailStyle.paper)
+        .listRowBackground(MailStyle.paper)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack(spacing: 18) {
+                ForEach(["Open", "All", "Completed"], id: \.self) { value in
+                    Button { status = value } label: { MailFilterLabel(title: value, selected: status == value) }
+                }
+                Spacer(minLength: 0)
+            }.buttonStyle(.plain).padding(.horizontal, 20).background(MailStyle.paper)
+                .overlay(alignment: .bottom) { MailRule() }.accessibilityIdentifier("taskStatusFilter")
+        }
+        .safeAreaInset(edge: .bottom, alignment: .trailing) {
+            Button { editing = .standalone() } label: {
+                Image(systemName: "plus").font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(MailStyle.paper).frame(width: 56, height: 56)
+                    .background(MailStyle.accent, in: .circle)
+            }.buttonStyle(.plain).accessibilityLabel("New task").accessibilityIdentifier("newTaskButton")
+                .padding(.trailing, 20).padding(.vertical, 10)
+        }
         .navigationTitle("Tasks")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: "Tasks, notes or lists")
@@ -92,10 +92,6 @@ struct MailTasksView: View {
                         ForEach(Array(Set(savedTasks.map(\.list).filter { !$0.isEmpty })).sorted(), id: \.self) { Text($0).tag($0) }
                     }
                 }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("New task", systemImage: "plus") { editing = .standalone() }
-                    .accessibilityIdentifier("newTaskButton")
             }
         }
         .sheet(item: $editing) { task in NavigationStack { MailTaskEditor(task: task) } }
@@ -113,15 +109,6 @@ struct MailTasksView: View {
         messages.filter { $0.accountID == task.accountID && !task.remoteThreadID.isEmpty && $0.remoteThreadID == task.remoteThreadID }
             .max { $0.receivedAt < $1.receivedAt }
     }
-    private func quickAdd() {
-        let task = MailTask.standalone(title: quickTitle)
-        guard !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        do {
-            guard let repository = runtime.repository else { return }
-            try repository.saveTask(task); quickTitle = ""; quickFocused = false; status = "Open"; query = ""
-            onlyInProgress = false; onlyToday = false; selectedList = ""; feedback.select()
-        } catch { errorMessage = error.localizedDescription }
-    }
     private func taskRow(_ task: MailTask) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Button {
@@ -136,7 +123,7 @@ struct MailTasksView: View {
                 .accessibilityIdentifier("toggleTask-\(task.accessibilityKey)")
             VStack(alignment: .leading, spacing: 6) {
                 Button { editing = task } label: { Text(task.title).font(.subheadline.weight(.semibold)).foregroundStyle(Color.primary).multilineTextAlignment(.leading).lineLimit(2) }
-                if !task.notes.isEmpty { Text(task.notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(3) }
+                if !task.notes.isEmpty { Text(task.notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(1) }
                 HStack(spacing: 10) {
                     if task.status == .inProgress { taskBadge("In progress", symbol: "circle.lefthalf.filled") }
                     if task.priority != .normal { taskBadge(task.priority.rawValue, symbol: task.priority.symbol) }
@@ -147,7 +134,6 @@ struct MailTasksView: View {
                     Label(dueAt.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
                         .font(.caption).foregroundStyle(task.section(now: Date()) == "Overdue" ? .red : .secondary)
                 }
-                if !task.isStandalone { Text(accounts.first { $0.id == task.accountID }?.email ?? task.sender).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 if let message = source(task) {
                     NavigationLink { GmailMessageView(message: message) } label: { Label("Open conversation", systemImage: "envelope") }
                         .font(.caption).accessibilityIdentifier("taskConversation-\(task.remoteMessageID)")
@@ -190,6 +176,7 @@ struct MailTaskEditor: View {
     @State private var errorMessage: String?
     @State private var selectedStatus: TaskStatus
     @State private var newStep = ""
+    @FocusState private var titleFocused: Bool
     init(task: MailTask) {
         _task = State(initialValue: task)
         _hasDueDate = State(initialValue: task.dueAt != nil)
@@ -198,11 +185,14 @@ struct MailTaskEditor: View {
     }
     var body: some View {
         Form {
-            Section("Next step") {
-                TextField("Task title", text: $task.title).accessibilityIdentifier("mailTaskTitle")
-                TextEditor(text: $task.notes).frame(minHeight: 120).accessibilityLabel("Task notes").accessibilityIdentifier("mailTaskNotes")
+            Section {
+                TextField("What needs doing?", text: $task.title)
+                    .font(.title3.weight(.medium)).focused($titleFocused).accessibilityIdentifier("mailTaskTitle")
+                TextEditor(text: $task.notes).frame(minHeight: 64, maxHeight: 120)
+                    .accessibilityLabel("Task notes").accessibilityIdentifier("mailTaskNotes")
             }
             Section {
+              DisclosureGroup("Dates, priority and list") {
                 Picker("Status", selection: $selectedStatus) {
                     ForEach(TaskStatus.allCases) { Text($0.rawValue).tag($0) }
                 }.accessibilityIdentifier("taskWorkflowPicker")
@@ -212,6 +202,7 @@ struct MailTaskEditor: View {
                 TextField("List (optional)", text: $task.list).accessibilityIdentifier("taskListField")
                 Toggle("Due date", isOn: $hasDueDate).accessibilityIdentifier("mailTaskDueToggle")
                 if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
+              }.accessibilityIdentifier("taskDetailsDisclosure")
             } footer: { Text("Due dates organise your task list. Tasks stay on this device.") }
             Section("Checklist") {
                 ForEach($task.steps) { $step in
@@ -234,6 +225,7 @@ struct MailTaskEditor: View {
         }
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
         .navigationTitle(task.isStandalone ? "Task" : "Email task").navigationBarTitleDisplayMode(.inline)
+        .task { if task.title.isEmpty { titleFocused = true } }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
