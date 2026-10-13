@@ -56,6 +56,7 @@ struct MailboxPanel: View {
     var body: some View {
         NavigationStack {
             List {
+              Group {
                 Section {
                     Menu {
                         Picker("Account", selection: $account) {
@@ -65,30 +66,23 @@ struct MailboxPanel: View {
                     } label: {
                         HStack {
                             AccountBadge(account: selectedAccount)
-                            Text(selectedAccount?.displayName ?? (accounts.isEmpty ? "Sample mail" : "All accounts")).foregroundStyle(.primary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(selectedAccount?.displayName ?? (accounts.isEmpty ? "Sample mail" : "All accounts"))
+                                    .font(.headline).foregroundStyle(MailStyle.ink)
+                                if let selectedAccount { Text(selectedAccount.email).font(.footnote).foregroundStyle(MailStyle.secondaryInk) }
+                            }
                             Spacer()
-                            if !accounts.isEmpty { Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.secondary) }
+                            if !accounts.isEmpty { Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(MailStyle.secondaryInk) }
                         }
                     }.disabled(accounts.isEmpty)
                 }
                 Section {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                        ForEach(["Inbox", "Unread", "Starred", "Drafts"], id: \.self) { name in
-                            Button { select(name) } label: {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Image(systemName: MailStyle.mailboxSymbol(name)).foregroundStyle(mailbox == name && label == nil ? MailStyle.accent : .secondary)
-                                        Spacer()
-                                        if let count = counts[name], count > 0 { Text(count, format: .number).monospacedDigit() }
-                                    }
-                                    Text(name).font(.subheadline.weight(.medium))
-                                }.foregroundStyle(.primary).padding(12).frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-                                    .background(mailbox == name && label == nil ? MailStyle.accent.opacity(0.1) : MailStyle.tile, in: .rect(cornerRadius: 12))
-                                    .contentShape(.rect)
-                            }.buttonStyle(.plain).accessibilityIdentifier("mailbox-\(name)")
-                                .accessibilityAddTraits(mailbox == name && label == nil ? [.isSelected] : [])
-                        }
-                    }.listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)).listRowBackground(Color.clear)
+                    ForEach(["Inbox", "Unread", "Starred", "Drafts"], id: \.self) { name in
+                        Button { select(name) } label: {
+                            row(name, symbol: MailStyle.mailboxSymbol(name), selected: mailbox == name && label == nil, count: counts[name] ?? 0)
+                        }.buttonStyle(.plain).accessibilityIdentifier("mailbox-\(name)")
+                            .accessibilityAddTraits(mailbox == name && label == nil ? [.isSelected] : [])
+                    }
                 }
                 Section("Mailboxes") {
                     ForEach(["Sent", "Archive", "Snoozed", "All Mail", "Spam", "Trash"], id: \.self) { name in
@@ -124,20 +118,27 @@ struct MailboxPanel: View {
                     NavigationLink { MailRulesView() } label: { row("Rules", symbol: "line.3.horizontal.decrease", selected: false) }
                 }
                 Section {
-                    shortcut("Tasks", "checklist", .secondary, openTasks)
-                    shortcut("Receipts", "receipt", .orange, openReceipts)
-                    shortcut("Attachments", "paperclip", .blue, openAttachments)
-                    shortcut("People", "person.2", .purple, openPeople)
-                    shortcut("Collections", "folder", .teal, openCollections)
-                    shortcut("Subscriptions", "newspaper", .pink, openSubscriptions)
+                    shortcut("Tasks", "checklist", openTasks)
+                    shortcut("Receipts", "receipt", openReceipts)
+                    shortcut("Attachments", "paperclip", openAttachments)
+                    shortcut("People", "person.2", openPeople)
+                    shortcut("Collections", "folder", openCollections)
+                    shortcut("Subscriptions", "newspaper", openSubscriptions)
                 }
                 Section {
-                    shortcut("Accounts", "person.crop.circle", .blue, openAccounts)
-                    shortcut("Settings", "gearshape", .gray, openSettings)
+                    shortcut("Accounts", "person.crop.circle", openAccounts)
+                    shortcut("Settings", "gearshape", openSettings)
                 }
-            }.listStyle(.insetGrouped).tint(.primary).environment(\.defaultMinListRowHeight, 44)
+              }
+              .listRowBackground(MailStyle.paper)
+              .listRowInsets(EdgeInsets(top: 6, leading: MailStyle.contentPadding, bottom: 6, trailing: MailStyle.contentPadding))
+              .listRowSeparator(.hidden)
+              .textCase(nil)
+            }.modifier(MailWorkspaceList())
                 .navigationTitle("Mailboxes").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) {
+                .toolbar {
+                  ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Mailboxes") }
+                  ToolbarItem(placement: .confirmationAction) {
                     MailCloseButton(title: "Close mailboxes", action: close).accessibilityIdentifier("closeMailboxesButton")
                 } }
         }.accessibilityAddTraits(.isModal)
@@ -150,16 +151,16 @@ struct MailboxPanel: View {
     private func select(_ name: String) { feedback.select(); label = nil; mailbox = name; close() }
     private func row(_ title: String, symbol: String, selected: Bool, count: Int = 0) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol).foregroundStyle(selected ? MailStyle.accent : .secondary).frame(width: 24)
-            Text(title).foregroundStyle(.primary)
+            Image(systemName: symbol).font(MailStyle.icon).foregroundStyle(selected ? MailStyle.accent : MailStyle.secondaryInk).frame(width: 24)
+            Text(title).font(.body.weight(selected ? .semibold : .regular)).foregroundStyle(MailStyle.ink)
             Spacer()
-            if count > 0 { Text(count, format: .number).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary) }
+            if count > 0 { Text(count, format: .number).font(.subheadline.monospacedDigit()).foregroundStyle(MailStyle.secondaryInk) }
             if selected { Image(systemName: "checkmark").foregroundStyle(MailStyle.accent).fontWeight(.semibold) }
-        }.padding(.vertical, 2).accessibilityAddTraits(selected ? .isSelected : [])
+        }.frame(minHeight: 44).contentShape(.rect).accessibilityAddTraits(selected ? .isSelected : [])
     }
-    private func shortcut(_ title: String, _ symbol: String, _ color: Color, _ action: @escaping () -> Void) -> some View {
+    private func shortcut(_ title: String, _ symbol: String, _ action: @escaping () -> Void) -> some View {
         Button { feedback.select(); action() } label: {
-            Label { Text(title).foregroundStyle(.primary) } icon: { Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 24) }
+            row(title, symbol: symbol, selected: false)
         }.accessibilityIdentifier(title == "Settings" ? "mailboxSettingsButton" : "mailbox-\(title)")
     }
 }

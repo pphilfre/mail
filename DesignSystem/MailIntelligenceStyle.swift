@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum MailIntelligenceStyle {
-    static let gradient = LinearGradient(colors: [.blue, .purple, .pink, .orange], startPoint: .leading, endPoint: .trailing)
+    static let foreground = MailStyle.accent
 }
 
 struct IntelligenceAction: View {
@@ -15,11 +15,9 @@ struct IntelligenceAction: View {
                 if running { ProgressView().controlSize(.small) }
                 else { Image(systemName: "sparkles") }
                 Text(title).font(.subheadline.weight(.semibold))
-            }.foregroundStyle(MailIntelligenceStyle.gradient)
+            }.foregroundStyle(MailIntelligenceStyle.foreground)
                 .padding(.horizontal, 14).frame(minHeight: 44)
-                .background(Color.secondary.opacity(0.06), in: .capsule)
-                .overlay { Capsule().strokeBorder(MailIntelligenceStyle.gradient.opacity(running ? 0.8 : 0.35), lineWidth: 1) }
-                .shadow(color: .purple.opacity(running ? 0.18 : 0), radius: 8)
+                .background(MailStyle.tile, in: .rect(cornerRadius: MailStyle.controlRadius))
         }.buttonStyle(.plain)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: running)
     }

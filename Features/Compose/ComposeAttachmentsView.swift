@@ -32,22 +32,25 @@ struct ComposeAttachmentsView: View {
                     } label: {
                         Label {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(file.filename).foregroundStyle(.primary).lineLimit(2)
-                                Text(file.sizeDescription).font(.caption).foregroundStyle(.secondary)
+                                Text(file.filename).font(.subheadline.weight(.medium)).foregroundStyle(MailStyle.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(file.sizeDescription).font(.footnote).foregroundStyle(MailStyle.secondaryInk)
                             }
-                        } icon: { Image(systemName: "doc") }
+                        } icon: { Image(systemName: "doc").font(MailStyle.icon).foregroundStyle(MailStyle.secondaryInk).frame(width: 24) }
+                        .frame(minHeight: 44)
                     }.accessibilityLabel("Preview \(file.filename), \(file.sizeDescription)")
                     Spacer()
                     Button {
                         attachments.removeAll { $0.id == file.id }
-                    } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                    } label: { Image(systemName: "xmark").font(MailStyle.icon).foregroundStyle(MailStyle.secondaryInk).frame(width: 44, height: 44) }
                         .accessibilityLabel("Remove \(file.filename)")
                         .accessibilityIdentifier("removeAttachment-\(file.filename)")
-                }.buttonStyle(.borderless)
+                }.buttonStyle(.borderless).padding(.vertical, 6)
+                    .overlay(alignment: .bottom) { MailRule() }
             }
             if importing { ProgressView("Copying attachments…").accessibilityIdentifier("attachmentImportProgress") }
             if !attachments.isEmpty {
-                Text("Attachments · \(totalSize)").font(.caption).foregroundStyle(.secondary)
+                Text("Attachments · \(totalSize)").font(.caption).foregroundStyle(MailStyle.secondaryInk)
             }
         }
         .quickLookPreview($previewURL)

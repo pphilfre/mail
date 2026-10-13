@@ -24,10 +24,10 @@ enum MailSwipeAction: String, CaseIterable, Identifiable {
     }
     var tint: Color {
         switch self {
-        case .read: .blue
-        case .archive: .orange
+        case .read: MailStyle.accent
+        case .archive: MailStyle.accent
         case .trash: .red
-        case .star: .yellow
+        case .star: MailStyle.accent
         case .none: .gray
         }
     }
@@ -67,16 +67,17 @@ struct SettingsView: View {
     @AppStorage("confirmationAnimations") private var confirmationAnimations = true
 
     var body: some View {
-        Form {
+        List {
+          Group {
             Section {
                 NavigationLink { AccountsView() } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "person.crop.circle")
-                            .font(.title2).foregroundStyle(MailStyle.accent)
-                            .frame(width: 44, height: 44).background(MailStyle.accent.opacity(0.08), in: .circle)
+                            .font(.title2).foregroundStyle(MailStyle.secondaryInk)
+                            .frame(width: 32, height: 44)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Your accounts").font(.headline)
-                            Text("Connections and sync").font(.caption).foregroundStyle(.secondary)
+                            Text("Connections and sync").font(.subheadline).foregroundStyle(MailStyle.secondaryInk)
                         }
                     }.padding(.vertical, 4)
                 }
@@ -89,7 +90,7 @@ struct SettingsView: View {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
                 }.accessibilityIdentifier("previewLinesPicker")
                 Toggle("Group conversations", isOn: $conversationRows)
-            } header: { Text("Reading") } footer: {
+            } header: { Text("Reading").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) } footer: {
                 Text("Remote images can reveal when you open mail. Company icons load from senders’ websites and do not verify their identity.")
             }
             if !accounts.isEmpty {
@@ -102,7 +103,7 @@ struct SettingsView: View {
                         NavigationLink("Signature · \(account.displayName)") { AccountPreferencesView(account: account) }
                     }
                     Text("New mail uses the selected inbox account first, then your default. Replies use the receiving account.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(MailStyle.secondaryInk)
                 }
             }
             Section("Swipe actions") {
@@ -124,8 +125,8 @@ struct SettingsView: View {
             Section {
                 Toggle("Haptic feedback", isOn: $haptics).accessibilityIdentifier("hapticFeedbackToggle")
                 Toggle("Confirmation animations", isOn: $confirmationAnimations).accessibilityIdentifier("confirmationAnimationsToggle")
-            } header: { Text("Feedback") } footer: {
-                Text("A little tap and a quick celebration when things are done. Animations follow your device’s Reduce Motion setting.")
+            } header: { Text("Feedback").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) } footer: {
+                Text("Subtle feedback when an action completes. Animations follow your device’s Reduce Motion setting.")
             }
             Section("Privacy & intelligence") {
                 NavigationLink("Privacy & intelligence") { MailIntegrationSettings() }
@@ -136,17 +137,21 @@ struct SettingsView: View {
             }
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
-                Text("A little more calm. A lot less inbox.").font(.footnote).foregroundStyle(.secondary)
+                Text("A little more calm. A lot less inbox.").font(.footnote).foregroundStyle(MailStyle.secondaryInk)
             }
+          }
+          .listRowBackground(MailStyle.paper)
+          .listRowInsets(EdgeInsets(top: 12, leading: MailStyle.contentPadding, bottom: 12, trailing: MailStyle.contentPadding))
+          .textCase(nil)
         }
-        .scrollContentBackground(.hidden)
-        .background(MailStyle.canvas)
+        .modifier(MailWorkspaceList())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Settings") } }
         .onChange(of: appearance) { _, _ in feedback.select() }
         .onChange(of: haptics) { _, enabled in if enabled { feedback.select() } }
         .onChange(of: confirmationAnimations) { _, enabled in
-            if enabled { feedback.show("A little celebration", detail: "You’re all set") }
+            if enabled { feedback.show("Confirmation animations enabled", detail: "You’re all set") }
         }
     }
 }

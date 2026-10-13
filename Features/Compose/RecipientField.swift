@@ -19,11 +19,11 @@ struct RecipientField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).foregroundStyle(.secondary).frame(width: 36, alignment: .leading)
+                Text(title).font(.subheadline).foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
                 if !editing && !text.isEmpty {
                     Button { editing = true } label: {
                         Text(RecipientInput.tokens(text).map { RecipientInput.address($0)?.displayName ?? $0 }.joined(separator: ", "))
-                            .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }.buttonStyle(.plain)
                         .accessibilityLabel("Edit \(title) recipients")
                         .contextMenu {
@@ -52,8 +52,8 @@ struct RecipientField: View {
                 } label: {
                     VStack(alignment: .leading) {
                         Text(suggestion.address.displayName)
-                        Text(suggestion.address.email).font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
+                        Text(suggestion.address.email).font(.caption).foregroundStyle(MailStyle.secondaryInk)
+                    }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }.buttonStyle(.plain).accessibilityLabel("Add \(suggestion.address.email) to \(title)")
             }
         }

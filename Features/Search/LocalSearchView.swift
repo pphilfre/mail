@@ -128,6 +128,7 @@ private struct SearchResultsView: View {
         let ready = completedRequest == request
         let ids = ready ? resultIDs : []
         List {
+          Group {
             if accounts.count > 1 {
                 Picker("Account", selection: $accountID) {
                     Text("All accounts").tag(UUID?.none)
@@ -136,19 +137,19 @@ private struct SearchResultsView: View {
             }
             if filters.active || accountID != nil || includeTrashAndSpam || meaning {
                 HStack {
-                    Text(meaning ? "By meaning" : "Filtered mail").font(.caption).foregroundStyle(.secondary)
+                    Text(meaning ? "By meaning" : "Filtered mail").font(.caption).foregroundStyle(MailStyle.secondaryInk)
                     Spacer()
                     Button("Reset") { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false }
                         .font(.caption)
                 }.listRowSeparator(.hidden)
             }
             if meaning && ready && semanticIDs == nil && !trimmed.isEmpty {
-                Text("Meaning search unavailable for this language. Showing keyword matches.").font(.caption).foregroundStyle(.secondary)
+                Text("Meaning search unavailable for this language. Showing keyword matches.").font(.caption).foregroundStyle(MailStyle.secondaryInk)
             }
             if indexing || !ready {
-                HStack { ProgressView(); Text("Preparing search…").foregroundStyle(.secondary) }
+                HStack { ProgressView(); Text("Preparing search…").foregroundStyle(MailStyle.secondaryInk) }
             } else if let error = parsed.error {
-                Label(error, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
+                Label(error, systemImage: "info.circle").font(.callout).foregroundStyle(MailStyle.secondaryInk)
             } else if trimmed.isEmpty && !filters.active && accountID == nil {
                 if !savedSearches.isEmpty {
                     Section("Saved searches") {
@@ -191,10 +192,10 @@ private struct SearchResultsView: View {
                         if let message = mailByID[id] {
                             NavigationLink { GmailMessageView(message: message) } label: {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    CachedMessageRow(message: message)
+                                    CachedMessageRow(message: message, account: accounts.count > 1 ? accounts.first { $0.id == message.accountID } : nil)
                                     if accountID == nil && accounts.count > 1,
                                        let account = accounts.first(where: { $0.id == message.accountID }) {
-                                        Text(account.email).font(.caption).foregroundStyle(.secondary).padding(.leading, 52)
+                                        Text(account.email).font(.footnote).foregroundStyle(MailStyle.secondaryInk).padding(.leading, 48)
                                     }
                                 }
                             }.accessibilityIdentifier("searchResultMail-\(id.uuidString)")
@@ -204,17 +205,24 @@ private struct SearchResultsView: View {
                         }
                     }
                 } header: {
-                    Text("\(ids.count) \(ids.count == 1 ? "result" : "results")")
+                    Text("\(ids.count) \(ids.count == 1 ? "result" : "results")").font(MailStyle.sectionHeading)
                 } footer: {
                     Text("Searching mail saved on this device\(includeTrashAndSpam ? ", including Trash and Spam" : "").")
                 }
             }
+          }
+          .listRowBackground(MailStyle.paper)
+          .listRowInsets(EdgeInsets(top: 0, leading: MailStyle.contentPadding, bottom: 0, trailing: MailStyle.contentPadding))
+          .textCase(nil)
+          .buttonStyle(.plain)
         }
         .listStyle(.plain)
-        .listRowBackground(MailStyle.paper)
+        .listRowSeparatorTint(MailStyle.divider)
         .scrollContentBackground(.hidden)
         .background(MailStyle.paper)
-        .safeAreaInset(edge: .top, spacing: 0) { filterBar.background(MailStyle.paper) }
+        .foregroundStyle(MailStyle.ink)
+        .environment(\.defaultMinListRowHeight, 52)
+        .safeAreaInset(edge: .top, spacing: 0) { filterBar.background(MailStyle.paper).overlay(alignment: .bottom) { MailRule() } }
         .accessibilityIdentifier("searchResultsList")
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
@@ -243,6 +251,7 @@ private struct SearchResultsView: View {
         .onSubmit(of: .search) { rememberQuery() }
         .onDisappear { rememberQuery() }
         .toolbar {
+            ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Search") }
             if dismissible { ToolbarItem(placement: .confirmationAction) {
                 Button("Close") { onClose?(); dismiss() }.accessibilityIdentifier("closeSearchButton")
             } }
@@ -286,28 +295,28 @@ private struct SearchResultsView: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 18) {
-                Button("All") { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false }
-                    .foregroundStyle(!filters.active && !meaning && !includeTrashAndSpam && accountID == nil ? MailStyle.accent : .secondary)
+                Button { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false } label: {
+                    MailFilterLabel(title: "All", selected: !filters.active && !meaning && !includeTrashAndSpam && accountID == nil)
+                }
+                .accessibilityAddTraits(!filters.active && !meaning && !includeTrashAndSpam && accountID == nil ? [.isSelected] : [])
                 filterChip("Unread", value: $filters.unread)
                 filterChip("Starred", value: $filters.starred)
                 filterChip("Attachments", value: Binding(get: { filters.attachmentPresence == true }, set: { filters.attachments = false; filters.attachmentPresence = $0 ? true : nil }))
                 filterChip("No attachments", value: Binding(get: { filters.attachmentPresence == false }, set: { filters.attachments = false; filters.attachmentPresence = $0 ? false : nil }))
-                Button(filters.sender ?? "Sender") { senderText = filters.sender ?? ""; showingSenderFilter = true }
-                    .foregroundStyle(filters.sender != nil ? MailStyle.accent : .secondary)
-                Button("Date") { showingDateFilters = true }
-                    .foregroundStyle(filters.after != nil || filters.before != nil ? MailStyle.accent : .secondary)
+                Button { senderText = filters.sender ?? ""; showingSenderFilter = true } label: {
+                    MailFilterLabel(title: filters.sender ?? "Sender", selected: filters.sender != nil)
+                }
+                Button { showingDateFilters = true } label: {
+                    MailFilterLabel(title: "Date", selected: filters.after != nil || filters.before != nil)
+                }
                 filterChip("By meaning", value: $meaning)
                 filterChip("Trash & Spam", value: $includeTrashAndSpam)
-            }.font(.subheadline.weight(.medium)).buttonStyle(.plain).padding(.horizontal, 16).frame(minHeight: 44)
+            }.buttonStyle(.plain).padding(.horizontal, MailStyle.contentPadding).frame(minHeight: 44)
         }.accessibilityIdentifier("searchFilterBar")
     }
     private func filterChip(_ title: String, value: Binding<Bool>) -> some View {
         Button { feedback.select(); value.wrappedValue.toggle() } label: {
-            HStack(spacing: 4) {
-                if value.wrappedValue { Image(systemName: "checkmark") }
-                Text(title)
-            }.font(.subheadline.weight(.medium)).frame(minHeight: 44)
-                .foregroundStyle(value.wrappedValue ? MailStyle.accent : .secondary)
+            MailFilterLabel(title: title, selected: value.wrappedValue)
         }.buttonStyle(.plain).accessibilityAddTraits(value.wrappedValue ? [.isSelected] : [])
     }
     private func rememberQuery() {

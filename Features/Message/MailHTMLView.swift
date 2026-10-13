@@ -15,13 +15,15 @@ struct MailHTMLView: UIViewRepresentable {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src \(images); font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>
-        :root { color-scheme: light dark; }
+        :root { color-scheme: light dark; --dispatch-ink: #252428; --dispatch-link: #705267; }
+        @media (prefers-color-scheme: dark) { :root { --dispatch-ink: #f2eff1; --dispatch-link: #d2b5c9; } }
         html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; overflow: visible !important; width: 100%; font: -apple-system-body; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+        body { color: var(--dispatch-ink); background: transparent; line-height: 1.55; }
         #dispatch-mail-body { display: flow-root; position: relative; height: auto !important; overflow: visible !important; }
         img { max-width: 100% !important; height: auto; }
         table { max-width: 100% !important; }
         pre { white-space: pre-wrap; }
-        a { color: #007aff; }
+        a { color: var(--dispatch-link); text-decoration: underline; }
         </style></head><body><div id="dispatch-mail-body">\(html)</div></body></html>
         """
     }
@@ -202,7 +204,7 @@ struct MailBodyView: View {
             .frame(maxWidth: .infinity)
             .frame(height: height)
         } else {
-            Text(MailPlainText.linked(text)).font(.body).textSelection(.enabled)
+            Text(MailPlainText.linked(text)).font(.body).foregroundStyle(MailStyle.ink).lineSpacing(6).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
         }
     }

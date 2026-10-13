@@ -6,28 +6,29 @@ struct MessageView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(message.subject).font(.title3.weight(.semibold)).textSelection(.enabled)
-                VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 24) {
+                Text(message.subject).font(MailStyle.readerTitle).foregroundStyle(MailStyle.ink).textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 16) {
                     HStack(alignment: .top, spacing: 12) {
                         SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false)
                         VStack(alignment: .leading, spacing: 5) {
                             Text(message.sender).font(.headline)
-                            Text(message.address).font(.caption).foregroundStyle(.secondary)
+                            Text(message.address).font(.footnote).foregroundStyle(MailStyle.secondaryInk)
                             Text(message.date, format: .dateTime.day().month().year().hour().minute())
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.footnote).foregroundStyle(MailStyle.secondaryInk)
                         }
                     }
-                    Divider()
+                    MailRule().padding(.vertical, 8)
                     MailBodyView(html: nil, text: message.body, remoteImages: false)
                 }.padding(.vertical, 8)
                 Label("Sample message", systemImage: "info.circle")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(MailStyle.secondaryInk)
             }
-            .padding(16)
-            .frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
+            .padding(MailStyle.contentPadding)
+            .frame(maxWidth: MailStyle.readingWidth, alignment: .leading).frame(maxWidth: .infinity)
         }
         .background(MailStyle.paper)
+        .foregroundStyle(MailStyle.ink)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)

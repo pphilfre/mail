@@ -160,7 +160,8 @@ struct RichMailEditor: UIViewRepresentable {
         view.adjustsFontForContentSizeCategory = true
         view.font = .preferredFont(forTextStyle: .body)
         view.allowsEditingTextAttributes = true
-        view.textContainerInset = UIEdgeInsets(top: 14, left: 0, bottom: 18, right: 0)
+        view.textContainerInset = UIEdgeInsets(top: 24, left: 0, bottom: 24, right: 0)
+        view.tintColor = UIColor(MailStyle.accent)
         view.textContainer.lineFragmentPadding = 0
         view.accessibilityLabel = "Message body"; view.accessibilityIdentifier = "composeBody"
         view.attributedText = Self.attributed(text, document: document)
@@ -194,7 +195,13 @@ struct RichMailEditor: UIViewRepresentable {
         return CGSize(width: width, height: max(260, size.height))
     }
     static func attributed(_ text: String, document: RichMailBody?) -> NSAttributedString {
-        let result = NSMutableAttributedString(string: text, attributes: [.font: UIFont.preferredFont(forTextStyle: .body), .foregroundColor: UIColor.label])
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 6
+        paragraph.paragraphSpacing = 8
+        let result = NSMutableAttributedString(string: text, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .body),
+            .foregroundColor: UIColor(MailStyle.ink), .paragraphStyle: paragraph
+        ])
         guard let document, document.text == text else { return result }
         for run in document.runs where run.location >= 0 && run.length > 0 && run.location <= result.length && run.length <= result.length - run.location {
             let range = NSRange(location: run.location, length: run.length)

@@ -13,15 +13,15 @@ struct SenderAvatar: View {
     @State private var resolvedKey = ""
     private var requestKey: String { "\(allowsRemoteIcon && senderPictures)-\(email.lowercased())" }
     private var category: LocalMailCategory { SenderIdentity.category(email: email, context: context) }
-    private var appearance: (String, Color) {
+    private var symbol: String {
         switch category {
-        case .finance: ("creditcard", .green)
-        case .travel: ("airplane", .teal)
-        case .newsletters: ("newspaper", .indigo)
-        case .promotions: ("tag", .orange)
-        case .work: ("briefcase", .blue)
-        case .personal: ("person.crop.circle", .secondary)
-        case .other: ("envelope", .secondary)
+        case .finance: "creditcard"
+        case .travel: "airplane"
+        case .newsletters: "newspaper"
+        case .promotions: "tag"
+        case .work: "briefcase"
+        case .personal: "person.crop.circle"
+        case .other: "envelope"
         }
     }
     var body: some View {
@@ -29,13 +29,13 @@ struct SenderAvatar: View {
             if let icon, resolvedKey == requestKey {
                 Image(uiImage: icon).resizable().scaledToFit().padding(max(3, size * 0.1)).background(MailStyle.paper)
             } else {
-                Image(systemName: appearance.0).font(.system(size: size * 0.48, weight: .regular))
-                    .foregroundStyle(appearance.1).frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(appearance.1.opacity(0.09))
+                Image(systemName: symbol).font(.system(size: size * 0.48, weight: .regular))
+                    .foregroundStyle(MailStyle.secondaryInk).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(MailStyle.tile)
             }
         }
         .frame(width: size, height: size)
-        .clipShape(.rect(cornerRadius: 11))
+        .clipShape(.rect(cornerRadius: MailStyle.controlRadius))
         .accessibilityHidden(true)
         .task(id: requestKey) {
             icon = nil; resolvedKey = ""

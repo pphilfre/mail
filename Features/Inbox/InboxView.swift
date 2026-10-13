@@ -141,15 +141,17 @@ struct InboxView: View {
         // Recreate the list's size cache when reading density changes, rather than keeping old cell heights.
         .id("mail-density-\(compactInbox)-\(previewLines)")
         .listStyle(.plain)
+        .listRowSeparatorTint(MailStyle.divider)
         .scrollContentBackground(.hidden)
         .background(MailStyle.paper)
+        .foregroundStyle(MailStyle.ink)
         .listRowSpacing(0)
         .environment(\.defaultMinListRowHeight, compactInbox ? 44 : 48)
         .environment(\.editMode, .constant(selecting ? .active : .inactive))
         .safeAreaInset(edge: .bottom) {
             if selecting { bulkToolbar }
         }
-        .safeAreaInset(edge: .top) { inboxHeader }
+        .safeAreaInset(edge: .top, spacing: 0) { inboxHeader }
         .confirmationDialog("Move \(selectedMessages.count) loaded messages to Trash?", isPresented: $confirmingTrash, titleVisibility: .visible) {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
@@ -164,7 +166,7 @@ struct InboxView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 if mailbox == "Drafts" && labelFilter == nil { DraftLocationPicker(selection: $draftLocation) }
-                else { Text(mailboxTitle).font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader) }
+                else { MailNavigationTitle(title: mailboxTitle) }
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
@@ -317,6 +319,8 @@ struct InboxView: View {
                         NavigationLink {
                             MessageView(message: message)
                         } label: { MessageRow(message: message) }
+                        .listRowBackground(MailStyle.paper)
+                        .listRowInsets(EdgeInsets(top: 0, leading: MailStyle.contentPadding, bottom: 0, trailing: MailStyle.contentPadding))
                     }
                     if filteredSamples.isEmpty {
                         ContentUnavailableView("No sample messages here", systemImage: "tray",
@@ -367,6 +371,8 @@ struct InboxView: View {
                                 }
                         }
                     }
+                    .listRowBackground(MailStyle.paper)
+                    .listRowInsets(EdgeInsets(top: 0, leading: MailStyle.contentPadding, bottom: 0, trailing: MailStyle.contentPadding))
                     if conversations.isEmpty {
                         if selectedAccounts.contains(where: { runtime.gmail?.syncing.contains($0.id) == true }) {
                             HStack { ProgressView(); Text("Loading \(mailbox.lowercased())…").foregroundStyle(.secondary) }
@@ -395,7 +401,7 @@ struct InboxView: View {
                 guard value != "Custom" else { return }
                 labelFilter = nil; quickFilter = .all; mailbox = value
             }),
-            scopeTitle: mailboxTitle, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
+            scopeTitle: mailboxTitle, accountTitle: scopeTitle, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
             canSelect: !accounts.isEmpty && !["Drafts", "Catch Up"].contains(mailbox), selecting: selecting,
             search: { feedback.select(); showingSearch = true },
             select: {
@@ -497,7 +503,7 @@ struct InboxView: View {
         CachedMessageRow(message: conversation.latest, messageCount: conversation.messages.count,
             unread: !conversation.isRead, starred: conversation.isStarred,
             hasAttachments: conversation.messages.contains { files.contains($0.id) },
-            account: accounts[conversation.latest.accountID],
+            account: accounts.count > 1 ? accounts[conversation.latest.accountID] : nil,
             pinned: saved[MailLocalOrganisation.key(conversation.latest)]?.pinned == true)
     }
     @ViewBuilder private func conversationSwipe(_ raw: String, conversation: MailConversation) -> some View {
@@ -564,38 +570,10 @@ struct CachedMessageRow: View {
     @AppStorage("previewLines") private var previewLines = 2
     @AppStorage("compactInbox") private var compactInbox = false
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.senderEmail, name: message.sender.displayName, size: compactInbox ? 36 : 38, context: message.subject)
-                .overlay(alignment: .bottomTrailing) {
-                    if !isRead { Circle().fill(MailStyle.accent).frame(width: 9, height: 9).overlay(Circle().stroke(.background, lineWidth: 2)) }
-                }
-            VStack(alignment: .leading, spacing: compactInbox ? 2 : MailStyle.rowSpacing) {
-                HStack {
-                    Text(message.sender.displayName).font(.system(.subheadline, weight: isRead ? .medium : .semibold)).lineLimit(1)
-                    if messageCount > 1 {
-                        Text(messageCount, format: .number).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                            .padding(.horizontal, 5).padding(.vertical, 2).background(MailStyle.canvas, in: .capsule)
-                            .accessibilityLabel("\(messageCount) messages")
-                    }
-                    Spacer()
-                    if starred ?? message.isStarred { Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption) }
-                    if hasAttachments { Image(systemName: "paperclip").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Has attachments") }
-                    MailRowDate(date: message.receivedAt)
-                }
-                Text(message.subject.isEmpty ? "No subject" : message.subject).font(.subheadline.weight(isRead ? .regular : .medium)).lineLimit(1)
-                if previewLines > 0 { Text(message.snippet).font(compactInbox ? .caption : .subheadline).foregroundStyle(.secondary).lineLimit(compactInbox ? min(previewLines, 1) : previewLines).fixedSize(horizontal: false, vertical: true) }
-
-            }
-        }.padding(.vertical, compactInbox ? 3 : 8)
-        .padding(.leading, 10)
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2).fill(Color(mailHex: account?.colourHex ?? "007AFF"))
-                .frame(width: 3).padding(.vertical, 4).accessibilityHidden(true)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if pinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary).accessibilityLabel("Pinned on this device") }
-        }
-        .accessibilityElement(children: .combine).accessibilityValue(isRead ? "Read" : "Unread")
+        MailMessageRowContent(sender: message.sender.displayName, email: message.senderEmail,
+            subject: message.subject, preview: message.snippet, date: message.receivedAt, isRead: isRead,
+            compact: compactInbox, previewLines: previewLines, messageCount: messageCount,
+            starred: starred ?? message.isStarred, hasAttachments: hasAttachments, pinned: pinned, account: account)
     }
 }
 
@@ -605,26 +583,79 @@ struct MessageRow: View {
     @AppStorage("compactInbox") private var compactInbox = false
 
     var body: some View {
+        MailMessageRowContent(sender: message.sender, email: message.address, subject: message.subject,
+            preview: message.snippet, date: message.date, isRead: message.isRead,
+            compact: compactInbox, previewLines: previewLines, allowsRemoteIcon: false)
+    }
+}
+
+/// Real mail, sample mail and search use the same reading rhythm and state cues.
+private struct MailMessageRowContent: View {
+    let sender: String
+    let email: String
+    let subject: String
+    let preview: String
+    let date: Date
+    let isRead: Bool
+    let compact: Bool
+    let previewLines: Int
+    var messageCount = 1
+    var starred = false
+    var hasAttachments = false
+    var pinned = false
+    var account: MailAccount? = nil
+    var allowsRemoteIcon = true
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            SenderAvatar(email: message.address, name: message.sender, allowsRemoteIcon: false, size: compactInbox ? 36 : 38)
+            SenderAvatar(email: email, name: sender, allowsRemoteIcon: allowsRemoteIcon, size: compact ? 32 : 36, context: subject)
                 .overlay(alignment: .bottomTrailing) {
-                    if !message.isRead {
+                    if !isRead {
                         Circle().fill(MailStyle.accent).frame(width: 9, height: 9)
                             .overlay(Circle().stroke(MailStyle.paper, lineWidth: 2))
                     }
                 }
-            VStack(alignment: .leading, spacing: compactInbox ? 2 : MailStyle.rowSpacing) {
+            VStack(alignment: .leading, spacing: compact ? 4 : MailStyle.rowSpacing) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(message.sender).font(.system(.subheadline, weight: message.isRead ? .medium : .semibold)).lineLimit(1)
+                    Text(sender).font(.subheadline.weight(isRead ? .medium : .semibold))
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+                        .foregroundStyle(MailStyle.ink)
                     Spacer(minLength: 8)
-                    MailRowDate(date: message.date)
+                    if !typeSize.isAccessibilitySize { MailRowDate(date: date).fixedSize() }
                 }
-                Text(message.subject).font(.subheadline.weight(message.isRead ? .regular : .medium)).lineLimit(1)
-                if previewLines > 0 { Text(message.snippet).font(compactInbox ? .caption : .subheadline).foregroundStyle(.secondary).lineLimit(compactInbox ? min(previewLines, 1) : previewLines).fixedSize(horizontal: false, vertical: true) }
+                Text(subject.isEmpty ? "No subject" : subject)
+                    .font(.body.weight(isRead ? .regular : .medium)).foregroundStyle(MailStyle.ink)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+                if previewLines > 0 {
+                    Text(preview).font(.subheadline).foregroundStyle(MailStyle.secondaryInk)
+                        .lineSpacing(2)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : compact ? min(previewLines, 1) : previewLines)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if typeSize.isAccessibilitySize || messageCount > 1 || starred || hasAttachments || pinned || account != nil {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { metadata }
+                        VStack(alignment: .leading, spacing: 6) { metadata }
+                    }.font(.caption).foregroundStyle(MailStyle.secondaryInk)
+                }
             }
         }
-        .padding(.vertical, compactInbox ? 3 : 6)
+        .padding(.vertical, compact ? 6 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(message.isRead ? "Read" : "Unread")
+        .accessibilityValue(isRead ? "Read" : "Unread")
+    }
+
+    @ViewBuilder private var metadata: some View {
+        if typeSize.isAccessibilitySize { MailRowDate(date: date) }
+        if messageCount > 1 { Text(messageCount, format: .number).monospacedDigit().accessibilityLabel("\(messageCount) messages") }
+        if starred { Image(systemName: "star.fill").accessibilityLabel("Starred") }
+        if hasAttachments { Image(systemName: "paperclip").accessibilityLabel("Has attachments") }
+        if pinned { Image(systemName: "pin.fill").accessibilityLabel("Pinned on this device") }
+        if let account {
+            Circle().fill(Color(mailHex: account.colourHex)).frame(width: 6, height: 6)
+                .accessibilityLabel("Account: \(account.displayName)")
+        }
     }
 }

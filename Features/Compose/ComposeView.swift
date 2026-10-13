@@ -71,25 +71,25 @@ struct ComposeView: View {
                     recipientField("To", text: $draft.to)
                     if !showAdditionalRecipients && draft.cc.isEmpty && draft.bcc.isEmpty {
                         Button("Cc / Bcc") { feedback.select(); showAdditionalRecipients = true }
-                            .font(.caption).frame(minHeight: 44)
+                            .font(.footnote).foregroundStyle(MailStyle.secondaryInk).frame(minHeight: 44)
                     }
                 }.padding(.vertical, 4)
-                Divider()
+                MailRule()
                 if showAdditionalRecipients || !draft.cc.isEmpty || !draft.bcc.isEmpty {
                     recipientField("Cc", text: $draft.cc).padding(.vertical, 4)
-                    Divider()
+                    MailRule()
                     recipientField("Bcc", text: $draft.bcc).padding(.vertical, 4)
-                    Divider()
+                    MailRule()
                 }
                 HStack(spacing: 8) {
-                    Text("From").foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
-                    if accounts.isEmpty { Text("No account connected").foregroundStyle(.secondary) }
+                    Text("From").foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
+                    if accounts.isEmpty { Text("No account connected").foregroundStyle(MailStyle.secondaryInk) }
                     else {
                         Circle().fill(Color(mailHex: sendingAccount?.colourHex ?? "007AFF")).frame(width: 7, height: 7)
                         Picker("Sending account", selection: $draft.accountID) {
                             Text("Choose account").tag(UUID?.none)
                             ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
-                        }.pickerStyle(.menu).labelsHidden().tint(.primary)
+                        }.pickerStyle(.menu).labelsHidden().tint(MailStyle.ink)
                             .accessibilityIdentifier("composeFromPicker")
                             .onChange(of: draft.accountID) { _, _ in
                                 draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil
@@ -97,15 +97,15 @@ struct ComposeView: View {
                             }
                     }
                     Spacer(minLength: 0)
-                }.font(.subheadline).padding(.vertical, 10)
-                Divider()
+                }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)
+                MailRule()
                 HStack(spacing: 8) {
-                    Text("Subject").foregroundStyle(.secondary)
-                    TextField("Subject", text: $draft.subject).font(.body.weight(.medium))
+                    Text("Subject").foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
+                    TextField("Subject", text: $draft.subject, axis: .vertical).font(.body.weight(.medium))
                     .accessibilityIdentifier("composeSubject")
                     .onChange(of: draft.subject) { _, _ in draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil }
-                }.font(.subheadline).padding(.vertical, 12)
-                Divider()
+                }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)
+                MailRule()
                 if !RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).isEmpty {
                     Text("Remove duplicate recipients: " + RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).sorted().joined(separator: ", "))
                         .font(.caption).foregroundStyle(.red).padding(.vertical, 8)
@@ -128,12 +128,13 @@ struct ComposeView: View {
                 if let attachmentError { Text(attachmentError).font(.callout).foregroundStyle(.red).padding(.vertical, 8) }
                 if working { ProgressView("Contacting Gmail…").padding(.vertical, 8) }
                 if hasCompositionContent && editor?.isSaved(draft) == true {
-                    Text("Saved on this device").font(.caption).foregroundStyle(.secondary)
+                    Text("Saved on this device").font(.caption).foregroundStyle(MailStyle.secondaryInk)
                         .accessibilityIdentifier("draftAutosaveStatus")
                 } else if hasCompositionContent {
-                    Text(saveError == nil ? "Saving draft…" : "Draft couldn’t save").font(.caption).foregroundStyle(.secondary)
+                    Text(saveError == nil ? "Saving draft…" : "Draft couldn’t save").font(.caption).foregroundStyle(MailStyle.secondaryInk)
                 }
-            }.padding(.horizontal, 20).padding(.bottom, 16).frame(maxWidth: 760).frame(maxWidth: .infinity)
+            }.padding(.horizontal, MailStyle.contentPadding).padding(.top, 12).padding(.bottom, 24)
+                .frame(maxWidth: MailStyle.readingWidth).frame(maxWidth: .infinity)
           }.onChange(of: showingWriting) { _, visible in
               if visible { withAnimation(MailStyle.motion(reduced: reduceMotion)) { proxy.scrollTo("writingAssistant", anchor: .bottom) } }
           }
@@ -143,6 +144,7 @@ struct ComposeView: View {
         composeFields
         .scrollDismissesKeyboard(.interactively)
         .background(MailStyle.paper)
+        .foregroundStyle(MailStyle.ink)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
                 if showingFormatting { formattingBar }
@@ -153,6 +155,7 @@ struct ComposeView: View {
         .navigationTitle("New message")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) { MailNavigationTitle(title: "New message") }
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") {
                     if sendUnconfirmed { finished = true; dismiss() }
@@ -242,7 +245,7 @@ struct ComposeView: View {
             NavigationStack {
                 Form {
                     DatePicker("Send after", selection: $scheduledDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
-                    Text("Saved on this device. Dispatch sends when it is open and online after this time. Keep the app open for on-time delivery.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Saved on this device. Dispatch sends when it is open and online after this time. Keep the app open for on-time delivery.").font(.footnote).foregroundStyle(MailStyle.secondaryInk)
                     if let saveError { Text(saveError).foregroundStyle(.red) }
                 }.navigationTitle("Schedule send")
                     .toolbar {
@@ -333,7 +336,7 @@ struct ComposeView: View {
                 writingSource = (draft.body as NSString).substring(with: writingRange)
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = true }
             } label: {
-                Image(systemName: "sparkles").foregroundStyle(MailIntelligenceStyle.gradient).frame(width: 44, height: 44)
+                Image(systemName: "sparkles").foregroundStyle(showingWriting ? MailStyle.accent : MailStyle.secondaryInk).frame(width: 44, height: 44)
             }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton")
             Button { showingFormatting.toggle() } label: {
                 Image(systemName: "textformat").frame(width: 44, height: 44).contentShape(.rect)
@@ -353,10 +356,10 @@ struct ComposeView: View {
             }.accessibilityLabel("Attach file").disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityIdentifier("attachFileButton")
         }
-        .buttonStyle(.plain).font(.system(size: 21)).frame(height: 52)
+        .buttonStyle(.plain).font(MailStyle.icon).foregroundStyle(MailStyle.ink).frame(height: 52)
         .padding(.horizontal, 14)
         .environment(\.defaultMinListRowHeight, 44)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .modifier(MailControlSurface())
         .disabled(importingAttachments || working || sendUnconfirmed)
         .padding(.vertical, 10).frame(maxWidth: .infinity)
     }

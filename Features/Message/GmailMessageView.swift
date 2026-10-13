@@ -113,17 +113,17 @@ struct GmailMessageView: View {
       let files = Dictionary(grouping: attachments, by: \.messageID)
       return ScrollViewReader { proxy in
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 Text(message.subject.isEmpty ? "No subject" : message.subject)
-                    .font(.title3.weight(.semibold)).textSelection(.enabled)
-                    .padding(.top, 4)
+                    .font(MailStyle.readerTitle).foregroundStyle(MailStyle.ink).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 20)
                 InlineMailSummary(sources: summarySources, loadingBody: loadingThread, securitySymbol: securityStatus.symbol, securityColor: securityStatus.color,
                    securityLabel: "Security Inspector, " + securityStatus.label, securityIdentifier: "securityInspector-\(actionMessage.remoteID)",
                    onSecurity: { readerPresentation = .security(actionMessage) })
                 if preparingForward { ProgressView("Preparing attachments…").font(.caption) }
                 if let error = readerError {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(error).font(.callout).foregroundStyle(.secondary)
+                        Text(error).font(.callout).foregroundStyle(MailStyle.secondaryInk)
                         Button("Retry") { Task { await refreshThread(syncFirst: true) } }.disabled(loadingThread)
                     }
                 }
@@ -149,7 +149,8 @@ struct GmailMessageView: View {
                         confirmingDraftDeletion = true
                     }
                 }
-            }.padding(.horizontal, 16).padding(.bottom, 12).frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
+            }.padding(.horizontal, MailStyle.contentPadding).padding(.bottom, 24)
+                .frame(maxWidth: MailStyle.readingWidth, alignment: .leading).frame(maxWidth: .infinity)
         }
         .task(id: thread.map(\.id)) {
             guard !focusedMessage, thread.contains(where: { $0.id == message.id }) else { return }
@@ -162,6 +163,7 @@ struct GmailMessageView: View {
     private var readerChrome: some View {
         conversationContent
         .background(MailStyle.paper)
+        .foregroundStyle(MailStyle.ink)
         .confirmationDialog("Unsubscribe from \(message.sender.displayName)?", isPresented: $confirmingUnsubscribe, titleVisibility: .visible) {
             if let unsubscribe {
                 if unsubscribe.oneClick {
@@ -211,7 +213,7 @@ struct GmailMessageView: View {
                         }.disabled(message.isDraft)
                         dockButton("Archive", "archivebox") { triage("archive"); dismiss() }
                             .disabled(!message.isInbox || message.isDraft)
-                    }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
+                    }.padding(4).modifier(MailControlSurface())
                     Spacer(minLength: 0)
                     MailGlassButton(title: "More", symbol: "ellipsis") { readerPresentation = .actions }
                         .accessibilityIdentifier("readerMoreButton")
