@@ -206,6 +206,7 @@ private struct SearchResultsView: View {
         .background(MailStyle.paper)
         .foregroundStyle(MailStyle.ink)
         .environment(\.defaultMinListRowHeight, 52)
+        .accessibilityIdentifier("searchResultsList")
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 filterBar.background(MailStyle.tile)
@@ -240,7 +241,6 @@ private struct SearchResultsView: View {
                 .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(MailStyle.accent.opacity(0.35), lineWidth: 1) }
                 .padding(.horizontal, 16).padding(.vertical, 10).background(MailStyle.tile)
         }
-        .accessibilityIdentifier("searchResultsList")
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: request) {

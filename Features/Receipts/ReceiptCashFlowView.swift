@@ -42,9 +42,7 @@ struct ReceiptCashFlowView: View {
             } else {
                 Text("Confirmed amounts will appear here.").font(.callout).foregroundStyle(MailStyle.secondaryInk)
             }
-            Text("Last six months, based on email received dates. Transfers are included; unpaid invoices, unknown amounts and unconfirmed directions are excluded. Currencies stay separate.")
-                .font(.caption).foregroundStyle(MailStyle.secondaryInk)
-        }.padding(.vertical, 8).accessibilityIdentifier("receiptCashFlow")
+        }.padding(.vertical, 8).accessibilityElement(children: .contain).accessibilityIdentifier("receiptCashFlow")
     }
     private func total(_ title: String, _ value: Decimal, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {

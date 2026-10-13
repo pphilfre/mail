@@ -66,10 +66,12 @@ struct MailTasksView: View {
             HStack(spacing: 18) {
                 ForEach(["Open", "All", "Completed"], id: \.self) { value in
                     Button { status = value } label: { MailFilterLabel(title: value, selected: status == value) }
+                        .accessibilityIdentifier("taskStatus-\(value)")
+                        .accessibilityAddTraits(status == value ? [.isSelected] : [])
                 }
                 Spacer(minLength: 0)
             }.buttonStyle(.plain).padding(.horizontal, 20).background(MailStyle.paper)
-                .overlay(alignment: .bottom) { MailRule() }.accessibilityIdentifier("taskStatusFilter")
+                .overlay(alignment: .bottom) { MailRule() }
         }
         .safeAreaInset(edge: .bottom, alignment: .trailing) {
             Button { editing = .standalone() } label: {
@@ -177,6 +179,8 @@ struct MailTaskEditor: View {
     @State private var selectedStatus: TaskStatus
     @State private var newStep = ""
     @FocusState private var titleFocused: Bool
+    @FocusState private var notesFocused: Bool
+    @State private var detailsExpanded = false
     init(task: MailTask) {
         _task = State(initialValue: task)
         _hasDueDate = State(initialValue: task.dueAt != nil)
@@ -189,10 +193,21 @@ struct MailTaskEditor: View {
                 TextField("What needs doing?", text: $task.title)
                     .font(.title3.weight(.medium)).focused($titleFocused).accessibilityIdentifier("mailTaskTitle")
                 TextEditor(text: $task.notes).frame(minHeight: 64, maxHeight: 120)
-                    .accessibilityLabel("Task notes").accessibilityIdentifier("mailTaskNotes")
+                    .focused($notesFocused).accessibilityLabel("Task notes").accessibilityIdentifier("mailTaskNotes")
             }
             Section {
-              DisclosureGroup("Dates, priority and list") {
+              Button {
+                  titleFocused = false; notesFocused = false
+                  detailsExpanded.toggle()
+              } label: {
+                  HStack {
+                      Text("Dates, priority and list")
+                      Spacer()
+                      Image(systemName: detailsExpanded ? "chevron.up" : "chevron.down").font(.caption)
+                  }.frame(minHeight: 44).contentShape(.rect)
+              }.buttonStyle(.plain).accessibilityIdentifier("taskDetailsDisclosure")
+                  .accessibilityValue(detailsExpanded ? "Expanded" : "Collapsed")
+              if detailsExpanded {
                 Picker("Status", selection: $selectedStatus) {
                     ForEach(TaskStatus.allCases) { Text($0.rawValue).tag($0) }
                 }.accessibilityIdentifier("taskWorkflowPicker")
@@ -202,7 +217,7 @@ struct MailTaskEditor: View {
                 TextField("List (optional)", text: $task.list).accessibilityIdentifier("taskListField")
                 Toggle("Due date", isOn: $hasDueDate).accessibilityIdentifier("mailTaskDueToggle")
                 if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
-              }.accessibilityIdentifier("taskDetailsDisclosure")
+              }
             } footer: { Text("Due dates organise your task list. Tasks stay on this device.") }
             Section("Checklist") {
                 ForEach($task.steps) { $step in

@@ -10,6 +10,7 @@ struct ComposeView: View {
     @Environment(MailFeedback.self) private var feedback
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Query(sort: \MailAccount.email) private var accounts: [MailAccount]
     @Query(sort: \MailMessage.receivedAt, order: .reverse) private var cachedMessages: [MailMessage]
     @AppStorage("defaultSendingAccount") private var defaultAccount = ""
@@ -39,6 +40,8 @@ struct ComposeView: View {
     @State private var showingSchedule = false
     @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var showingWriting = false
+    @State private var showingWritingSetup = false
+    @State private var pendingWritingSetup = false
     @State private var writingSource = ""
     @State private var writingSnapshot = ""
     @State private var writingRange = NSRange(location: 0, length: 0)
@@ -90,7 +93,8 @@ struct ComposeView: View {
                         Picker("Sending account", selection: $draft.accountID) {
                             Text("Choose account").tag(UUID?.none)
                             ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
-                        }.pickerStyle(.menu).labelsHidden().tint(MailStyle.ink)
+                        }.pickerStyle(.menu).labelsHidden().tint(MailStyle.ink).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityIdentifier("composeFromPicker")
                             .onChange(of: draft.accountID) { _, _ in
                                 draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil
@@ -116,10 +120,6 @@ struct ComposeView: View {
                     .opacity(writingPreview == nil ? 1 : 0).accessibilityHidden(writingPreview != nil)
                 if let writingPreview {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Added").foregroundStyle(.green)
-                            Text("Removed").foregroundStyle(.red).strikethrough()
-                        }.font(.caption)
                         Text(previewText(writingPreview)).font(.body).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("composeWritingPreview")
                         HStack {
@@ -159,10 +159,18 @@ struct ComposeView: View {
         .modifier(MailFeedbackOverlay(playsHaptics: false))
         .navigationTitle("New message")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingWriting) {
+        .sheet(isPresented: $showingWriting, onDismiss: {
+            if pendingWritingSetup { pendingWritingSetup = false; showingWritingSetup = true }
+        }) {
             InlineWritingAssistant(source: writingSource, draftUnchanged: draft.body == writingSnapshot,
-                apply: applyWriting, reviewInDraft: { writingPreview = $0; showingWriting = false }, close: { showingWriting = false })
-                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+                reviewInDraft: { writingPreview = $0; showingWriting = false },
+                setup: { pendingWritingSetup = true; showingWriting = false }, close: { showingWriting = false })
+                .presentationDetents([.height(typeSize.isAccessibilitySize ? 160 : 124)]).presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingWritingSetup) {
+            NavigationStack {
+                MailIntegrationSettings().toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { showingWritingSetup = false } } }
+            }
         }
         .toolbar {
             ToolbarItem(placement: .principal) { MailNavigationTitle(title: "New message") }

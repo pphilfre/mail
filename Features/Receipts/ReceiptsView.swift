@@ -23,6 +23,8 @@ struct ReceiptsView: View {
     @State private var editing: ReceiptEditContext?
     @State private var errorMessage: String?
     @State private var exporting = false
+    @State private var selectedReceipt: ReceiptSummary?
+    @State private var showingReceipt = false
     private var sources: [ReceiptSource] {
         messages.filter { !$0.isTrash && !$0.isSpam && !$0.isDraft && !$0.isSent && (accountID == nil || $0.accountID == accountID) }
             .map(ReceiptSource.init)
@@ -63,15 +65,15 @@ struct ReceiptsView: View {
         List {
             Section {
                 ReceiptCashFlowView(receipts: allReceipts)
-                Toggle("This month", isOn: $thisMonth)
-                Text("\(receipts.count) transactions in downloaded mail").font(.caption).foregroundStyle(.secondary)
             }
             if scanning { ProgressView("Finding receipts…") }
             ForEach(months, id: \.self) { month in
                 Section(month.formatted(.dateTime.month(.wide).year())) {
                     ForEach(receipts.filter { Calendar.current.isDate($0.receivedAt, equalTo: month, toGranularity: .month) }) { receipt in
-                        NavigationLink { ReceiptDetailView(receipt: receipt, history: allReceipts, message: messages.first { $0.id == receipt.id }, onEdit: { edit(receipt) }) }
-                        label: { receiptRow(receipt) }
+                        Button { selectedReceipt = receipt; showingReceipt = true } label: {
+                            receiptRow(receipt).frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
+                        }
+                            .buttonStyle(.plain)
                             .accessibilityIdentifier("receipt-\(receipt.remoteID)")
                             .contextMenu {
                                 Button("Review receipt", systemImage: "pencil") { edit(receipt) }
@@ -89,9 +91,18 @@ struct ReceiptsView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
         .scrollContentBackground(.hidden).background(MailStyle.canvas)
+        .environment(\.editMode, .constant(.inactive))
+        .navigationDestination(isPresented: $showingReceipt) {
+            if let selectedReceipt {
+                ReceiptDetailView(receipt: selectedReceipt, history: allReceipts, message: messages.first { $0.id == selectedReceipt.id }, onEdit: { edit(selectedReceipt) })
+            }
+        }
         .navigationTitle("Receipts")
         .searchable(text: $query, prompt: "Merchant, subject or amount")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Menu("Filter transactions", systemImage: "line.3.horizontal.decrease") { Toggle("This month", isOn: $thisMonth) }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Export CSV", systemImage: "square.and.arrow.up") { exporting = true }
                     .disabled(receipts.isEmpty || scanning)
@@ -178,7 +189,7 @@ private struct ReceiptDetailView: View {
                 Text(receipt.signedAmount).font(.system(.largeTitle, design: .rounded, weight: .semibold)).monospacedDigit().foregroundStyle(receipt.flow.color)
                 LabeledContent("Type", value: receipt.kind)
                 LabeledContent("Received", value: receipt.receivedAt.formatted(date: .abbreviated, time: .shortened))
-            } footer: { Text(receipt.reviewed ? "You reviewed these details in Dispatch." : "Detected from the email. Review against the original before using these details.") }
+            }
             if !receipt.facts.isEmpty {
                 Section("Transaction details") {
                     ForEach(receipt.facts) { fact in LabeledContent(fact.label, value: fact.value).textSelection(.enabled) }
@@ -188,8 +199,6 @@ private struct ReceiptDetailView: View {
                 ReceiptCashFlowView(receipts: history.filter { $0.merchant == receipt.merchant }.map { $0.id == receipt.id ? receipt : $0 })
             }
             Section("Source") {
-                Text(receipt.subject)
-                Text(receipt.senderEmail).font(.caption).foregroundStyle(.secondary)
                 if let message { NavigationLink("Open original email") { GmailMessageView(message: message) } }
             }
         }
@@ -227,8 +236,7 @@ struct ReceiptEditor: View {
                 TextField("Currency", text: $currency).textInputAutocapitalization(.characters).autocorrectionDisabled()
                 Picker("Direction", selection: $flow) { ForEach(ReceiptFlow.allCases, id: \.self) { Text($0.title).tag($0) } }
                 Toggle("Include in Receipts", isOn: $included)
-            } header: { Text("Receipt details") }
-              footer: { Text("Leave the amount blank if it is unknown. Use a currency code such as GBP, EUR or USD. These changes stay on this device.") }
+            } header: { Text("Receipt details") } footer: { Text("Leave the amount blank if it is unknown. Use a currency code such as GBP, EUR or USD. These changes stay on this device.") }
             Section("Original email") {
                 Text(context.source.subject)
                 Text(context.source.senderEmail).font(.caption).foregroundStyle(.secondary)
