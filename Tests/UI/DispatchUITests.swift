@@ -571,13 +571,13 @@ final class DispatchUITests: XCTestCase {
         let subject = app.textFields["composeSubject"]
         XCTAssertTrue(subject.waitForExistence(timeout: 5))
         let title = "Confirmed draft \(UUID().uuidString.prefix(8))"
-        subject.tap(); subject.typeText(title)
-        // Hosted simulators can drop keyboard events during first-responder transitions.
-        // Verify the input before testing persistence, and complete only a missing suffix.
-        if let entered = subject.value as? String, entered != title, title.hasPrefix(entered) {
-            subject.tap()
-            subject.typeText(String(title.dropFirst(entered.count)))
-        }
+        subject.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        subject.typeText(title)
+        // Accessibility can briefly report a prefix while the keyboard is still committing input.
+        // Wait for the complete value; appending a suffix can overlap the original typing.
+        let entered = NSPredicate(format: "value == %@", title)
+        XCTAssertTrue(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: entered, object: subject)], timeout: 10) == .completed)
         XCTAssertEqual(subject.value as? String, title)
         app.buttons["saveDraftButton"].tap()
         XCTAssertTrue(app.staticTexts["Draft saved"].waitForExistence(timeout: 5))
