@@ -101,7 +101,7 @@ struct ComposeView: View {
                 MailRule()
                 HStack(spacing: 8) {
                     Text("Subject").foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
-                    TextField("Subject", text: $draft.subject, axis: .vertical).font(.body.weight(.medium))
+                    TextField("Subject", text: $draft.subject).font(.body.weight(.medium))
                     .accessibilityIdentifier("composeSubject")
                     .onChange(of: draft.subject) { _, _ in draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil }
                 }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)

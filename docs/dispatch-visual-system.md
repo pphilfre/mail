@@ -28,7 +28,7 @@ The concept is a quiet correspondence desk: warm paper, ink, and a restrained pl
 - **Mailboxes:** aligned single-column navigation with neutral icons, plain counts and a checkmark for selection. Account, label, smart-folder and utility actions remain available.
 - **Reader:** New York subject, separated sender metadata, comfortable column width and plain text rhythm. HTML has adaptive fallback ink and underlined plum links; sender-provided layouts, image permissions and the security policy are retained. Conversation messages use rules and space instead of enclosing cards.
 - **Search:** native focused search field, shared filters, the same inbox rows, sentence-case section headings and consistent insets. Query, scope, saved history and search behavior are retained.
-- **Compose:** aligned recipient and sender labels, wrapping subject, a spacious native rich-text editor, understated attachment rows and a glass editing dock. Rich-text formatting, recipients, signatures, autosave and sending remain intact. Editor paragraph spacing is display styling; it is not added to the outgoing rich-text document.
+- **Compose:** aligned recipient and sender labels, clear subject typography, a spacious native rich-text editor, understated attachment rows and a glass editing dock. Rich-text formatting, recipients, signatures, autosave and sending remain intact. Editor paragraph spacing is display styling; it is not added to the outgoing rich-text document.
 - **Settings:** a continuous paper list with sentence-case groups and familiar native toggles and pickers. Preferences and storage keys are retained.
 - Welcome and transient confirmations follow the same colours, typography and motion rules.
 
