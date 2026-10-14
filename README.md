@@ -20,7 +20,7 @@ The foundation includes Inbox, Accounts, Settings, a sample message reader, and 
 
 ## Windows workflow
 
-Edit `.swift` files and `project.yml` in your preferred editor. Commit and push a pull request to GitHub. Open **Actions → iOS CI** to see the simulator build and unit/UI test results. Download `ios-test-results-*` for logs and the Xcode result bundle. Never manually edit a generated `.xcodeproj`. Main and releases run the full suite; core-only pull requests use all unit tests plus eight UI checks. Documentation-only changes skip CI, and weekly full runs collect coverage.
+Edit `.swift` files and `project.yml` in your preferred editor. Commit and push a pull request to GitHub. Open **Actions → iOS CI** to see the simulator build and unit/UI test results. Download `ios-test-results-*` for logs and the Xcode result bundle. Never manually edit a generated `.xcodeproj`. Main IPA builds and core-only pull requests run all unit tests plus eight critical UI checks. UI pull requests and releases run the full suite; **iOS Regression** runs the comprehensive suite weekly with coverage or on demand. Documentation-only changes skip CI.
 
 ```powershell
 git add .
@@ -39,7 +39,7 @@ git tag v0.2.1
 git push origin v0.2.1
 ```
 
-The release workflow runs the full iOS CI suite alongside the physical-device build, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and attaches the IPA and SHA-256 checksum to a GitHub Release only after both succeed. The simulator app/test bundles compile once and run on three separate test runners. Package downloads and compatible incremental compiler outputs are cached. Tags must use `vMAJOR.MINOR.PATCH`. Manual runs save artifacts; enable their publish input to publish the validated commit as a release. The historical `v0.1.0` tag predates the Dispatch rename.
+The **Release IPA** workflow runs the full iOS CI suite alongside the physical-device build, packages `Payload/Dispatch.app` into `Dispatch-v<version>.ipa`, and publishes the IPA and SHA-256 checksum in GitHub's **Releases** tab after both succeed. This applies to tag triggers and manual Release IPA runs. Tags must use `vMAJOR.MINOR.PATCH`; select a new version for each release. Existing releases are never overwritten, and an existing tag must refer to the validated commit. The Actions job summary links directly to the published release. Routine iOS CI IPA builds remain Actions artifacts. Simulator app/test bundles compile once and full suites run on three separate runners. Package downloads and compatible incremental compiler outputs are cached for both device and simulator builds. The historical `v0.1.0` tag predates the Dispatch rename.
 
 The default IPA is **unsigned** and needs a compatible sideloading tool to re-sign it with your Apple account. Installation and push support depend on that tool and your provisioning. Signed releases and APNs are later stages; no signing secrets are required for this foundation.
 

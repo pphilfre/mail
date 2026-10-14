@@ -13,7 +13,8 @@ xcodebuild -project Dispatch.xcodeproj -scheme Dispatch -configuration Release \
   -destination 'generic/platform=iOS' -derivedDataPath build/ReleaseDerivedData \
   -clonedSourcePackagesDirPath build/SourcePackages \
   -disableAutomaticPackageResolution -skipPackageUpdates \
-  MARKETING_VERSION="${version#v}" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  -parallelizeTargets -showBuildTimingSummary \
+  MARKETING_VERSION="${version#v}" COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   build 2>&1 | tee build/release-build.log
 app_path="build/ReleaseDerivedData/Build/Products/Release-iphoneos/Dispatch.app"
 test -f "$app_path/Dispatch"

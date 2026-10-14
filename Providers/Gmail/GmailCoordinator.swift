@@ -466,6 +466,7 @@ final class GmailCoordinator {
         do {
             try await vault.remove(for: id)
             try repository.removeAccountData(id: id)
+            await MailSummaryCache.shared.clear()
             UserDefaults.standard.removeObject(forKey: MailSignature.key(id))
             UserDefaults.standard.removeObject(forKey: MailTextLibrary.key("Signatures", accountID: id))
             if UserDefaults.standard.string(forKey: "defaultSendingAccount") == id.uuidString {

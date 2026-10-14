@@ -1,4 +1,15 @@
-Dispatch v0.8.1 retains the consolidated v0.8.0 functionality and further reduces release validation time.
+Dispatch v0.9.0 improves native mail UI, local caching, responsiveness and release delivery.
+
+- Consistent Liquid Glass controls, compact compose and Drafts tools, inline AI writing,
+  and reusable email attachment selection with search and previews.
+- Locally cached summaries and sender/company icons, including Discord; faster reader
+  preparation and scrolling, improved People filters and a compact receipt organiser.
+- Editable receipt/invoice types, clearer receipt filters and cash-flow charts, and
+  simpler Accounts and Settings screens with shared typography and surfaces.
+- Cached device builds and parallel IPA packaging. Release builds retain complete
+  unit/UI validation and publish IPA/checksum downloads in GitHub's Releases tab.
+
+Included from v0.8.1: consolidated v0.8.0 functionality and faster release validation.
 
 - Starts simulator migration alongside compilation and balances the complete UI suite
   across three isolated runners using measured durations. Publication still requires
@@ -46,7 +57,7 @@ Included from v0.6.1:
 - Receipt detection recognises more transaction confirmations and uses HTML when plain text is empty or incomplete.
 - Fixed-width HTML emails fit the reader and resize with the available width. Email scripts remain disabled.
 
-Manual GitHub Actions builds run the full test suite alongside packaging. Publication is gated on both succeeding; artifacts from a failed run are not a validated release. Tag builds also publish a release, and manual builds can opt into publication.
+Manual **Release IPA** runs and version tags run the full test suite alongside packaging. Both publish the IPA and checksum in GitHub's **Releases** tab after validation succeeds. Failed runs cannot publish a release. Routine iOS CI IPA builds use essential checks and remain Actions artifacts.
 
 Included from v0.6.0: sender profiles, an attachment library, project collections and a subscription centre, alongside the v0.5.0 tasks, receipts and composer improvements.
 

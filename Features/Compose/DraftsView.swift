@@ -15,7 +15,9 @@ struct DraftsView: View {
             .listStyle(.plain).scrollContentBackground(.hidden).background(MailStyle.paper)
             .navigationTitle("Drafts")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .principal) { DraftLocationPicker(selection: $location) } }
+            .toolbar { ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) { MailNavigationTitle(title: "Drafts"); DraftLocationPicker(selection: $location) }
+            } }
             .sheet(item: $editingDraft) { draft in
                 NavigationStack { ComposeView(draft: draft) }
             }
@@ -24,15 +26,18 @@ struct DraftsView: View {
 
 struct DraftLocationPicker: View {
     @Binding var selection: DraftLocation
-    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
-        Group {
-            if typeSize.isAccessibilitySize { picker.pickerStyle(.menu) }
-            else { picker.pickerStyle(.segmented) }
-        }.accessibilityIdentifier("draftLocationPicker")
-    }
-    private var picker: some View {
-        Picker("Draft location", selection: $selection) { ForEach(DraftLocation.allCases) { Text($0.rawValue).tag($0) } }
+        HStack(spacing: 2) {
+            ForEach(DraftLocation.allCases) { location in
+                Button { selection = location } label: {
+                    Image(systemName: location == .device ? "iphone" : "icloud")
+                        .font(MailStyle.icon).frame(width: 44, height: 44)
+                        .foregroundStyle(selection == location ? MailStyle.accent : MailStyle.secondaryInk)
+                        .background(selection == location ? MailStyle.accent.opacity(0.12) : .clear, in: .capsule)
+                }.buttonStyle(.plain).accessibilityLabel(location.rawValue)
+                    .accessibilityAddTraits(selection == location ? .isSelected : [])
+            }
+        }.padding(.horizontal, 3).modifier(MailControlSurface()).accessibilityIdentifier("draftLocationPicker")
     }
 }
 
@@ -135,6 +140,7 @@ struct DraftSections: View {
                 }
             }
         }
+        .listRowBackground(MailStyle.paper)
         .task(id: accountID) { await refresh() }
     }
     // A single stable presenter avoids duplicating dialogs across the Group's list rows.

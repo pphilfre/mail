@@ -125,16 +125,27 @@ struct MailboxPanel: View {
                     shortcut("Collections", "folder", openCollections)
                     shortcut("Subscriptions", "newspaper", openSubscriptions)
                 }
-                Section {
-                    shortcut("Accounts", "person.crop.circle", openAccounts)
-                    shortcut("Settings", "gearshape", openSettings)
-                }
               }
               .listRowBackground(MailStyle.paper)
-              .listRowInsets(EdgeInsets(top: 6, leading: MailStyle.contentPadding, bottom: 6, trailing: MailStyle.contentPadding))
+              .listRowInsets(EdgeInsets(top: 0, leading: MailStyle.contentPadding, bottom: 0, trailing: MailStyle.contentPadding))
               .listRowSeparator(.hidden)
               .textCase(nil)
             }.modifier(MailWorkspaceList())
+                .listSectionSpacing(.custom(10))
+                .environment(\.defaultMinListRowHeight, 44)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        MailRule()
+                        HStack(spacing: 12) {
+                            Spacer(minLength: 0)
+                            Button("Accounts", systemImage: "person.crop.circle", action: openAccounts)
+                                .accessibilityIdentifier("mailbox-Accounts")
+                            Button("Settings", systemImage: "gearshape", action: openSettings)
+                                .accessibilityIdentifier("mailboxSettingsButton")
+                        }.font(.subheadline.weight(.medium)).buttonStyle(.plain)
+                            .frame(minHeight: 56).padding(.horizontal, 16)
+                    }.background(MailStyle.paper)
+                }
                 .navigationTitle("Mailboxes").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                   ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Mailboxes") }

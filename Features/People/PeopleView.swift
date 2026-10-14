@@ -13,18 +13,22 @@ struct PeopleView: View {
     @Query private var messages: [MailMessage]
     @Query private var metadata: [StoreMetadata]
     @State private var query = ""
+    @State private var filter = "All"
     var body: some View {
         let notes = Dictionary(uniqueKeysWithValues: metadata.filter { $0.key.hasPrefix(SenderProfile.prefix) }.compactMap { row -> (String, SenderProfile)? in
             guard let profile = try? SenderProfile.decode(row) else { return nil }
             return (profile.email, profile)
         })
         let people = SenderInsights.directory(messages, accountID: accountID).filter { person in
-            query.isEmpty || [person.email, person.name, notes[person.email]?.nickname ?? ""].contains { $0.localizedCaseInsensitiveContains(query) }
+            let matches = query.isEmpty || [person.email, person.name, notes[person.email]?.nickname ?? ""].contains { $0.localizedCaseInsensitiveContains(query) }
+            return matches && (filter != "Favourites" || notes[person.email]?.isFavourite == true)
+                && (filter != "Recent" || person.lastReceivedAt >= (Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast))
+        }.sorted {
+            if filter == "Frequent", $0.receivedCount != $1.receivedCount { return $0.receivedCount > $1.receivedCount }
+            if filter == "All" || filter == "Favourites" { return $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            return $0.lastReceivedAt > $1.lastReceivedAt
         }
         List {
-            Section {
-                Text("Sender profiles from mail saved on this device.").font(.caption).foregroundStyle(.secondary)
-            }
             ForEach(people) { person in
                 let nickname = notes[person.email]?.nickname ?? ""
                 NavigationLink {
@@ -41,14 +45,33 @@ struct PeopleView: View {
                         Spacer(minLength: 0)
                         MailRowDate(date: person.lastReceivedAt)
                     }.padding(.vertical, 6)
-                }.accessibilityIdentifier("senderProfile-\(person.email)")
+                }.listRowBackground(MailStyle.paper).accessibilityIdentifier("senderProfile-\(person.email)")
             }
             if people.isEmpty {
                 ContentUnavailableView("No matching senders", systemImage: "person.2", description: Text("Profiles appear as mail downloads. Try a name or email address."))
             }
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
-        .navigationTitle("People")
+        .modifier(MailWorkspaceList())
+        .navigationTitle("People").navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: "Sender name or email")
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 18) {
+                    ForEach(["Recent", "Frequent", "Favourites", "All"], id: \.self) { value in
+                        Button { filter = value } label: { MailFilterLabel(title: value, selected: filter == value) }
+                            .accessibilityAddTraits(filter == value ? .isSelected : [])
+                    }
+                }.buttonStyle(.plain).padding(.horizontal, MailStyle.contentPadding)
+            }.background(MailStyle.paper).overlay(alignment: .bottom) { MailRule() }
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) { MailNavigationTitle(title: "People") }
+            ToolbarItem(placement: .topBarLeading) {
+                Menu("People filters", systemImage: "line.3.horizontal.decrease") {
+                    Picker("People", selection: $filter) { ForEach(["Recent", "Frequent", "Favourites", "All"], id: \.self) { Text($0).tag($0) } }
+                }
+            }
+        }
     }
 }

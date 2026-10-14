@@ -43,10 +43,17 @@ and warm runs of the consolidated tree; do not present the estimated improvement
   and deleted files remain visible to Xcode; its dependency graph still controls rebuilding.
 - Do not cache simulator state, credentials, Index or build logs. Cache success never
   bypasses compilation or validation. Cold builds remain supported.
-- Full tests on main, releases, weekly coverage and manual full runs. Core/provider-only
+- Full tests on UI pull requests, releases, weekly coverage and manual full runs. Main IPA builds and core/provider-only
   pull requests use all unit tests and eight critical UI tests. Changes to app/UI,
   resources, project or CI infrastructure select the full UI suite. Documentation-only
   changes skip CI. Branch pushes no longer duplicate pull-request builds.
+
+The 14 October refresh additionally starts the device job alongside validation, restores
+device incremental caches, and moves scheduled full runs to `ios-regression.yml`.
+All unit tests plus eight essential UI checks run for routine main IPA builds; Release IPA
+continues to require the full suite before publishing to the Releases tab. See
+[the current UI/build refresh audit](mail-ui-refresh.md) for the observed 39m 25s and
+19m 50s run breakdowns and the unmeasured post-change timing limitation.
 - Coverage instrumentation moves from every build to the weekly full run. Successful
   screenshots remain in xcresult; attachment export is only performed for failures.
   Already-compressed IPA/test archives are uploaded without duplicate compression.

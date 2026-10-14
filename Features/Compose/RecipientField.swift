@@ -18,12 +18,17 @@ struct RecipientField: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(title).font(.subheadline).foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
                 if !editing && !text.isEmpty {
                     Button { editing = true } label: {
+                      HStack(spacing: 8) {
+                        if let token = RecipientInput.tokens(text).first, let address = RecipientInput.address(token) {
+                            SenderAvatar(email: address.email, name: address.displayName, size: 24)
+                        }
                         Text(RecipientInput.tokens(text).map { RecipientInput.address($0)?.displayName ?? $0 }.joined(separator: ", "))
                             .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                      }
                     }.buttonStyle(.plain)
                         .accessibilityLabel("Edit \(title) recipients")
                         .contextMenu {
@@ -50,9 +55,12 @@ struct RecipientField: View {
                 Button {
                     text = RecipientInput.replacingLastToken(text, with: suggestion.address)
                 } label: {
-                    VStack(alignment: .leading) {
-                        Text(suggestion.address.displayName)
-                        Text(suggestion.address.email).font(.caption).foregroundStyle(MailStyle.secondaryInk)
+                    HStack(spacing: 10) {
+                        SenderAvatar(email: suggestion.address.email, name: suggestion.address.displayName, size: 28)
+                        VStack(alignment: .leading) {
+                            Text(suggestion.address.displayName)
+                            Text(suggestion.address.email).font(.caption).foregroundStyle(MailStyle.secondaryInk)
+                        }
                     }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }.buttonStyle(.plain).accessibilityLabel("Add \(suggestion.address.email) to \(title)")
             }

@@ -89,7 +89,6 @@ private struct SearchResultsView: View {
     @State private var completedRequest: SemanticRequest?
     @AppStorage("semanticMailSearch") private var meaning = false
     @State private var query = ""
-    @State private var searchPresented = false
     @FocusState private var searchFocused: Bool
     @State private var accountID: UUID?
     @State private var includeTrashAndSpam = false
@@ -129,20 +128,6 @@ private struct SearchResultsView: View {
         let ids = ready ? resultIDs : []
         List {
           Group {
-            if accounts.count > 1 {
-                Picker("Account", selection: $accountID) {
-                    Text("All accounts").tag(UUID?.none)
-                    ForEach(accounts) { Text($0.displayName).tag(Optional($0.id)) }
-                }.listRowSeparator(.hidden)
-            }
-            if filters.active || accountID != nil || includeTrashAndSpam || meaning {
-                HStack {
-                    Text(meaning ? "By meaning" : "Filtered mail").font(.caption).foregroundStyle(MailStyle.secondaryInk)
-                    Spacer()
-                    Button("Reset") { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false }
-                        .font(.caption)
-                }.listRowSeparator(.hidden)
-            }
             if meaning && ready && semanticIDs == nil && !trimmed.isEmpty {
                 Text("Meaning search unavailable for this language. Showing keyword matches.").font(.caption).foregroundStyle(MailStyle.secondaryInk)
             }
@@ -204,8 +189,6 @@ private struct SearchResultsView: View {
                                 .accessibilityIdentifier("searchResultSample-\(sample.address)")
                         }
                     }
-                } header: {
-                    Text("\(ids.count) \(ids.count == 1 ? "result" : "results")").font(MailStyle.sectionHeading)
                 } footer: {
                     Text("Searching mail saved on this device\(includeTrashAndSpam ? ", including Trash and Spam" : "").")
                 }
@@ -217,13 +200,47 @@ private struct SearchResultsView: View {
           .buttonStyle(.plain)
         }
         .listStyle(.plain)
+        .listSectionSpacing(.custom(0))
         .listRowSeparatorTint(MailStyle.divider)
         .scrollContentBackground(.hidden)
         .background(MailStyle.paper)
         .foregroundStyle(MailStyle.ink)
         .environment(\.defaultMinListRowHeight, 52)
-        .safeAreaInset(edge: .top, spacing: 0) { filterBar.background(MailStyle.paper).overlay(alignment: .bottom) { MailRule() } }
         .accessibilityIdentifier("searchResultsList")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                filterBar.background(MailStyle.tile)
+                if !trimmed.isEmpty || filters.active || accountID != nil || includeTrashAndSpam || meaning {
+                    HStack(spacing: 8) {
+                        Text(ready ? "\(ids.count) \(ids.count == 1 ? "result" : "results")" : "Preparing search…")
+                            .font(.subheadline.weight(.medium))
+                        if filters.active || accountID != nil || includeTrashAndSpam || meaning {
+                            Text(meaning ? "By meaning" : "Filtered mail").font(.caption).foregroundStyle(MailStyle.secondaryInk)
+                        }
+                        Spacer(minLength: 0)
+                        Button("Reset") { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false }
+                            .font(.caption).frame(minHeight: 44)
+                    }.padding(.horizontal, MailStyle.contentPadding).background(MailStyle.paper)
+                }
+            }.overlay(alignment: .bottom) { MailRule() }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").foregroundStyle(MailStyle.accent)
+                TextField("Search mail", text: $query)
+                    .focused($searchFocused).submitLabel(.search)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("mailSearchField")
+                if !query.isEmpty {
+                    Button { query = ""; searchFocused = true } label: {
+                        Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
+                    }.buttonStyle(.plain).foregroundStyle(MailStyle.secondaryInk).accessibilityLabel("Clear search")
+                }
+            }.padding(.leading, 14).padding(.trailing, 4).frame(minHeight: 52)
+                .background(MailStyle.paper, in: .rect(cornerRadius: 14))
+                .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(MailStyle.accent.opacity(0.35), lineWidth: 1) }
+                .padding(.horizontal, 16).padding(.vertical, 10).background(MailStyle.tile)
+        }
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: request) {
@@ -243,11 +260,7 @@ private struct SearchResultsView: View {
                 semanticIDs = matches; resultIDs = matches ?? lexical; completedRequest = request
             } catch { }
         }
-        .searchable(text: $query, isPresented: $searchPresented,
-                    placement: .navigationBarDrawer(displayMode: .always), prompt: "Search mail")
-        .searchFocused($searchFocused)
-        .searchPresentationToolbarBehavior(.avoidHidingContent)
-        .task { await Task.yield(); searchPresented = true; searchFocused = true }
+        .task { await Task.yield(); searchFocused = true }
         .onSubmit(of: .search) { rememberQuery() }
         .onDisappear { rememberQuery() }
         .toolbar {
@@ -256,7 +269,12 @@ private struct SearchResultsView: View {
                 Button("Close") { onClose?(); dismiss() }.accessibilityIdentifier("closeSearchButton")
             } }
             ToolbarItem(placement: .topBarLeading) {
-                Menu("Search history", systemImage: "ellipsis") {
+                Menu("Search filters", systemImage: "line.3.horizontal.decrease") {
+                    Toggle("Unread", isOn: $filters.unread)
+                    Toggle("Starred", isOn: $filters.starred)
+                    Button("Date") { showingDateFilters = true }
+                    Button("Sender") { senderText = filters.sender ?? ""; showingSenderFilter = true }
+                    Toggle("Trash & Spam", isOn: $includeTrashAndSpam)
                     Toggle("Keep recent searches", isOn: $keepHistory)
                     Button("Save this search") { searchName = ""; namingSearch = true }
                         .disabled((!parsed.active && !filters.active && accountID == nil) || parsed.error != nil || savedSearches.count >= 20)
@@ -295,6 +313,14 @@ private struct SearchResultsView: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 18) {
+                if accounts.count > 1 {
+                    Menu {
+                        Picker("Account", selection: $accountID) {
+                            Text("All accounts").tag(UUID?.none)
+                            ForEach(accounts) { Text($0.displayName).tag(Optional($0.id)) }
+                        }
+                    } label: { MailFilterLabel(title: accounts.first { $0.id == accountID }?.displayName ?? "Accounts", selected: accountID != nil) }
+                }
                 Button { filters = MailSearchFilters(); accountID = nil; includeTrashAndSpam = false; meaning = false } label: {
                     MailFilterLabel(title: "All", selected: !filters.active && !meaning && !includeTrashAndSpam && accountID == nil)
                 }

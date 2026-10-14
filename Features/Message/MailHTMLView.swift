@@ -7,7 +7,7 @@ struct MailHTMLView: UIViewRepresentable {
     let remoteImages: Bool
     @Binding var height: CGFloat
 
-    static func document(_ html: String, remoteImages: Bool) -> String {
+    nonisolated static func document(_ html: String, remoteImages: Bool) -> String {
         let images = remoteImages ? "https: data:" : "data:"
         let html = removingTrackingPixels(html)
         return """
@@ -28,7 +28,7 @@ struct MailHTMLView: UIViewRepresentable {
         """
     }
     func makeCoordinator() -> Coordinator { Coordinator(height: $height) }
-    static func removingTrackingPixels(_ html: String) -> String {
+    nonisolated static func removingTrackingPixels(_ html: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: #"(?is)<img\b[^>]*>"#) else { return html }
         var output = html
         for match in regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).reversed() {
@@ -56,6 +56,8 @@ struct MailHTMLView: UIViewRepresentable {
         view.backgroundColor = .clear
         view.scrollView.backgroundColor = .clear
         view.scrollView.isScrollEnabled = false
+        view.scrollView.panGestureRecognizer.isEnabled = false
+        view.scrollView.bounces = false
         view.navigationDelegate = context.coordinator
         view.configuration.userContentController.add(context.coordinator, contentWorld: .defaultClient, name: "mailLayout")
         return view
@@ -106,12 +108,21 @@ struct MailHTMLView: UIViewRepresentable {
         context.coordinator.height = $height
         guard context.coordinator.sourceHTML != html || context.coordinator.remoteImages != remoteImages else { return }
         context.coordinator.sourceHTML = html; context.coordinator.remoteImages = remoteImages
-        let document = Self.document(html, remoteImages: remoteImages)
-        guard context.coordinator.document != document else { return }
-        context.coordinator.document = document
-        view.loadHTMLString(document, baseURL: nil)
+        let coordinator = context.coordinator
+        coordinator.preparation?.cancel()
+        let source = html, images = remoteImages
+        coordinator.preparation = Task { @MainActor [weak view, weak coordinator] in
+            let work = Task.detached(priority: .userInitiated) { Self.document(source, remoteImages: images) }
+            let document = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+            guard !Task.isCancelled, let coordinator, let view,
+                  coordinator.sourceHTML == source, coordinator.remoteImages == images,
+                  coordinator.document != document else { return }
+            coordinator.document = document
+            view.loadHTMLString(document, baseURL: nil)
+        }
     }
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        coordinator.preparation?.cancel()
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "mailLayout", contentWorld: .defaultClient)
         uiView.stopLoading()
         uiView.navigationDelegate = nil
@@ -122,12 +133,14 @@ struct MailHTMLView: UIViewRepresentable {
         var document = ""
         var sourceHTML: String?
         var remoteImages = false
+        var preparation: Task<Void, Never>?
         init(height: Binding<CGFloat>) { self.height = height }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame, let number = message.body as? NSNumber else { return }
             let value = max(40, CGFloat(number.doubleValue))
             guard value.isFinite, abs(height.wrappedValue - value) > 1 else { return }
-            height.wrappedValue = value
+            var transaction = Transaction(animation: nil); transaction.disablesAnimations = true
+            withTransaction(transaction) { height.wrappedValue = value }
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
@@ -178,18 +191,37 @@ struct MailHTMLView: UIViewRepresentable {
         let value: NSAttributedString
         if let cached = cache.object(forKey: key) { value = cached }
         else {
-            let result = NSMutableAttributedString(string: text)
-            if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue | NSTextCheckingResult.CheckingType.phoneNumber.rawValue) {
-                for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                    let url = match.url ?? match.phoneNumber.flatMap { URL(string: "tel:" + $0.filter { $0.isNumber || $0 == "+" }) }
-                    if let url, ["http", "https", "mailto", "tel"].contains(url.scheme?.lowercased() ?? "") {
-                        result.addAttribute(.link, value: url, range: match.range)
-                    }
-                }
-            }
+            let result = Self.makeLinked(text)
             value = result; cache.setObject(value, forKey: key, cost: text.utf8.count)
         }
         return (try? AttributedString(value)) ?? AttributedString(text)
+    }
+    nonisolated static func makeLinked(_ text: String) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: text)
+        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue | NSTextCheckingResult.CheckingType.phoneNumber.rawValue) {
+            for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                if Task.isCancelled { break }
+                let url = match.url ?? match.phoneNumber.flatMap { URL(string: "tel:" + $0.filter { $0.isNumber || $0 == "+" }) }
+                if let url, ["http", "https", "mailto", "tel"].contains(url.scheme?.lowercased() ?? "") {
+                    result.addAttribute(.link, value: url, range: match.range)
+                }
+            }
+        }
+        return result
+    }
+}
+
+/// Keep link detection off the UI actor; the unlinked body is scrollable immediately.
+private actor MailPlainTextRenderer {
+    static let shared = MailPlainTextRenderer()
+    private var cache: [String: AttributedString] = [:]
+    private var bytes = 0
+    func linked(_ text: String) -> AttributedString {
+        if let result = cache[text] { return result }
+        let result = (try? AttributedString(MailPlainText.makeLinked(text))) ?? AttributedString(text)
+        if cache.count >= 64 || bytes + text.utf8.count > 2_000_000 { cache.removeAll(); bytes = 0 }
+        if text.utf8.count <= 2_000_000 { cache[text] = result; bytes += text.utf8.count }
+        return result
     }
 }
 
@@ -198,14 +230,22 @@ struct MailBodyView: View {
     let text: String
     let remoteImages: Bool
     @State private var height: CGFloat = 80
+    @State private var linked: AttributedString?
+    @State private var linkedSource = ""
     var body: some View {
         if let html, !html.isEmpty {
         MailHTMLView(html: html, remoteImages: remoteImages, height: $height)
             .frame(maxWidth: .infinity)
             .frame(height: height)
         } else {
-            Text(MailPlainText.linked(text)).font(.body).foregroundStyle(MailStyle.ink).lineSpacing(6).textSelection(.enabled)
+            Text(linkedSource == text ? linked ?? AttributedString(text) : AttributedString(text))
+                .font(.body).foregroundStyle(MailStyle.ink).lineSpacing(6).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                .task(id: text) {
+                    let result = await MailPlainTextRenderer.shared.linked(text)
+                    guard !Task.isCancelled else { return }
+                    linked = result; linkedSource = text
+                }
         }
     }
     static func escape(_ text: String) -> String {

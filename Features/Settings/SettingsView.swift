@@ -75,35 +75,39 @@ struct SettingsView: View {
                         Image(systemName: "person.crop.circle")
                             .font(.title2).foregroundStyle(MailStyle.secondaryInk)
                             .frame(width: 32, height: 44)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Your accounts").font(.headline)
-                            Text("Connections and sync").font(.subheadline).foregroundStyle(MailStyle.secondaryInk)
-                        }
+                        Text("Accounts").font(.body)
                     }.padding(.vertical, 4)
                 }
             }
+            Section("Privacy") {
+                NavigationLink("Privacy & AI") { MailIntegrationSettings() }
+                    .accessibilityIdentifier("privacyIntelligenceSettingsLink")
+            }
+            Section("Appearance") {
+                Picker("Appearance", selection: $appearance) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }.pickerStyle(.segmented)
+            }
             Section {
-                Toggle("Load remote images", isOn: $remoteImages)
-                Toggle("Show company icons", isOn: $senderPictures)
+                Toggle(isOn: $remoteImages) { MailInfoLabel(title: "Remote images", information: "Loading images can reveal when you open mail.") }
+                Toggle(isOn: $senderPictures) { MailInfoLabel(title: "Company icons", information: "Icons load from senders’ websites. They do not verify identity.") }
                 Toggle("Compact inbox", isOn: $compactInbox).accessibilityIdentifier("compactInboxToggle")
                 Picker("Preview lines", selection: $previewLines) {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
                 }.accessibilityIdentifier("previewLinesPicker")
                 Toggle("Group conversations", isOn: $conversationRows)
-            } header: { Text("Reading").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) } footer: {
-                Text("Remote images can reveal when you open mail. Company icons load from senders’ websites and do not verify their identity.")
-            }
+            } header: { Text("Reading").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) }
             if !accounts.isEmpty {
                 Section("Composing") {
-                    Picker("Default sending account", selection: $defaultAccount) {
+                    Picker("Send from", selection: $defaultAccount) {
                         Text("Use selected account").tag("")
                         ForEach(accounts) { Text($0.displayName).tag($0.id.uuidString) }
                     }
                     ForEach(accounts) { account in
                         NavigationLink("Signature · \(account.displayName)") { AccountPreferencesView(account: account) }
                     }
-                    Text("New mail uses the selected inbox account first, then your default. Replies use the receiving account.")
-                        .font(.caption).foregroundStyle(MailStyle.secondaryInk)
                 }
             }
             Section("Swipe actions") {
@@ -113,31 +117,18 @@ struct SettingsView: View {
                 Picker("Swipe left", selection: $trailingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
                 }
-                Toggle("Perform action on full swipe", isOn: $fullSwipe)
-            }
-            Section("Appearance") {
-                Picker("Colour scheme", selection: $appearance) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                }.pickerStyle(.segmented)
+                Toggle("Full swipe", isOn: $fullSwipe)
             }
             Section {
                 Toggle("Haptic feedback", isOn: $haptics).accessibilityIdentifier("hapticFeedbackToggle")
                 Toggle("Confirmation animations", isOn: $confirmationAnimations).accessibilityIdentifier("confirmationAnimationsToggle")
-            } header: { Text("Feedback").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) } footer: {
-                Text("Subtle feedback when an action completes. Animations follow your device’s Reduce Motion setting.")
-            }
-            Section("Privacy & intelligence") {
-                NavigationLink("Privacy & intelligence") { MailIntegrationSettings() }
-                    .accessibilityIdentifier("privacyIntelligenceSettingsLink")
-            }
+            } header: { Text("Feedback").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) }
             Section("Sample mail") {
                 Toggle("Show sample inbox", isOn: $showSamples).accessibilityIdentifier("sampleInboxToggle")
             }
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
-                Text("A little more calm. A lot less inbox.").font(.footnote).foregroundStyle(MailStyle.secondaryInk)
+
             }
           }
           .listRowBackground(MailStyle.paper)

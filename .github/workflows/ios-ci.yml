@@ -6,8 +6,6 @@ on:
     paths-ignore: ['docs/**', '**/*.md']
   pull_request:
     paths-ignore: ['docs/**', '**/*.md']
-  schedule:
-    - cron: '0 3 * * 1'
   workflow_dispatch:
     inputs:
       test_filter:
@@ -16,7 +14,7 @@ on:
         type: string
       test_scope:
         description: UI suite scope; all unit tests always run unless test_filter is set
-        default: full
+        default: smoke
         type: choice
         options: [full, smoke]
   workflow_call:
@@ -54,6 +52,9 @@ jobs:
           TEST_FILTER: ${{ github.event_name == 'workflow_dispatch' && inputs.test_filter || '' }}
         run: |
           scope="$REQUESTED_SCOPE"
+          # Main IPA builds use all unit tests and critical UI checks. Full UI coverage
+          # stays on UI pull requests, weekly regression runs and the release gate.
+          if [[ "$EVENT" == push && "${{ github.workflow }}" != 'Release IPA' ]]; then scope=smoke; fi
           if [[ "$EVENT" == pull_request ]]; then
             scope=smoke
             if git diff --name-only "$BASE...$HEAD" | grep -Eq '^(App/|Features/|DesignSystem/|Tests/UI/|Configuration/|project.yml|scripts/|\.github/)'; then scope=full; fi
@@ -159,22 +160,25 @@ jobs:
         run: test "$RESULTS" = 'success,success,success'
 
   device-ipa:
-    needs: build-and-test
-    if: github.event_name != 'pull_request' && github.ref_type != 'tag' && github.workflow != 'Release IPA'
+    needs: plan
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_type != 'tag' && github.workflow == 'iOS CI' && inputs.test_filter == ''
     runs-on: macos-26
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
-      - name: Generate device project
-        run: bash scripts/prepare-macos.sh
+      - uses: ./.github/actions/xcode-setup
+        with:
+          variant: device
       - name: Build and package unsigned device IPA
         run: |
           version="$(sed -n 's/.*MARKETING_VERSION: "\([^"]*\)"/\1/p' project.yml | head -n 1)"
           bash scripts/package-ipa.sh "v${version}"
+          python3 scripts/cache-inputs.py save build/input-times.json
       - name: Save IPA and checksum
         uses: actions/upload-artifact@v4
         with:
           name: Dispatch-device-IPA-${{ github.run_id }}
+          compression-level: 0
           path: |
             build/Dispatch-*.ipa
             build/Dispatch-*.ipa.sha256

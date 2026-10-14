@@ -3,6 +3,15 @@ import Foundation
 enum AttachmentCategory: String, CaseIterable, Identifiable, Sendable {
     case all = "All", documents = "Documents", images = "Images", archives = "Archives", other = "Other"
     var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .all: "paperclip"
+        case .documents: "doc.text"
+        case .images: "photo"
+        case .archives: "archivebox"
+        case .other: "doc"
+        }
+    }
     static func classify(filename: String, mimeType: String) -> Self {
         let type = mimeType.lowercased(), ext = (filename as NSString).pathExtension.lowercased()
         if type.hasPrefix("image/") || ["jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tif", "tiff", "svg"].contains(ext) { return .images }

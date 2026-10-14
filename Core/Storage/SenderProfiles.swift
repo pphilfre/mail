@@ -6,6 +6,7 @@ struct SenderProfile: Codable, Equatable, Sendable {
     let email: String
     var nickname = ""
     var notes = ""
+    var isFavourite: Bool? = nil
     var accountIDs: [UUID]
     static let prefix = "sender-profile:"
     var key: String { Self.prefix + email }

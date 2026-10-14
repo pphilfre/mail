@@ -33,8 +33,8 @@ struct PendingActionsView: View {
                 } header: { Text(account.displayName) }
             }
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
-        .navigationTitle("Mailbox changes")
+        .modifier(MailWorkspaceList())
+        .mailSheetTitle("Mailbox changes")
     }
     private func title(_ kind: String) -> String {
         switch kind {

@@ -22,7 +22,6 @@ struct SubscriptionsView: View {
     var body: some View {
         List {
             Section {
-                Toggle("Unread only", isOn: $unreadOnly)
                 Text("Likely newsletters from downloaded mail. Counts cover this device; frequency is the last 7 days.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Manage newsletter senders", systemImage: "slider.horizontal.3") { managing = true }
@@ -62,8 +61,12 @@ struct SubscriptionsView: View {
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
-        .navigationTitle("Subscriptions").searchable(text: $query, prompt: "Newsletter sender")
+        .modifier(MailWorkspaceList())
+        .mailSheetTitle("Subscriptions").searchable(text: $query, prompt: "Newsletter sender")
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
+        .toolbar { ToolbarItem(placement: .topBarLeading) {
+            Menu("Subscription filters", systemImage: "line.3.horizontal.decrease") { Toggle("Unread only", isOn: $unreadOnly) }
+        } }
         .sheet(isPresented: $managing) { NavigationStack { SubscriptionSenderManager(accountID: accountID) } }
         .confirmationDialog("Archive downloaded newsletter mail?", isPresented: Binding(
             get: { archiving != nil }, set: { if !$0 { archiving = nil } }), titleVisibility: .visible) {
@@ -124,7 +127,8 @@ private struct SubscriptionSenderManager: View {
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .navigationTitle("Newsletter senders").searchable(text: $query, prompt: "Sender name or email")
+        .mailSheetTitle("Newsletter senders").searchable(text: $query, prompt: "Sender name or email")
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
         .toolbar { ToolbarItem(placement: .confirmationAction) {
             Button("Done") { dismiss() }.accessibilityIdentifier("closeSubscriptionManagerButton")
         } }

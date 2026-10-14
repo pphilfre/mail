@@ -6,6 +6,7 @@ struct MailSummarySource: Sendable, Equatable {
     let text: String?
     let html: String?
     var receivedAt: Date? = nil
+    var reader: String? = nil
 }
 
 enum MailSummaryPreparation {
@@ -85,7 +86,8 @@ enum MailSummaryPreparation {
             let hasEarlierCopy = previousBodies.contains { $0.count > 20 && complete.contains($0) }
             let preparedBody = hasEarlierCopy && !authored.isEmpty ? authored : complete
             previousBodies.append(authored)
-            let header = "Message \(index + 1), from \(String(source.sender.prefix(120)))\nSubject: \(String(source.subject.prefix(240)))\nBody:\n"
+            let reader = source.reader.map { "The person reading this mailbox: \(String($0.prefix(180)))\n" } ?? ""
+            let header = reader + "Message \(index + 1), from \(String(source.sender.prefix(120)))\nSubject: \(String(source.subject.prefix(240)))\nBody:\n"
             inputs += chunks(preparedBody, maximum: max(100, maximum - header.count)).map { header + $0 }
         }
         guard inputs.count <= 40 else { throw MailSummaryError.tooLarge }
@@ -104,7 +106,7 @@ enum MailSummaryPreparation {
     }
 }
 
-struct MailSummaryResult: Sendable {
+struct MailSummaryResult: Sendable, Codable {
     let text: String
     let generated: Bool
     var missingBodies = 0
@@ -142,17 +144,22 @@ struct MailSummaryResult: Sendable {
         let preparation = Task.detached(priority: .userInitiated) { try MailSummaryPreparation.inputs(sources, maximum: maximum) }
         let inputs = try await withTaskCancellationHandler { try await preparation.value } onCancel: { preparation.cancel() }
         try Task.checkCancellation()
-        let text = try await MailSummaryPipeline.run(inputs, maximum: maximum) { try await self.generate(.summary, text: $0) }
+        var text = try await MailSummaryPipeline.run(inputs, maximum: maximum) { try await self.generate(.summary, text: $0) }
+        if MailWritingRevision.wordCount(text) > 80 {
+            text = try MailSummaryPreparation.paragraph(await generate(.summary, text: "Keep only the recipient’s essential update or next action from this brief:\n" + text))
+            guard MailWritingRevision.wordCount(text) <= 80 else { throw MailSummaryError.tooVerbose }
+        }
         return MailSummaryResult(text: text, generated: true)
     }
 }
 
 enum MailSummaryError: LocalizedError {
-    case missingBody, tooLarge
+    case missingBody, tooLarge, tooVerbose
     var errorDescription: String? {
         switch self {
         case .missingBody: "A message body isn’t downloaded yet. Refresh the conversation and try again."
         case .tooLarge: "This conversation is too large to summarise reliably on this device."
+        case .tooVerbose: "The model returned too much background. Try again for a shorter brief."
         }
     }
 }

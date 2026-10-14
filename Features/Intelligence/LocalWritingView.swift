@@ -44,7 +44,7 @@ struct LocalWritingView: View {
                         .font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                         .id(showingOriginal)
                         .transition(.opacity)
-                    Text("Coloured words changed. Review before replacing your draft.").font(.caption).foregroundStyle(.secondary)
+                    Text("Green words are added. Red struck-through words are removed.").font(.caption).foregroundStyle(.secondary)
                     if let apply {
                         Button("Use revision", systemImage: "checkmark") { apply(output); dismiss() }
                             .buttonStyle(.glassProminent).disabled(output == text)
@@ -53,7 +53,7 @@ struct LocalWritingView: View {
             }.padding(20).frame(maxWidth: 760).frame(maxWidth: .infinity)
         }
         .background(MailStyle.paper)
-        .navigationTitle("Polish writing").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Polish writing")
         .animation(MailStyle.motion(reduced: reduceMotion), value: showingOriginal)
         .toolbar { ToolbarItem(placement: .confirmationAction) {
             Button("Done") { dismiss() }.accessibilityIdentifier("writingDoneButton")
@@ -70,22 +70,13 @@ struct LocalWritingView: View {
         }
     }
     static func comparison(original: String, revised: String) -> AttributedString {
-        // Word diff identifies additions/replacements rather than colouring every word present elsewhere.
-        let old = original.split(whereSeparator: \.isWhitespace).map(String.init)
-        let next = revised.split(whereSeparator: \.isWhitespace).map(String.init)
-        let additions = Set(next.difference(from: old).compactMap { change -> Int? in
-            if case .insert(let offset, _, _) = change { return offset }; return nil
-        })
         var result = AttributedString()
-        var cursor = revised.startIndex
-        for (index, word) in next.enumerated() {
-            guard let range = revised.range(of: word, range: cursor..<revised.endIndex) else { continue }
-            result += AttributedString(String(revised[cursor..<range.lowerBound]))
-            var value = AttributedString(String(revised[range]))
-            if additions.contains(index) { value.foregroundColor = .purple; value.backgroundColor = .purple.opacity(0.08) }
-            result += value; cursor = range.upperBound
+        for run in MailWritingRevision.runs(original: original, revised: revised) {
+            var value = AttributedString(run.text)
+            if run.change == .added { value.foregroundColor = .green; value.backgroundColor = .green.opacity(0.1) }
+            if run.change == .removed { value.foregroundColor = .red; value.strikethroughStyle = .single }
+            result += value
         }
-        result += AttributedString(String(revised[cursor...]))
         return result
     }
 }

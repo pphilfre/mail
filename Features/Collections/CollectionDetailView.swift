@@ -62,7 +62,7 @@ struct CollectionDetailView: View {
             } else { ContentUnavailableView("Collection unavailable", systemImage: "folder", description: Text("It may have been removed, or its saved data could not be read.")) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
+        .modifier(MailWorkspaceList())
         .navigationTitle(collection?.name ?? "Collection")
         .toolbar { ToolbarItem(placement: .primaryAction) {
             if let collection {
@@ -178,7 +178,8 @@ private struct CollectionMembershipView: View {
             if rows.isEmpty { ContentUnavailableView.search(text: query) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .navigationTitle("Conversations").searchable(text: $query, prompt: "Subject or sender")
+        .mailSheetTitle("Conversations").searchable(text: $query, prompt: "Subject or sender")
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
 }

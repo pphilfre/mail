@@ -7,10 +7,11 @@ struct CollectionsView: View {
     @Query private var messages: [MailMessage]
     @State private var creating = false
     @State private var query = ""
+    @State private var sortByName = false
     private var collections: [MailCollection] {
         metadata.filter { $0.key.hasPrefix(MailCollection.prefix) }.compactMap { try? MailCollection.decode($0) }
             .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.notes.localizedCaseInsensitiveContains(query) }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted { sortByName ? $0.name.localizedStandardCompare($1.name) == .orderedAscending : $0.updatedAt > $1.updatedAt }
     }
     var body: some View {
         List {
@@ -35,8 +36,12 @@ struct CollectionsView: View {
                 Text(MailCollectionError.invalidData.localizedDescription).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
-        .navigationTitle("Collections").searchable(text: $query, prompt: "Collection name or notes")
+        .modifier(MailWorkspaceList())
+        .mailSheetTitle("Collections").searchable(text: $query, prompt: "Collection name or notes")
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
+        .toolbar { ToolbarItem(placement: .topBarLeading) {
+            Menu("Collection filters", systemImage: "line.3.horizontal.decrease") { Toggle("Sort by name", isOn: $sortByName) }
+        } }
         .toolbar { ToolbarItem(placement: .primaryAction) {
             Button("New collection", systemImage: "plus") { creating = true }.accessibilityIdentifier("newCollectionButton")
         } }
@@ -55,7 +60,7 @@ struct CollectionEditor: View {
             Section("Notes") { TextEditor(text: $collection.notes).frame(minHeight: 120) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .navigationTitle("Collection").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Collection")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
@@ -103,7 +108,7 @@ struct AddToCollectionView: View {
             }.accessibilityIdentifier("newReaderCollectionButton")
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .navigationTitle("Add to collection").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Add to collection")
         .navigationDestination(isPresented: $creating) {
             CollectionEditor(collection: MailCollection(name: "", links: [MailCollectionLink(message)]))
         }

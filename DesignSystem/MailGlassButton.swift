@@ -1,5 +1,17 @@
 import SwiftUI
 
+struct MailReaderActionSurface: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.foregroundStyle(.white).tint(.white).background(MailStyle.readerAction, in: .capsule)
+        } else {
+            content.foregroundStyle(.white).tint(.white)
+                .glassEffect(.regular.tint(MailStyle.readerAction).interactive(), in: .capsule)
+        }
+    }
+}
+
 /// Keep glass on controls, with a full native touch target and a spoken label.
 struct MailGlassButton: View {
     let title: String

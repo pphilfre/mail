@@ -31,6 +31,7 @@ struct ComposeView: View {
     @State private var importingAttachments = false
     @State private var attachmentError: String?
     @State private var choosingFiles = false
+    @State private var choosingEmailAttachment = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var showingSignatureSettings = false
     @State private var textLibrary: String?
@@ -39,9 +40,11 @@ struct ComposeView: View {
     @State private var showingSchedule = false
     @State private var scheduledDate = Date().addingTimeInterval(3600)
     @State private var showingWriting = false
+    @State private var showingWritingSetup = false
     @State private var writingSource = ""
     @State private var writingSnapshot = ""
     @State private var writingRange = NSRange(location: 0, length: 0)
+    @State private var writingPreview: String?
     @State private var richEditor = RichMailEditorController()
     @State private var showingFormatting = false
     @State private var addingLink = false
@@ -89,7 +92,8 @@ struct ComposeView: View {
                         Picker("Sending account", selection: $draft.accountID) {
                             Text("Choose account").tag(UUID?.none)
                             ForEach(accounts) { Text($0.email).tag(Optional($0.id)) }
-                        }.pickerStyle(.menu).labelsHidden().tint(MailStyle.ink)
+                        }.pickerStyle(.menu).labelsHidden().tint(MailStyle.ink).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityIdentifier("composeFromPicker")
                             .onChange(of: draft.accountID) { _, _ in
                                 draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil
@@ -97,14 +101,14 @@ struct ComposeView: View {
                             }
                     }
                     Spacer(minLength: 0)
-                }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)
+                }.font(.subheadline).frame(minHeight: 44).padding(.vertical, 4)
                 MailRule()
-                HStack(spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Subject").foregroundStyle(MailStyle.secondaryInk).frame(minWidth: 52, alignment: .leading)
-                    TextField("Subject", text: $draft.subject).font(.body.weight(.medium))
+                    TextField("Subject", text: $draft.subject).font(.body)
                     .accessibilityIdentifier("composeSubject")
                     .onChange(of: draft.subject) { _, _ in draft.remoteThreadID = nil; draft.inReplyTo = nil; draft.referencesHeader = nil }
-                }.font(.subheadline).frame(minHeight: 52).padding(.vertical, 6)
+                }.font(.subheadline).frame(minHeight: 44).padding(.vertical, 4)
                 MailRule()
                 if !RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).isEmpty {
                     Text("Remove duplicate recipients: " + RecipientInput.duplicateEmails([draft.to, draft.cc, draft.bcc]).sorted().joined(separator: ", "))
@@ -112,14 +116,15 @@ struct ComposeView: View {
                 }
                 RichMailEditor(text: $draft.body, document: $draft.richBody, controller: richEditor)
                     .frame(minHeight: 260)
-                if showingWriting {
-                    InlineWritingAssistant(source: writingSource, draftUnchanged: draft.body == writingSnapshot, apply: { suggestion in
-                        guard richEditor.applyRevision(suggestion, range: writingRange, expected: writingSnapshot) else {
-                            saveError = "The draft changed. Your current writing was kept."; return
+                if let writingPreview {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(previewText(writingPreview)).font(.body).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("composeWritingPreview")
+                        HStack {
+                            Button("Apply changes") { applyWriting(writingPreview) }.buttonStyle(.glassProminent).tint(MailStyle.intelligence)
+                            Button("Keep original") { self.writingPreview = nil }.buttonStyle(.glass)
                         }
-                        withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = false }
-                    }, close: { withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = false } })
-                        .id("writingAssistant").transition(.opacity).padding(.vertical, 8)
+                    }.padding(.vertical, 12)
                 }
                 ComposeAttachmentsView(draftID: draft.id, attachments: $draft.attachments, importing: $importingAttachments,
                     choosingFiles: $choosingFiles, photos: $photos) { attachmentError = $0 }
@@ -127,16 +132,8 @@ struct ComposeView: View {
                 if let saveError { Text(saveError).font(.callout).foregroundStyle(.red).padding(.vertical, 8) }
                 if let attachmentError { Text(attachmentError).font(.callout).foregroundStyle(.red).padding(.vertical, 8) }
                 if working { ProgressView("Contacting Gmail…").padding(.vertical, 8) }
-                if hasCompositionContent && editor?.isSaved(draft) == true {
-                    Text("Saved on this device").font(.caption).foregroundStyle(MailStyle.secondaryInk)
-                        .accessibilityIdentifier("draftAutosaveStatus")
-                } else if hasCompositionContent {
-                    Text(saveError == nil ? "Saving draft…" : "Draft couldn’t save").font(.caption).foregroundStyle(MailStyle.secondaryInk)
-                }
             }.padding(.horizontal, MailStyle.contentPadding).padding(.top, 12).padding(.bottom, 24)
                 .frame(maxWidth: MailStyle.readingWidth).frame(maxWidth: .infinity)
-          }.onChange(of: showingWriting) { _, visible in
-              if visible { withAnimation(MailStyle.motion(reduced: reduceMotion)) { proxy.scrollTo("writingAssistant", anchor: .bottom) } }
           }
         }
     }
@@ -146,21 +143,47 @@ struct ComposeView: View {
         .background(MailStyle.paper)
         .foregroundStyle(MailStyle.ink)
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                if showingFormatting { formattingBar }
-                composerDock
+            GlassEffectContainer(spacing: 8) {
+                VStack(spacing: 8) {
+                    if showingWriting {
+                        InlineWritingAssistant(source: writingSource, draftUnchanged: draft.body == writingSnapshot,
+                            reviewInDraft: { writingPreview = $0; showingWriting = false },
+                            setup: { showingWritingSetup = true }, close: { showingWriting = false })
+                    }
+                    composerDock
+                }.padding(.horizontal, 12).padding(.vertical, 8)
             }
         }
         .modifier(MailFeedbackOverlay(playsHaptics: false))
         .navigationTitle("New message")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingWritingSetup) {
+            NavigationStack {
+                MailIntegrationSettings().toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { showingWritingSetup = false } } }
+            }
+        }
         .toolbar {
-            ToolbarItem(placement: .principal) { MailNavigationTitle(title: "New message") }
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    MailNavigationTitle(title: "New message")
+                    if hasCompositionContent {
+                        Group {
+                            if saveError != nil { Image(systemName: "exclamationmark.circle").foregroundStyle(.red) }
+                            else if editor?.isSaved(draft) == true { Image(systemName: "checkmark.circle.fill").foregroundStyle(MailStyle.success) }
+                            else { Image(systemName: "arrow.clockwise").symbolEffect(.rotate, options: .repeating, isActive: !reduceMotion) }
+                        }.font(.caption).padding(7).modifier(MailControlSurface())
+                            .accessibilityLabel(saveError != nil ? "Draft couldn’t save" : editor?.isSaved(draft) == true ? "Draft saved" : "Saving draft")
+                            .accessibilityIdentifier("draftAutosaveStatus")
+                            .accessibilityValue(editor?.isSaved(draft) == true ? "Saved" : "Saving")
+                    }
+                }
+            }
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") {
                     if sendUnconfirmed { finished = true; dismiss() }
                     else { save() }
-                }.accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
+                }.frame(minHeight: 44).fixedSize(horizontal: true, vertical: false)
+                    .accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
                     .disabled(working || importingAttachments)
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -172,8 +195,10 @@ struct ComposeView: View {
                         .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                         .buttonStyle(.glassProminent)
                         .buttonBorderShape(.circle)
-                        .disabled(draft.accountID == nil || !validRecipients || working || sendUnconfirmed)
+                        .disabled(draft.accountID == nil || !validRecipients || working || sendUnconfirmed || writingPreview != nil)
                         .accessibilityIdentifier("sendButton")
+                } else {
+                    Color.clear.frame(width: 44, height: 44).allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -214,8 +239,26 @@ struct ComposeView: View {
                         Button("Edit account signature", systemImage: "pencil") { showingSignatureSettings = true }.disabled(sendingAccount == nil)
                     }
                     Button("Schedule send", systemImage: "clock") { showingSchedule = true }
-                        .disabled(!validRecipients || draft.accountID == nil || runtime.gmail == nil)
-                }.accessibilityIdentifier("composerOptionsButton")
+                        .disabled(!validRecipients || draft.accountID == nil || runtime.gmail == nil || writingPreview != nil)
+                }.labelStyle(.iconOnly).frame(width: 44, height: 44).accessibilityIdentifier("composerOptionsButton")
+            }
+        }
+        .sheet(isPresented: $choosingEmailAttachment) {
+            NavigationStack {
+                AttachmentLibraryView(accountID: draft.accountID, onSelect: { attachment in
+                    choosingEmailAttachment = false
+                    importingAttachments = true
+                    Task { @MainActor in
+                        defer { importingAttachments = false }
+                        do {
+                            guard let gmail = runtime.gmail else { throw AttachmentError.unavailable }
+                            let url = try await gmail.download(attachment)
+                            let item = try await runtime.draftAttachments.importFile(url, draftID: draft.id, existing: draft.attachments)
+                            draft.attachments.append(item)
+                        } catch { attachmentError = error.localizedDescription }
+                    }
+                })
+                .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { choosingEmailAttachment = false } } }
             }
         }
         .sheet(isPresented: $showingScanner) {
@@ -247,7 +290,7 @@ struct ComposeView: View {
                     DatePicker("Send after", selection: $scheduledDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                     Text("Saved on this device. Dispatch sends when it is open and online after this time. Keep the app open for on-time delivery.").font(.footnote).foregroundStyle(MailStyle.secondaryInk)
                     if let saveError { Text(saveError).foregroundStyle(.red) }
-                }.navigationTitle("Schedule send")
+                }.mailSheetTitle("Schedule send")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingSchedule = false } }
                         ToolbarItem(placement: .confirmationAction) { Button("Schedule") { queueSend(at: scheduledDate) } }
@@ -296,6 +339,9 @@ struct ComposeView: View {
             }
         }
         .onChange(of: draft) { _, _ in scheduleAutosave() }
+        .onChange(of: draft.body) { _, value in
+            if value != writingSnapshot { showingWriting = false; writingPreview = nil }
+        }
         .onChange(of: importingAttachments) { _, value in
             if value { attachmentError = nil } else { checkpoint() }
         }
@@ -323,8 +369,23 @@ struct ComposeView: View {
         RecipientField(title: title, text: text, suggestions: suggestions,
             excluded: Set([draft.to, draft.cc, draft.bcc].flatMap(RecipientInput.tokens).compactMap { RecipientInput.address($0)?.email.lowercased() }))
     }
+    private func applyWriting(_ suggestion: String) {
+        guard richEditor.applyRevision(suggestion, range: writingRange, expected: writingSnapshot) else {
+            saveError = "The draft changed. Your current writing was kept."; writingPreview = nil; return
+        }
+        writingPreview = nil; showingWriting = false
+    }
+    private func previewText(_ revision: String) -> AttributedString {
+        let source = writingSnapshot as NSString
+        guard writingRange.location >= 0, NSMaxRange(writingRange) <= source.length else { return AttributedString(writingSnapshot) }
+        return AttributedString(source.substring(to: writingRange.location))
+            + LocalWritingView.comparison(original: writingSource, revised: revision)
+            + AttributedString(source.substring(from: NSMaxRange(writingRange)))
+    }
     private var composerDock: some View {
         HStack(spacing: 0) {
+          ScrollView(.horizontal, showsIndicators: false) {
+           HStack(spacing: 2) {
             Button {
                 feedback.select()
                 if showingWriting { showingWriting = false; return }
@@ -334,11 +395,13 @@ struct ComposeView: View {
                     writingRange = selection
                 } else { writingRange = NSRange(MailSignature.authoredRange(in: draft.body), in: draft.body) }
                 writingSource = (draft.body as NSString).substring(with: writingRange)
+                writingPreview = nil
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = true }
             } label: {
-                Image(systemName: "sparkles").foregroundStyle(showingWriting ? MailStyle.accent : MailStyle.secondaryInk).frame(width: 44, height: 44)
-            }.accessibilityLabel("Polish writing").accessibilityIdentifier("polishWritingButton")
-            Button { showingFormatting.toggle() } label: {
+                Image(systemName: "sparkles").foregroundStyle(MailStyle.intelligence).frame(width: 44, height: 44)
+                    .modifier(MailIntelligenceSurface())
+            }.accessibilityLabel("Writing assistance").accessibilityIdentifier("polishWritingButton")
+            Button { withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingFormatting.toggle() } } label: {
                 Image(systemName: "textformat").frame(width: 44, height: 44).contentShape(.rect)
             }.foregroundStyle(showingFormatting ? MailStyle.accent : .primary).accessibilityLabel("Formatting")
                 .accessibilityAddTraits(showingFormatting ? .isSelected : [])
@@ -351,17 +414,29 @@ struct ComposeView: View {
                 Image(systemName: "photo").frame(width: 44, height: 44).contentShape(.rect)
             }.disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityLabel("Attach photo").accessibilityIdentifier("attachPhotoButton")
-            Button { feedback.select(); choosingFiles = true } label: {
+            Menu {
+                Button("From Device", systemImage: "iphone") { choosingFiles = true }
+                Button("From Email", systemImage: "envelope") { choosingEmailAttachment = true }
+            } label: {
                 Image(systemName: "paperclip").frame(width: 44, height: 44).contentShape(.rect)
             }.accessibilityLabel("Attach file").disabled(draft.attachments.count >= DraftAttachmentStore.maximumCount)
                 .accessibilityIdentifier("attachFileButton")
+            if showingFormatting { formattingBar }
+           }
+          }
+          if showingFormatting {
+              Button { withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingFormatting = false } } label: {
+                  Image(systemName: "chevron.down").frame(width: 44, height: 44)
+              }.accessibilityLabel("Collapse formatting")
+          }
         }
         .buttonStyle(.plain).font(MailStyle.icon).foregroundStyle(MailStyle.ink).frame(height: 52)
         .padding(.horizontal, 14)
         .environment(\.defaultMinListRowHeight, 44)
         .modifier(MailControlSurface())
+        .contentShape(.capsule).onTapGesture { }
         .disabled(importingAttachments || working || sendUnconfirmed)
-        .padding(.vertical, 10).frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity)
     }
     private func insertSignature() {
         let signature = signatureForAccount()
@@ -370,7 +445,6 @@ struct ComposeView: View {
         chooseSignature(signature)
     }
     private var formattingBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 formatButton("Bold", "bold", selected: richEditor.bold) { richEditor.toggleTrait(.traitBold) }
                 formatButton("Italic", "italic", selected: richEditor.italic) { richEditor.toggleTrait(.traitItalic) }
@@ -380,8 +454,7 @@ struct ComposeView: View {
                 formatButton("Numbered list", "list.number") { richEditor.list(numbered: true) }
                 formatButton("Add link", "link") { linkValue = ""; addingLink = true }
                 formatButton("Quote", "text.quote") { richEditor.quote() }
-            }.padding(.horizontal, 12)
-        }.background(.regularMaterial)
+            }
     }
     private func formatButton(_ title: String, _ symbol: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: symbol).frame(width: 44, height: 44) }

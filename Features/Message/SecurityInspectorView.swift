@@ -120,7 +120,7 @@ struct SecurityInspectorView: View {
             }
             }
         }
-        .navigationTitle("Security Inspector").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Security Inspector")
         .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { dismiss() } } }
         .presentationDetents([.large]).presentationDragIndicator(.visible)
         .confirmationDialog("Share with VirusTotal?", isPresented: Binding(get: { pendingLookup != nil }, set: { if !$0 { pendingLookup = nil } }), titleVisibility: .visible) {
@@ -135,7 +135,8 @@ struct SecurityInspectorView: View {
         }
         .task(id: MailSecurityContent.fingerprint(message, attachments: attachments)) { await inspect() }
         .onDisappear { apiKey = ""; authenticationTask?.cancel(); authenticationTask = nil }
-        .onChange(of: report, initial: true) { _, value in
+        .onChange(of: report) { _, value in
+            guard !inspecting else { return }
             runtime.securityReports[message.id] = (MailSecurityContent.fingerprint(message, attachments: attachments), value)
         }
     }
@@ -171,7 +172,10 @@ struct SecurityInspectorView: View {
     }
     private func inspect() async {
         inspecting = true
-        defer { inspecting = false }
+        defer {
+            inspecting = false
+            if !Task.isCancelled { runtime.securityReports[message.id] = (MailSecurityContent.fingerprint(message, attachments: attachments), report) }
+        }
         authenticationTask?.cancel(); verifiedAuthentication = nil
         let protection = LocalMailProtection.storageProtection(backgroundRefresh: UserDefaults.standard.bool(forKey: "backgroundMailRefresh"))
         storageChecks = await Task.detached(priority: .utility) {

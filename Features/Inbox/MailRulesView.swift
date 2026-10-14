@@ -22,7 +22,7 @@ struct MailRulesView: View {
                 catch { errorMessage = error.localizedDescription }
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-        }.navigationTitle("Organisation rules")
+        }.mailSheetTitle("Organisation rules")
             .toolbar { ToolbarItem(placement: .primaryAction) { Button("Add rule", systemImage: "plus") { editing = MailOrganisationRule() } } }
             .sheet(item: $editing) { rule in NavigationStack { MailRuleEditor(rule: rule) } }
     }
@@ -55,7 +55,7 @@ private struct MailRuleEditor: View {
                 }
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-        }.navigationTitle("Edit rule")
+        }.mailSheetTitle("Edit rule")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("Save") {

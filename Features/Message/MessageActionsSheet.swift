@@ -44,6 +44,7 @@ struct MessageActionsSheet: View {
             Section {
                 row(message.isStarred ? "Unflag" : "Flag", "flag", .triage(message.isStarred ? "unstar" : "star"))
                 NavigationLink { folderPicker(move: false) } label: { actionLabel("Tag", "tag") }
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     .disabled(folders.filter { $0.kindRaw == "user" }.isEmpty)
                 row(organisation.pinned ? "Unpin" : "Pin", "pin", .pin(!organisation.pinned))
                 if organisation.isSnoozed(at: Date()) { row(message.isInbox ? "Return to inbox" : "Stop snoozing", "clock.arrow.circlepath", .unsnooze) }
@@ -53,11 +54,13 @@ struct MessageActionsSheet: View {
                         Button("Tomorrow morning") { select(.snooze(Self.tomorrowMorning())) }
                         Button("In one week") { select(.snooze(Date().addingTimeInterval(7 * 86400))) }
                     } label: { actionLabel("Snooze", "clock") }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 }
                 row(message.isRead ? "Mark Unread" : "Mark Read", message.isRead ? "envelope.badge" : "envelope.open", .triage(message.isRead ? "unread" : "read"), identifier: "readerReadButton")
             } header: { Text("Organisation") }
             Section("Management") {
                 NavigationLink { folderPicker(move: true) } label: { actionLabel("Move", "folder") }
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     .disabled(message.isTrash || message.isSpam || message.isDraft)
                 row("Archive", "archivebox", .triage("archive")).disabled(!message.isInbox || message.isDraft)
                 if message.isTrash { row("Restore", "arrow.uturn.backward", .triage("restore")) }
@@ -84,6 +87,7 @@ struct MessageActionsSheet: View {
                     NavigationLink {
                         AddToCollectionView(message: message, onDone: { dismiss() })
                     } label: { actionLabel("Add to collection", "folder.badge.plus") }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         .accessibilityIdentifier("addToCollectionButton")
                     row("Save receipt", "receipt", .receipt, identifier: "makeReceiptButton")
                 }
@@ -97,7 +101,7 @@ struct MessageActionsSheet: View {
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listSectionSpacing(.compact)
         .environment(\.defaultMinListRowHeight, 44)
-        .navigationTitle("Message actions").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Message actions")
         .toolbar { ToolbarItem(placement: .confirmationAction) { MailCloseButton { dismiss() } } }
         .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
     }
@@ -112,7 +116,8 @@ struct MessageActionsSheet: View {
     }
     private func actionLabel(_ title: String, _ symbol: String, destructive: Bool = false) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 18)).frame(width: 24)
+            Image(systemName: symbol).font(.system(size: 18, weight: .medium))
+                .frame(width: 28, height: 44).accessibilityHidden(true)
             Text(title).font(.body)
         }.foregroundStyle(destructive ? Color.red : Color.primary)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(.rect)
@@ -121,7 +126,8 @@ struct MessageActionsSheet: View {
         Button { select(action) } label: {
             VStack(spacing: 4) { Image(systemName: symbol).font(.title2); Text(title).font(.subheadline) }
                 .frame(maxWidth: .infinity, minHeight: 52)
-        }.buttonStyle(.glass).accessibilityLabel(title)
+        }.buttonStyle(.plain).foregroundStyle(MailStyle.accent)
+            .background(MailStyle.tile, in: .rect(cornerRadius: 10)).accessibilityLabel(title)
     }
     private func folderPicker(move: Bool) -> some View {
         List {

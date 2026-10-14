@@ -28,7 +28,7 @@ struct MailTextLibraryView: View {
                     }
                 }
             }.onDelete { offsets in var updated = items; updated.remove(atOffsets: offsets); raw = MailTextLibrary.encode(updated) }
-        }.navigationTitle(kind)
+        }.mailSheetTitle(kind)
             .toolbar { ToolbarItem(placement: .primaryAction) { Button("Add", systemImage: "plus") { editing = MailTextItem(name: "", body: "") } } }
             .sheet(item: $editing) { item in
                 NavigationStack { MailTextEditor(item: item, isTemplate: kind == "Templates") { updated in
@@ -50,7 +50,7 @@ private struct MailTextEditor: View {
             TextField("Name", text: $item.name)
             if isTemplate { TextField("Subject", text: $item.subject) }
             TextEditor(text: $item.body).frame(minHeight: 200).accessibilityLabel("Reusable text")
-        }.navigationTitle("Edit text")
+        }.mailSheetTitle("Edit text")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

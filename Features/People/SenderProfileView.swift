@@ -70,9 +70,9 @@ struct SenderProfileView: View {
             content
             senderDetails
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
+        .modifier(MailWorkspaceList())
         .buttonStyle(.borderless)
-        .navigationTitle("Sender profile").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Sender profile")
         .sheet(isPresented: $editingProfile) {
             let owners = Set((SenderInsights.received(messages, email: email, accountID: nil) +
                 SenderInsights.sent(messages, email: email, accountID: nil)).map(\.accountID))
@@ -260,11 +260,12 @@ private struct SenderProfileEditor: View {
         Form {
             Section {
                 TextField("Nickname", text: $profile.nickname).accessibilityIdentifier("senderNicknameField")
+                Toggle("Favourite", isOn: Binding(get: { profile.isFavourite == true }, set: { profile.isFavourite = $0 }))
                 TextEditor(text: $profile.notes).frame(minHeight: 160).accessibilityIdentifier("senderNotesField")
             } header: { Text(profile.email) } footer: { Text("Private to this device. Notes are shared across your connected accounts for this sender.") }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
-        .navigationTitle("Sender notes").navigationBarTitleDisplayMode(.inline)
+        .mailSheetTitle("Sender notes")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {

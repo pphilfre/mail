@@ -29,8 +29,8 @@ struct AccountPreferencesView: View {
             NavigationLink("Signatures") { MailTextLibraryView(kind: "Signatures", accountID: account.id) }
             if let saveError { Text(saveError).foregroundStyle(.red) }
         }
-        .scrollContentBackground(.hidden).background(MailStyle.canvas)
-        .navigationTitle("Personalise account").navigationBarTitleDisplayMode(.inline)
+        .modifier(MailWorkspaceList())
+        .mailSheetTitle("Personalise account")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {

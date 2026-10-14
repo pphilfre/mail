@@ -63,6 +63,8 @@ struct MailFeedbackOverlay: ViewModifier {
                         feedback.confirmation = nil
                     }
                     .id(confirmation.id)
+                    .contentShape(.rect)
+                    .zIndex(100)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 88)
                     .transition(reduceMotion || !animations ? .opacity : .move(edge: .bottom).combined(with: .opacity))
@@ -118,5 +120,10 @@ private struct ConfirmationToast: View {
         .frame(maxWidth: 460)
         .foregroundStyle(MailStyle.ink)
         .modifier(MailControlSurface(cornerRadius: 16))
+        .background(MailStyle.paper, in: .rect(cornerRadius: 16))
+        .contentShape(.rect)
+        .allowsHitTesting(true)
+        .onTapGesture(perform: close)
+        .accessibilityAction(named: "Dismiss confirmation", close)
     }
 }

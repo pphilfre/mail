@@ -8,12 +8,8 @@ on:
       version:
         description: IPA version (vMAJOR.MINOR.PATCH)
         required: true
-        default: v0.8.1
+        default: v0.9.0
         type: string
-      publish:
-        description: Publish a GitHub Release after full validation succeeds
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -61,7 +57,6 @@ jobs:
           if-no-files-found: warn
   publish:
     needs: [validate, package]
-    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -82,5 +77,12 @@ jobs:
             echo 'Release already exists; refusing to overwrite its assets' >&2
             exit 1
           fi
+          # A manual run must never attach a new IPA to a tag for a different commit.
+          tag_ref="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
+          if [[ -n "$tag_ref" ]]; then
+            git fetch --depth=1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
+          fi
           gh release create "$RELEASE_TAG" "build/Dispatch-${RELEASE_TAG}.ipa" "build/Dispatch-${RELEASE_TAG}.ipa.sha256" \
             --target "$GITHUB_SHA" --title "Dispatch ${RELEASE_TAG}" --notes-file docs/release-notes.md
+          echo "[Download Dispatch ${RELEASE_TAG} from Releases](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG})" >> "$GITHUB_STEP_SUMMARY"

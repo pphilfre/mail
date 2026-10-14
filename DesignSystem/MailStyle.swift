@@ -4,6 +4,8 @@ enum MailStyle {
     // Paper and ink stay opaque. Native bars and transient controls supply the glass layer.
     static let accent = adaptive(light: 0x705267, dark: 0xD2B5C9)
     static let success = Color(red: 0.16, green: 0.62, blue: 0.43)
+    static let intelligence = adaptive(light: 0x614CC4, dark: 0xBDB0FF)
+    static let readerAction = Color(red: 112.0 / 255, green: 82.0 / 255, blue: 103.0 / 255)
     static let canvas = adaptive(light: 0xF1EFEB, dark: 0x19181B)
     static let paper = adaptive(light: 0xFAF9F6, dark: 0x211F23)
     static let ink = adaptive(light: 0x252428, dark: 0xF2EFF1)
@@ -63,6 +65,7 @@ struct MailWorkspaceList: ViewModifier {
             .listSectionSpacing(.custom(24))
             .listSectionSeparator(.hidden)
             .listRowSeparatorTint(MailStyle.divider)
+            .listRowBackground(MailStyle.paper)
             .scrollContentBackground(.hidden)
             .background(MailStyle.paper)
             .font(.body)
@@ -131,5 +134,31 @@ struct MailCloseButton: View {
         }
         .labelStyle(.iconOnly)
         .accessibilityLabel(title)
+    }
+}
+
+extension View {
+    func mailSheetTitle(_ title: String) -> some View {
+        navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .principal) { MailNavigationTitle(title: title) } }
+    }
+}
+
+struct MailInfoLabel: View {
+    let title: String
+    let information: String
+    @State private var showing = false
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+            Button { showing = true } label: {
+                Image(systemName: "info.circle").font(.footnote).foregroundStyle(MailStyle.secondaryInk)
+                    .frame(width: 44, height: 44)
+            }.buttonStyle(.borderless).accessibilityLabel("About " + title)
+                .popover(isPresented: $showing) {
+                    Text(information).font(.callout).padding(20).frame(idealWidth: 280)
+                        .presentationCompactAdaptation(.popover)
+                }
+        }
     }
 }

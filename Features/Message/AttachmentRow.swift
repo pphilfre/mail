@@ -11,7 +11,8 @@ struct AttachmentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Image(systemName: "doc").font(MailStyle.icon).foregroundStyle(MailStyle.secondaryInk).frame(width: 24)
+                Image(systemName: AttachmentCategory.classify(filename: attachment.filename, mimeType: attachment.mimeType).symbol)
+                    .font(MailStyle.icon).foregroundStyle(MailStyle.secondaryInk).frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(attachment.filename).font(.subheadline).lineLimit(2)
                     Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.byteCount), countStyle: .file))

@@ -13,37 +13,28 @@ struct InboxHeader: View {
     @Binding var filter: InboxQuickFilter
     @Binding var mailbox: String
     let scopeTitle: String
-    let accountTitle: String
     let showFilters: Bool
     let allowStarred: Bool
     let canSelect: Bool
     let selecting: Bool
-    let search: () -> Void
     let select: () -> Void
     var updating = false
     var waitingUntil: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(accountTitle)
-                .font(.footnote).foregroundStyle(MailStyle.secondaryInk)
-                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            Group {
+        VStack(alignment: .leading, spacing: 4) {
+            if mailbox != "Drafts" { Group {
                 if typeSize.isAccessibilitySize { mailboxPicker.pickerStyle(.menu).frame(minHeight: 44) }
                 else { mailboxPicker.pickerStyle(.segmented) }
-            }.accessibilityIdentifier("mailboxSelector")
+            }.accessibilityIdentifier("mailboxSelector") }
         HStack(spacing: 12) {
-            Button(action: search) {
-                Image(systemName: "magnifyingglass").font(MailStyle.icon)
-                    .foregroundStyle(MailStyle.secondaryInk).frame(width: 44, height: 44).contentShape(.rect)
-            }.buttonStyle(.plain).accessibilityLabel("Search your mail").accessibilityIdentifier("searchButton")
             if showFilters {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 18) {
                         ForEach(InboxQuickFilter.allCases.filter { allowStarred || $0 != .starred }) { value in
                             Button {
                                 feedback.select()
-                                withAnimation(MailStyle.motion(reduced: reduceMotion)) { filter = value }
+                                filter = value
                             } label: {
                                 MailFilterLabel(title: value.rawValue, selected: filter == value)
                             }.buttonStyle(.plain).accessibilityIdentifier("inboxFilter-\(value.id)")

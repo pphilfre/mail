@@ -9,20 +9,25 @@ struct ReceiptOverride: Codable, Equatable, Sendable {
     var merchant: String?
     var money: ReceiptMoney?
     var amountReviewed = false
+    var flow: ReceiptFlow?
+    var kind: String?
     static func prefix(_ id: UUID) -> String { "receipt-override:\(id.uuidString):" }
     var key: String { Self.prefix(accountID) + remoteID }
     static func decode(_ row: StoreMetadata) throws -> ReceiptOverride {
         let value = try JSONDecoder().decode(Self.self, from: Data(row.value.utf8))
         guard value.version == 1, value.key == row.key, ["include", "exclude"].contains(value.inclusion) else { throw ReceiptError.invalidData }
+        if let kind = value.kind, !["Receipt", "Invoice"].contains(kind) { throw ReceiptError.invalidData }
         return value
     }
     func apply(to source: ReceiptSource, detected: ReceiptSummary?) -> ReceiptSummary? {
         guard inclusion != "exclude" else { return nil }
         var result = detected ?? ReceiptSummary(id: source.id, accountID: source.accountID, remoteID: source.remoteID,
             merchant: ReceiptDetector.merchant(source), kind: "Receipt", money: nil, subject: source.subject,
-            senderEmail: source.senderEmail, receivedAt: source.receivedAt)
+            senderEmail: source.senderEmail, receivedAt: source.receivedAt, flow: .unknown, facts: ReceiptDetector.facts(in: source.bodyText))
         if let merchant { result.merchant = merchant }
         if amountReviewed { result.money = money }
+        if let flow { result.flow = flow }
+        if let kind, ["Receipt", "Invoice"].contains(kind) { result.kind = kind }
         result.reviewed = true
         return result
     }
@@ -42,6 +47,7 @@ enum ReceiptError: LocalizedError {
     func saveReceipt(_ correction: ReceiptOverride) throws {
         guard try account(id: correction.accountID) != nil else { throw GmailError.reconnect }
         guard correction.version == 1, ["include", "exclude"].contains(correction.inclusion) else { throw ReceiptError.invalidData }
+        if let kind = correction.kind, !["Receipt", "Invoice"].contains(kind) { throw ReceiptError.invalidData }
         if let money = correction.money {
             guard money.amount >= 0, money.currency.range(of: #"^(?:[A-Z]{3}|[$¥])$"#, options: .regularExpression) != nil else { throw ReceiptError.invalidAmount }
         }

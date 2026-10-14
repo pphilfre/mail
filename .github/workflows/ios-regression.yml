@@ -1,0 +1,16 @@
+name: iOS Regression
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  full-suite:
+    uses: ./.github/workflows/ios-ci.yml
+    with:
+      test_scope: full

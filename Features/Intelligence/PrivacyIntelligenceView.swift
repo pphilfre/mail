@@ -81,7 +81,7 @@ struct MailIntegrationSettings: View {
                     Text("Scheduled mail can send during a granted refresh while unlocked, or when Dispatch is open. iOS does not guarantee the scheduled time.")
                 }.font(.caption).foregroundStyle(.secondary)
             }
-        }.navigationTitle("Privacy & Intelligence").navigationBarTitleDisplayMode(.inline)
+        }.mailSheetTitle("Privacy & Intelligence")
             .task { await runtime.nativeServices.updateAuthorization() }
             .onChange(of: phase) { _, value in if value == .active { Task { await runtime.nativeServices.updateAuthorization() } } }
     }

@@ -36,7 +36,7 @@ struct OutboxView: View {
                                     Text(row.body).frame(maxWidth: .infinity, alignment: .leading)
                                     SavedOutgoingAttachmentsView(outgoingID: row.id)
                                 }.padding().textSelection(.enabled)
-                            }.navigationTitle("Saved copy").navigationBarTitleDisplayMode(.inline)
+                            }.mailSheetTitle("Saved copy")
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(row.subject.isEmpty ? "No subject" : row.subject).font(.headline)
@@ -70,7 +70,7 @@ struct OutboxView: View {
                 }
             }
         }
-        .navigationTitle("Outbox")
+        .mailSheetTitle("Outbox")
         .navigationBarTitleDisplayMode(.inline)
     }
 
