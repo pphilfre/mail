@@ -4,10 +4,10 @@ struct MailReaderActionSurface: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     func body(content: Content) -> some View {
         if reduceTransparency {
-            content.foregroundStyle(.white).tint(.white).background(MailStyle.readerAction, in: .capsule)
+            content.foregroundStyle(MailStyle.ink).tint(MailStyle.ink).background(MailStyle.tile, in: .capsule)
         } else {
-            content.foregroundStyle(.white).tint(.white)
-                .glassEffect(.regular.tint(MailStyle.readerAction).interactive(), in: .capsule)
+            content.foregroundStyle(MailStyle.ink).tint(MailStyle.ink)
+                .glassEffect(.regular.tint(MailStyle.tile).interactive(), in: .capsule)
         }
     }
 }

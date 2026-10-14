@@ -115,7 +115,9 @@ struct ComposeView: View {
                         .font(.caption).foregroundStyle(.red).padding(.vertical, 8)
                 }
                 RichMailEditor(text: $draft.body, document: $draft.richBody, controller: richEditor)
-                    .frame(minHeight: 260)
+                    .frame(height: writingPreview == nil ? nil : 0)
+                    .frame(minHeight: writingPreview == nil ? 260 : 0)
+                    .clipped().allowsHitTesting(writingPreview == nil).accessibilityHidden(writingPreview != nil)
                 if let writingPreview {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(previewText(writingPreview)).font(.body).textSelection(.enabled)
@@ -147,7 +149,7 @@ struct ComposeView: View {
                 VStack(spacing: 8) {
                     if showingWriting {
                         InlineWritingAssistant(source: writingSource, draftUnchanged: draft.body == writingSnapshot,
-                            reviewInDraft: { writingPreview = $0; showingWriting = false },
+                            reviewInDraft: { richEditor.view?.resignFirstResponder(); writingPreview = $0; showingWriting = false },
                             setup: { showingWritingSetup = true }, close: { showingWriting = false })
                     }
                     composerDock
@@ -164,27 +166,28 @@ struct ComposeView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    MailNavigationTitle(title: "New message")
+                MailNavigationTitle(title: "New message")
+            }
+            ToolbarItem(placement: .cancellationAction) {
+                HStack(spacing: 6) {
+                    Button("Done") {
+                        if sendUnconfirmed { finished = true; dismiss() }
+                        else { save() }
+                    }.frame(minHeight: 44)
+                        .accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
+                        .disabled(working || importingAttachments)
                     if hasCompositionContent {
                         Group {
                             if saveError != nil { Image(systemName: "exclamationmark.circle").foregroundStyle(.red) }
-                            else if editor?.isSaved(draft) == true { Image(systemName: "checkmark.circle.fill").foregroundStyle(MailStyle.success) }
-                            else { Image(systemName: "arrow.clockwise").symbolEffect(.rotate, options: .repeating, isActive: !reduceMotion) }
-                        }.font(.caption).padding(7).modifier(MailControlSurface())
+                            else if editor?.isSaved(draft) == true { Image(systemName: "checkmark").foregroundStyle(MailStyle.ink) }
+                            else { ProgressView().controlSize(.mini) }
+                        }.font(.caption)
+                            .accessibilityElement(children: .ignore)
                             .accessibilityLabel(saveError != nil ? "Draft couldn’t save" : editor?.isSaved(draft) == true ? "Draft saved" : "Saving draft")
                             .accessibilityIdentifier("draftAutosaveStatus")
                             .accessibilityValue(editor?.isSaved(draft) == true ? "Saved" : "Saving")
                     }
-                }
-            }
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Done") {
-                    if sendUnconfirmed { finished = true; dismiss() }
-                    else { save() }
-                }.frame(minHeight: 44).fixedSize(horizontal: true, vertical: false)
-                    .accessibilityIdentifier("saveDraftButton").accessibilityHint("Saves your draft")
-                    .disabled(working || importingAttachments)
+                }.fixedSize(horizontal: true, vertical: false).accessibilityElement(children: .contain)
             }
             ToolbarItem(placement: .confirmationAction) {
                 if !accounts.isEmpty {
@@ -398,7 +401,7 @@ struct ComposeView: View {
                 writingPreview = nil
                 withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingWriting = true }
             } label: {
-                Image(systemName: "sparkles").foregroundStyle(MailStyle.intelligence).frame(width: 44, height: 44)
+                Image(systemName: "sparkles").foregroundStyle(.white).frame(width: 44, height: 44)
                     .modifier(MailIntelligenceSurface())
             }.accessibilityLabel("Writing assistance").accessibilityIdentifier("polishWritingButton")
             Button { withAnimation(MailStyle.motion(reduced: reduceMotion)) { showingFormatting.toggle() } } label: {

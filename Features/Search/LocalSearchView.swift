@@ -175,7 +175,7 @@ private struct SearchResultsView: View {
                 Section {
                     ForEach(ids, id: \.self) { id in
                         if let message = mailByID[id] {
-                            NavigationLink { GmailMessageView(message: message) } label: {
+                            NavigationLink { GmailMessageView(message: message).onAppear { searchFocused = false } } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     CachedMessageRow(message: message, account: accounts.count > 1 ? accounts.first { $0.id == message.accountID } : nil)
                                     if accountID == nil && accounts.count > 1,
@@ -183,9 +183,11 @@ private struct SearchResultsView: View {
                                         Text(account.email).font(.footnote).foregroundStyle(MailStyle.secondaryInk).padding(.leading, 48)
                                     }
                                 }
-                            }.accessibilityIdentifier("searchResultMail-\(id.uuidString)")
+                            }.simultaneousGesture(TapGesture().onEnded { searchFocused = false })
+                            .accessibilityIdentifier("searchResultMail-\(id.uuidString)")
                         } else if let sample = samplesByID[id] {
-                            NavigationLink { MessageView(message: sample) } label: { MessageRow(message: sample) }
+                            NavigationLink { MessageView(message: sample).onAppear { searchFocused = false } } label: { MessageRow(message: sample) }
+                                .simultaneousGesture(TapGesture().onEnded { searchFocused = false })
                                 .accessibilityIdentifier("searchResultSample-\(sample.address)")
                         }
                     }
@@ -262,7 +264,7 @@ private struct SearchResultsView: View {
         }
         .task { await Task.yield(); searchFocused = true }
         .onSubmit(of: .search) { rememberQuery() }
-        .onDisappear { rememberQuery() }
+        .onDisappear { searchFocused = false; rememberQuery() }
         .toolbar {
             ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Search") }
             if dismissible { ToolbarItem(placement: .confirmationAction) {

@@ -43,15 +43,7 @@ struct ReceiptsView: View {
             detected: detected, scanning: scanning, sources: snapshot, corrections: corrections, allReceipts: allReceipts)
         .task(id: snapshot) {
             scanning = true
-            let work = Task.detached(priority: .userInitiated) {
-                var result: [ReceiptSummary] = []
-                for source in snapshot {
-                    if Task.isCancelled { break }
-                    if let receipt = ReceiptDetector.detect(source) { result.append(receipt) }
-                }
-                return result
-            }
-            let result = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+            let result = await ReceiptDetectionCache.shared.receipts(for: snapshot)
             guard !Task.isCancelled else { return }
             detected = Dictionary(uniqueKeysWithValues: result.map { ($0.id, $0) }); scanning = false
         }

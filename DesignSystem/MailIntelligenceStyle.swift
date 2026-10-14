@@ -2,7 +2,7 @@ import SwiftUI
 
 enum MailIntelligenceStyle {
     static let foreground = MailStyle.intelligence
-    static let gradient = LinearGradient(colors: [.blue, .purple, .pink, .orange, .purple, .blue], startPoint: .leading, endPoint: .trailing)
+    static let gradient = LinearGradient(colors: [Color(red: 0.35, green: 0.58, blue: 0.96), Color(red: 0.67, green: 0.52, blue: 0.88)], startPoint: .leading, endPoint: .trailing)
 }
 
 /// Motion is limited to work in progress; idle controls do not keep the render loop alive.
@@ -15,7 +15,7 @@ struct MailIntelligenceSurface: ViewModifier {
             .modifier(MailControlSurface())
             .overlay {
                 Capsule().strokeBorder(MailIntelligenceStyle.gradient, lineWidth: 1.5)
-                    .hueRotation(.degrees(flowing ? 180 : 0))
+                    .opacity(flowing ? 0.5 : 0.85)
                     .allowsHitTesting(false).accessibilityHidden(true)
             }
             .onChange(of: running, initial: true) { _, active in

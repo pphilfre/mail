@@ -29,7 +29,7 @@ struct InlineMailSummary: View {
                             }.contentShape(.rect)
                     }.buttonStyle(.plain).accessibilityLabel(securityLoading ? "Security Inspector, checking downloaded content" : securityLabel).accessibilityIdentifier(securityIdentifier)
                 }
-                IntelligenceAction(title: running ? "Summarising…" : expanded ? "Hide summary" : "Summarise", running: running) {
+                Button {
                     if result != nil { withAnimation(MailStyle.motion(reduced: reduceMotion)) { expanded.toggle() }; return }
                     running = true; error = nil
                     let id = UUID(); requestID = id
@@ -49,9 +49,19 @@ struct InlineMailSummary: View {
                             withAnimation(MailStyle.motion(reduced: reduceMotion)) { result = value; expanded = true }
                         } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
                     }
-                }
+                } label: {
+                    HStack(spacing: 6) {
+                        if running { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "text.alignleft").foregroundStyle(MailStyle.ink) }
+                        Text(running ? "Summarising…" : "Summarise")
+                            .foregroundStyle(MailIntelligenceStyle.gradient)
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold)).foregroundStyle(MailStyle.ink)
+                    }.font(.subheadline.weight(.semibold)).frame(minHeight: 44).contentShape(.rect)
+                }.buttonStyle(.plain)
                     .disabled(loadingBody || (runtime.localModel.busy && result == nil) || running)
                     .accessibilityIdentifier("inlineSummaryButton")
+                    .accessibilityValue(expanded ? "Expanded" : "Collapsed")
                 if running { MailCloseButton(title: "Cancel summary") { job?.cancel() } }
                 Spacer(minLength: 0)
             }

@@ -14,6 +14,7 @@ struct LocalMailOverview: View {
         let snapshot = snapshots
         let byID = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
         List {
+          Group {
             if preparing { ProgressView("Finding important unread mail…") }
             ForEach(results) { mail in
                 if let message = byID[mail.id] {
@@ -25,6 +26,7 @@ struct LocalMailOverview: View {
                     description: Text("No important unread conversations in downloaded mail."))
                     .listRowBackground(Color.clear)
             }
+          }.listRowBackground(MailStyle.paper)
         }.listStyle(.plain).scrollContentBackground(.hidden).background(MailStyle.paper)
             .task(id: snapshot) {
                 preparing = true

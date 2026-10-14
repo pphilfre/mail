@@ -161,12 +161,18 @@ struct InboxView: View {
             else {
                 HStack {
                     Spacer()
-                    MailGlassButton(title: "Compose", symbol: "square.and.pencil") { showingCompose = true }
+                    Button { showingCompose = true } label: {
+                        Image(systemName: "square.and.pencil").font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(MailStyle.paper).frame(width: 56, height: 56)
+                            .background(MailStyle.accent, in: .circle)
+                    }.buttonStyle(.plain).accessibilityLabel("Compose")
                         .accessibilityIdentifier("composeButton")
                 }.padding(.horizontal, MailStyle.contentPadding).padding(.vertical, 8)
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) { inboxHeader }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if mailbox != "Drafts" || labelFilter != nil { inboxHeader }
+        }
         .confirmationDialog("Move \(selectedMessages.count) loaded messages to Trash?", isPresented: $confirmingTrash, titleVisibility: .visible) {
             Button("Move to Trash", role: .destructive) { bulkAction("trash") }
         }
@@ -180,13 +186,11 @@ struct InboxView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                if mailbox == "Drafts" && labelFilter == nil {
-                    HStack(spacing: 8) { MailNavigationTitle(title: "Drafts"); DraftLocationPicker(selection: $draftLocation) }
-                }
-                else { MailNavigationTitle(title: mailboxTitle) }
+                MailNavigationTitle(title: mailboxTitle)
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button("Mailboxes", systemImage: "line.3.horizontal") { toggleDrawer() }
+                    .foregroundStyle(MailStyle.accent).tint(MailStyle.accent)
                     .accessibilityIdentifier("mailboxDrawerButton")
                     .disabled(showingDrawer)
             }
@@ -195,9 +199,11 @@ struct InboxView: View {
                     .disabled(showingDrawer)
             }
             ToolbarItem(placement: .primaryAction) {
-                Button("Settings", systemImage: "gearshape") { feedback.select(); showingSettings = true }
-                    .labelStyle(.iconOnly).accessibilityIdentifier("settingsButton")
-                    .disabled(showingDrawer)
+                HStack(spacing: 0) {
+                    if mailbox == "Drafts" && labelFilter == nil { DraftLocationPicker(selection: $draftLocation) }
+                    Button("Settings", systemImage: "gearshape") { feedback.select(); showingSettings = true }
+                        .labelStyle(.iconOnly).frame(width: 44, height: 44).accessibilityIdentifier("settingsButton")
+                }.disabled(showingDrawer)
             }
         }
         .fullScreenCover(isPresented: $showingDrawer, onDismiss: presentDestination) { mailboxPanel }
@@ -427,8 +433,15 @@ struct InboxView: View {
             }
             Button("Manage accounts", systemImage: "person.crop.circle") { showingAccounts = true }
         } label: {
-            Image(systemName: "person.crop.circle").font(MailStyle.icon).frame(width: 44, height: 44)
+            Group {
+                if let account = accounts.first(where: { $0.id == accountFilter }) ?? (accounts.count == 1 ? accounts.first : nil) {
+                    Text(String(account.displayName.prefix(1)).uppercased())
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 26, height: 26).overlay { Circle().strokeBorder(lineWidth: 1.5) }
+                } else { Image(systemName: "person.2.crop.square.stack").font(MailStyle.icon) }
+            }.foregroundStyle(MailStyle.accent).frame(width: 44, height: 44)
         }
+        .tint(MailStyle.accent)
         .accessibilityLabel("Account: " + scopeTitle)
         .accessibilityIdentifier("profileMenuButton")
     }

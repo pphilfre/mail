@@ -11,7 +11,7 @@ struct InlineWritingAssistant: View {
     @State private var task: LocalWritingTask?
     @State private var running = false
     @State private var request = 0
-    private let tasks: [LocalWritingTask] = [.shorten, .expand, .proofread, .polish, .professional, .friendly]
+    private let tasks: [LocalWritingTask] = [.summary, .shorten, .expand, .proofread, .polish, .professional, .friendly]
 
     var body: some View {
         HStack(spacing: 4) {
@@ -26,7 +26,7 @@ struct InlineWritingAssistant: View {
                                 if running && task == option { ProgressView().controlSize(.small) }
                                 else { Image(systemName: symbol(option)).font(.system(size: 17, weight: .medium)) }
 
-                            }.foregroundStyle(MailIntelligenceStyle.gradient).frame(width: 44, height: 44)
+                            }.foregroundStyle(.white).frame(width: 44, height: 44)
                         }.buttonStyle(.plain).accessibilityLabel(option.rawValue)
                             .accessibilityIdentifier("writingTool-\(option.id)")
                             .disabled(running || !runtime.localModel.canWrite || source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -60,6 +60,7 @@ struct InlineWritingAssistant: View {
     }
     private func symbol(_ option: LocalWritingTask) -> String {
         switch option {
+        case .summary: "text.alignleft"
         case .shorten: "arrow.down.right.and.arrow.up.left"
         case .expand: "arrow.up.left.and.arrow.down.right"
         case .proofread: "checkmark.circle"

@@ -73,14 +73,14 @@ struct SettingsView: View {
                 NavigationLink { AccountsView() } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "person.crop.circle")
-                            .font(.title2).foregroundStyle(MailStyle.secondaryInk)
+                            .font(.title2).foregroundStyle(.white)
                             .frame(width: 32, height: 44)
                         Text("Accounts").font(.body)
                     }.padding(.vertical, 4)
                 }
             }
             Section("Privacy") {
-                NavigationLink("Privacy & AI") { MailIntegrationSettings() }
+                NavigationLink { MailIntegrationSettings() } label: { SettingsLabel("Privacy & AI", symbol: "hand.raised") }
                     .accessibilityIdentifier("privacyIntelligenceSettingsLink")
             }
             Section("Appearance") {
@@ -91,43 +91,43 @@ struct SettingsView: View {
                 }.pickerStyle(.segmented)
             }
             Section {
-                Toggle(isOn: $remoteImages) { MailInfoLabel(title: "Remote images", information: "Loading images can reveal when you open mail.") }
-                Toggle(isOn: $senderPictures) { MailInfoLabel(title: "Company icons", information: "Icons load from senders’ websites. They do not verify identity.") }
-                Toggle("Compact inbox", isOn: $compactInbox).accessibilityIdentifier("compactInboxToggle")
-                Picker("Preview lines", selection: $previewLines) {
+                Toggle(isOn: $remoteImages) { HStack { Image(systemName: "photo").foregroundStyle(.white).frame(width: 28); MailInfoLabel(title: "Remote images", information: "Loading images can reveal when you open mail.") } }.accessibilityIdentifier("remoteImagesToggle")
+                Toggle(isOn: $senderPictures) { HStack { Image(systemName: "building.2").foregroundStyle(.white).frame(width: 28); MailInfoLabel(title: "Company icons", information: "Icons load from senders’ websites. They do not verify identity.") } }
+                Toggle(isOn: $compactInbox) { SettingsLabel("Compact inbox", symbol: "rectangle.compress.vertical") }.accessibilityIdentifier("compactInboxToggle")
+                Picker(selection: $previewLines) {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
-                }.accessibilityIdentifier("previewLinesPicker")
-                Toggle("Group conversations", isOn: $conversationRows)
+                } label: { SettingsLabel("Preview lines", symbol: "text.alignleft") }.accessibilityIdentifier("previewLinesPicker")
+                Toggle(isOn: $conversationRows) { SettingsLabel("Group conversations", symbol: "bubble.left.and.bubble.right") }
             } header: { Text("Reading").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) }
             if !accounts.isEmpty {
                 Section("Composing") {
-                    Picker("Send from", selection: $defaultAccount) {
+                    Picker(selection: $defaultAccount) {
                         Text("Use selected account").tag("")
                         ForEach(accounts) { Text($0.displayName).tag($0.id.uuidString) }
-                    }
+                    } label: { SettingsLabel("Send from", symbol: "paperplane") }
                     ForEach(accounts) { account in
-                        NavigationLink("Signature · \(account.displayName)") { AccountPreferencesView(account: account) }
+                        NavigationLink { AccountPreferencesView(account: account) } label: { SettingsLabel("Signature · \(account.displayName)", symbol: "signature") }
                     }
                 }
             }
             Section("Swipe actions") {
-                Picker("Swipe right", selection: $leadingSwipe) {
+                Picker(selection: $leadingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
-                }.accessibilityIdentifier("leadingSwipePicker")
-                Picker("Swipe left", selection: $trailingSwipe) {
+                } label: { SettingsLabel("Swipe right", symbol: "arrow.right") }.accessibilityIdentifier("leadingSwipePicker")
+                Picker(selection: $trailingSwipe) {
                     ForEach(MailSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                Toggle("Full swipe", isOn: $fullSwipe)
+                } label: { SettingsLabel("Swipe left", symbol: "arrow.left") }
+                Toggle(isOn: $fullSwipe) { SettingsLabel("Full swipe", symbol: "hand.draw") }
             }
             Section {
-                Toggle("Haptic feedback", isOn: $haptics).accessibilityIdentifier("hapticFeedbackToggle")
-                Toggle("Confirmation animations", isOn: $confirmationAnimations).accessibilityIdentifier("confirmationAnimationsToggle")
+                Toggle(isOn: $haptics) { SettingsLabel("Haptic feedback", symbol: "waveform") }.accessibilityIdentifier("hapticFeedbackToggle")
+                Toggle(isOn: $confirmationAnimations) { SettingsLabel("Confirmation animations", symbol: "checkmark.circle") }.accessibilityIdentifier("confirmationAnimationsToggle")
             } header: { Text("Feedback").font(MailStyle.sectionHeading).foregroundStyle(MailStyle.secondaryInk) }
             Section("Sample mail") {
-                Toggle("Show sample inbox", isOn: $showSamples).accessibilityIdentifier("sampleInboxToggle")
+                Toggle(isOn: $showSamples) { SettingsLabel("Show sample inbox", symbol: "tray") }.accessibilityIdentifier("sampleInboxToggle")
             }
             Section("About") {
-                LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
+                LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") } label: { SettingsLabel("Version", symbol: "info.circle") }
 
             }
           }
@@ -144,5 +144,14 @@ struct SettingsView: View {
         .onChange(of: confirmationAnimations) { _, enabled in
             if enabled { feedback.show("Confirmation animations enabled", detail: "You’re all set") }
         }
+    }
+}
+
+private struct SettingsLabel: View {
+    let title: String
+    let symbol: String
+    init(_ title: String, symbol: String) { self.title = title; self.symbol = symbol }
+    var body: some View {
+        Label { Text(title) } icon: { Image(systemName: symbol).foregroundStyle(.white).frame(width: 28) }
     }
 }

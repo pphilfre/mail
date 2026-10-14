@@ -15,9 +15,10 @@ struct DraftsView: View {
             .listStyle(.plain).scrollContentBackground(.hidden).background(MailStyle.paper)
             .navigationTitle("Drafts")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) { MailNavigationTitle(title: "Drafts"); DraftLocationPicker(selection: $location) }
-            } }
+            .toolbar {
+                ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Drafts") }
+                ToolbarItem(placement: .primaryAction) { DraftLocationPicker(selection: $location) }
+            }
             .sheet(item: $editingDraft) { draft in
                 NavigationStack { ComposeView(draft: draft) }
             }
@@ -37,7 +38,7 @@ struct DraftLocationPicker: View {
                 }.buttonStyle(.plain).accessibilityLabel(location.rawValue)
                     .accessibilityAddTraits(selection == location ? .isSelected : [])
             }
-        }.padding(.horizontal, 3).modifier(MailControlSurface()).accessibilityIdentifier("draftLocationPicker")
+        }.accessibilityElement(children: .contain).accessibilityIdentifier("draftLocationPicker")
     }
 }
 
@@ -70,7 +71,6 @@ struct DraftSections: View {
 
     var body: some View {
         Group {
-            deletionPresenter
             if location == .device && !local.isEmpty {
               Section {
                 ForEach(local) { draft in
@@ -101,13 +101,13 @@ struct DraftSections: View {
                 .contextMenu { Button("Delete local copy", systemImage: "trash", role: .destructive) { deletingDraft = draft } }
                 }
               } header: {
-                Text("On this device")
+                Text("On this device").background { deletionPresenter }
               } footer: {
                 Text("Edits are saved on this device. Use Save to Gmail in the composer to update the Gmail copy.")
               }
             }
             if location == .gmail && !remote.isEmpty {
-                Section("In Gmail") {
+                Section {
                     ForEach(remote) { message in
                         NavigationLink { GmailMessageView(message: message) } label: {
                             VStack(alignment: .leading, spacing: 4) {
@@ -121,7 +121,7 @@ struct DraftSections: View {
                         .contextMenu { Button("Delete Gmail draft", systemImage: "trash", role: .destructive) { deletingRemote = message } }
                         .disabled(deleting)
                     }
-                }
+                } header: { Text("In Gmail").background { deletionPresenter } }
             }
             if location == .device ? local.isEmpty : remote.isEmpty {
                 ContentUnavailableView("No drafts", systemImage: "doc", description: Text(location == .device ? "Drafts saved on this device appear here." : "Your Gmail drafts appear here after syncing."))
@@ -145,7 +145,7 @@ struct DraftSections: View {
     }
     // A single stable presenter avoids duplicating dialogs across the Group's list rows.
     private var deletionPresenter: some View {
-        Color.clear.frame(height: 0).listRowInsets(EdgeInsets()).listRowSeparator(.hidden)
+        Color.clear.frame(width: 0, height: 0)
         .confirmationDialog("Delete the local copy?", isPresented: Binding(
             get: { deletingDraft != nil }, set: { if !$0 { deletingDraft = nil } }
         ), titleVisibility: .visible, presenting: deletingDraft) { draft in

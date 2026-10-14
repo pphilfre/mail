@@ -5,7 +5,6 @@ enum MailStyle {
     static let accent = adaptive(light: 0x705267, dark: 0xD2B5C9)
     static let success = Color(red: 0.16, green: 0.62, blue: 0.43)
     static let intelligence = adaptive(light: 0x614CC4, dark: 0xBDB0FF)
-    static let readerAction = Color(red: 112.0 / 255, green: 82.0 / 255, blue: 103.0 / 255)
     static let canvas = adaptive(light: 0xF1EFEB, dark: 0x19181B)
     static let paper = adaptive(light: 0xFAF9F6, dark: 0x211F23)
     static let ink = adaptive(light: 0x252428, dark: 0xF2EFF1)

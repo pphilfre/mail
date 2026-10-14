@@ -10,7 +10,7 @@ struct ReceiptMoney: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-struct ReceiptSource: Identifiable, Hashable, Sendable {
+struct ReceiptSource: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let accountID: UUID
     let remoteID: String
@@ -41,13 +41,13 @@ enum ReceiptFlow: String, Codable, CaseIterable, Hashable, Sendable {
     var sign: String { self == .incoming ? "+" : self == .outgoing ? "−" : "" }
 }
 
-struct ReceiptFact: Identifiable, Equatable, Sendable {
+struct ReceiptFact: Codable, Identifiable, Equatable, Sendable {
     let label: String
     let value: String
     var id: String { label }
 }
 
-struct ReceiptSummary: Identifiable, Equatable, Sendable {
+struct ReceiptSummary: Codable, Identifiable, Equatable, Sendable {
     let id: UUID
     let accountID: UUID
     let remoteID: String

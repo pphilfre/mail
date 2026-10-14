@@ -79,6 +79,8 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         let title = "Plan weekend \(UUID().uuidString.prefix(6))"
         input.tap(); input.typeText(title)
+        let committed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", title), object: input)
+        XCTAssertEqual(XCTWaiter.wait(for: [committed], timeout: 5), .completed)
         app.buttons["saveMailTaskButton"].tap()
         XCTAssertTrue(app.buttons[title].waitForExistence(timeout: 5))
         app.buttons[title].tap()
@@ -165,8 +167,9 @@ final class DispatchUITests: XCTestCase {
         app.buttons["saveDraftButton"].tap()
         app.buttons["mailboxDrawerButton"].tap()
         revealMailbox("mailboxSettingsButton", app: app).tap()
-        revealMailbox("privacyIntelligenceSettingsLink", app: app).tap()
-        XCTAssertTrue(app.navigationBars["Privacy & Intelligence"].waitForExistence(timeout: 5))
+        let privacy = app.descendants(matching: .any)["privacyIntelligenceSettingsLink"].firstMatch
+        XCTAssertTrue(privacy.waitForExistence(timeout: 5)); privacy.tap()
+        XCTAssertTrue(app.navigationBars["Privacy & AI"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.switches["mailAppLockToggle"].exists)
         attachScreenshot("Privacy and intelligence in dark mode with large text", app: app)
     }
@@ -360,7 +363,8 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(merchant.waitForExistence(timeout: 5))
         merchant.tap(); merchant.typeText(" Shop")
         app.buttons["saveReceiptButton"].tap()
-        XCTAssertTrue(app.staticTexts["Receipt saved"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["receiptMerchant"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Paper & Ink Shop"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["mailConfirmationTitle"].firstMatch.waitForNonExistence(timeout: 8))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.staticTexts["Paper & Ink Shop"].waitForExistence(timeout: 5))
@@ -460,7 +464,7 @@ final class DispatchUITests: XCTestCase {
         app.buttons["Done"].tap()
         app.buttons["mailboxDrawerButton"].tap()
         revealMailbox("mailboxSettingsButton", app: app).tap()
-        XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["remoteImagesToggle"].waitForExistence(timeout: 5))
         let swipePicker = app.descendants(matching: .any)["leadingSwipePicker"].firstMatch
         for _ in 0..<6 {
             if swipePicker.exists && swipePicker.isHittable { break }
@@ -484,7 +488,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["composeButton"].isHittable)
         app.buttons["mailboxDrawerButton"].tap()
         revealMailbox("mailboxSettingsButton", app: app).tap()
-        XCTAssertTrue(app.switches["Load remote images"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["remoteImagesToggle"].waitForExistence(timeout: 5))
         attachScreenshot("Settings redesign", app: app)
     }
 
@@ -628,6 +632,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertFalse(results.descendants(matching: .any)["searchResultSample-studio@example.com"].exists)
         match.tap()
         XCTAssertTrue(app.staticTexts["Sample message"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         search.tap()
         search.typeText("zzzznomatch")
@@ -713,9 +718,9 @@ final class DispatchUITests: XCTestCase {
         revealMailbox("mailbox-Drafts", app: app).tap()
         let picker = app.descendants(matching: .any)["draftLocationPicker"].firstMatch
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.buttons["In Gmail"].tap()
+        app.buttons["In Gmail"].tap()
         XCTAssertFalse(app.staticTexts[title].exists)
-        picker.buttons["On this device"].tap()
+        app.buttons["On this device"].tap()
         let row = app.staticTexts[title]
         XCTAssertTrue(row.waitForExistence(timeout: 5)); row.swipeLeft()
         app.buttons["Delete local copy"].firstMatch.tap()

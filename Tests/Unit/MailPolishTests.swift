@@ -1,8 +1,27 @@
 import XCTest
 import UIKit
+import SwiftUI
 @testable import DispatchMail
 
 @MainActor final class MailPolishTests: XCTestCase {
+    func testWritingReviewMarksReplacementsAndApplyDoesNotAppend() {
+        let original = "Please review tomorrow."
+        let revised = "Please review today."
+        let comparison = LocalWritingView.comparison(original: original, revised: revised)
+        XCTAssertTrue(comparison.runs.contains { run in
+            String(comparison.characters[run.range]).contains("tomorrow.") && run.foregroundColor == .red && run.strikethroughStyle == .single
+        })
+        XCTAssertTrue(comparison.runs.contains { run in
+            String(comparison.characters[run.range]).contains("today.") && run.foregroundColor == .green && run.backgroundColor != nil
+        })
+        let view = UITextView()
+        view.attributedText = RichMailEditor.attributed(original, document: nil)
+        view.selectedRange = NSRange(location: original.utf16.count, length: 0)
+        let controller = RichMailEditorController(); controller.view = view
+        XCTAssertTrue(controller.applyRevision(revised, range: NSRange(location: 0, length: original.utf16.count), expected: original))
+        XCTAssertEqual(view.text, revised)
+    }
+
     func testGmailBodyDecodesMixedCaseSpacedCharsetWithoutDoubleDecoding() {
         let part = GmailPart(mimeType: "text/plain", headers: [
             GmailHeader(name: "Content-Type", value: "text/plain; CHARSET = 'windows-1252'; format=flowed"),

@@ -1,3 +1,12 @@
+Reader and composer refinements:
+
+- Neutral reader action pills, compact Summarise disclosure with a blue/lavender gradient, and white writing-tool icons.
+- Account initials in the profile control; compose matches the Tasks add button.
+- Search results dismiss the keyboard. Catch Up and Privacy & AI use the shared workspace background.
+- Draft location controls sit beside Settings, with no empty header or presenter row above drafts.
+- Draft save status sits beside Done; writing comparisons replace the body visually until accepted or discarded.
+- Receipt detection persists across launches and refreshes when message content changes, including previously non-receipt messages.
+
 Dispatch v0.9.0 improves native mail UI, local caching, responsiveness and release delivery.
 
 - Consistent Liquid Glass controls, compact compose and Drafts tools, inline AI writing,

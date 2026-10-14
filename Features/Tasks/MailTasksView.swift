@@ -126,6 +126,7 @@ struct MailTasksView: View {
                 .accessibilityIdentifier("toggleTask-\(task.accessibilityKey)")
             VStack(alignment: .leading, spacing: 6) {
                 Button { editing = task } label: { Text(task.title).font(.subheadline.weight(.semibold)).foregroundStyle(Color.primary).multilineTextAlignment(.leading).lineLimit(2) }
+                    .accessibilityLabel(task.title).accessibilityIdentifier("editTask-\(task.accessibilityKey)")
                 if !task.notes.isEmpty { Text(task.notes).font(.subheadline).foregroundStyle(.secondary).lineLimit(1) }
                 HStack(spacing: 10) {
                     if task.status == .inProgress { taskBadge("In progress", symbol: "circle.lefthalf.filled") }
