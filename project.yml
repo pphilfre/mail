@@ -63,6 +63,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.freddiephilpot.dispatch
         PRODUCT_MODULE_NAME: DispatchMail
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": App/Simulator.entitlements
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Dispatch
