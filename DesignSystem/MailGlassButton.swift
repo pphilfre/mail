@@ -1,14 +1,21 @@
 import SwiftUI
 
-struct MailReaderActionSurface: ViewModifier {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    func body(content: Content) -> some View {
-        if reduceTransparency {
-            content.foregroundStyle(MailStyle.ink).tint(MailStyle.ink).background(MailStyle.tile, in: .capsule)
-        } else {
-            content.foregroundStyle(MailStyle.ink).tint(MailStyle.ink)
-                .glassEffect(.regular.tint(MailStyle.tile).interactive(), in: .capsule)
+struct MailFloatingActionButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 24, weight: .semibold))
+                .frame(width: 56, height: 56, alignment: .center)
+                .foregroundStyle(MailStyle.paper)
+                .background(MailStyle.accent, in: .circle)
+                .contentShape(.circle)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 

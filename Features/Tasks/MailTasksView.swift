@@ -74,12 +74,9 @@ struct MailTasksView: View {
                 .overlay(alignment: .bottom) { MailRule() }
         }
         .safeAreaInset(edge: .bottom, alignment: .trailing) {
-            Button { editing = .standalone() } label: {
-                Image(systemName: "plus").font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(MailStyle.paper).frame(width: 56, height: 56)
-                    .background(MailStyle.accent, in: .circle)
-            }.buttonStyle(.plain).accessibilityLabel("New task").accessibilityIdentifier("newTaskButton")
-                .padding(.trailing, 20).padding(.vertical, 10)
+            MailFloatingActionButton(title: "New task", symbol: "plus") { editing = .standalone() }
+                .accessibilityIdentifier("newTaskButton")
+                .padding(.trailing, MailStyle.contentPadding).padding(.vertical, 8)
         }
         .mailSheetTitle("Tasks")
         .navigationBarTitleDisplayMode(.inline)

@@ -51,6 +51,8 @@ struct SubscriptionsView: View {
                             .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Exclude \(entry.email) from subscriptions")
                     }.font(.caption)
                 }.padding(.vertical, 8).buttonStyle(.borderless)
+                    .listRowBackground(MailStyle.paper)
+                    .listRowInsets(EdgeInsets(top: 8, leading: MailStyle.contentPadding, bottom: 8, trailing: MailStyle.contentPadding))
             }
             if entries.isEmpty {
                 ContentUnavailableView("No newsletters here", systemImage: "newspaper",
@@ -124,9 +126,12 @@ private struct SubscriptionSenderManager: View {
                         Button("Reset") { set(person.email, included: nil) }
                     }.font(.subheadline).buttonStyle(.borderless)
                 }.padding(.vertical, 6)
+                    .listRowBackground(MailStyle.paper)
+                    .listRowInsets(EdgeInsets(top: 8, leading: MailStyle.contentPadding, bottom: 8, trailing: MailStyle.contentPadding))
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
         }
+        .modifier(MailWorkspaceList())
         .mailSheetTitle("Newsletter senders").searchable(text: $query, prompt: "Sender name or email")
         .searchPresentationToolbarBehavior(.avoidHidingContent)
         .toolbar { ToolbarItem(placement: .confirmationAction) {

@@ -8,11 +8,7 @@ enum InboxQuickFilter: String, CaseIterable, Identifiable {
 
 struct InboxHeader: View {
     @Environment(MailFeedback.self) private var feedback
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var typeSize
     @Binding var filter: InboxQuickFilter
-    @Binding var mailbox: String
-    let scopeTitle: String
     let showFilters: Bool
     let allowStarred: Bool
     let canSelect: Bool
@@ -22,11 +18,6 @@ struct InboxHeader: View {
     var waitingUntil: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if mailbox != "Drafts" { Group {
-                if typeSize.isAccessibilitySize { mailboxPicker.pickerStyle(.menu).frame(minHeight: 44) }
-                else { mailboxPicker.pickerStyle(.segmented) }
-            }.accessibilityIdentifier("mailboxSelector") }
         HStack(spacing: 12) {
             if showFilters {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -55,17 +46,8 @@ struct InboxHeader: View {
                     .accessibilityIdentifier("selectMailButton")
             }
         }
-        }
         .padding(.horizontal, MailStyle.contentPadding).padding(.top, 8)
         .background(MailStyle.paper)
         .overlay(alignment: .bottom) { MailRule() }
-    }
-    private var mailboxPicker: some View {
-        Picker("Mailbox", selection: $mailbox) {
-            Text("Inbox").tag("Inbox")
-            Text("Catch Up").tag("Catch Up")
-            Text("Sent").tag("Sent")
-            if !["Inbox", "Catch Up", "Sent"].contains(mailbox) { Text(scopeTitle).tag(mailbox) }
-        }
     }
 }

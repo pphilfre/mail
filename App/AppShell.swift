@@ -8,6 +8,10 @@ struct AppShell: View {
     @Query(filter: #Predicate<StoreMetadata> { $0.key == "mail-triage-undo" }) private var undoMetadata: [StoreMetadata]
     @AppStorage("showSampleInbox") private var showSamples = false
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("surfaceColour") private var surfaceColour = "stone"
+    @AppStorage("accentColour") private var accentColour = "plum"
+    @AppStorage("customAccentColour") private var customAccentColour = "705267"
+    @AppStorage("mailFont") private var mailFont = "serif"
     @AppStorage("selectedMailAccount") private var selectedAccount = ""
     @State private var tab = MailTab.mail
     @State private var showingSearch = false
@@ -42,7 +46,12 @@ struct AppShell: View {
             }
         }
         .tint(MailStyle.accent)
+        .fontDesign(MailStyle.selectedFontDesign)
         .foregroundStyle(MailStyle.ink)
+        .animation(nil, value: surfaceColour)
+        .animation(nil, value: accentColour)
+        .animation(nil, value: customAccentColour)
+        .animation(nil, value: mailFont)
         .modifier(MailFeedbackOverlay())
         .environment(feedback)
         .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)

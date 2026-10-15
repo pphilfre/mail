@@ -189,18 +189,18 @@ struct GmailMessageView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 ShareLink(item: MessageUtilities.readableCopy(actionMessage)) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 19, weight: .medium))
-                        .frame(width: 44, height: 44).contentShape(.circle)
-                }.labelStyle(.iconOnly).buttonStyle(.plain).modifier(MailReaderActionSurface())
+                    Image(systemName: "square.and.arrow.up").font(MailStyle.icon)
+                        .frame(width: 44, height: 44).contentShape(.rect)
+                }.labelStyle(.iconOnly).buttonStyle(.plain)
                     .accessibilityLabel("Share message")
                 if !message.isDraft {
                     Button { feedback.select(); forward(actionMessage) } label: {
                         Image(systemName: "arrowshape.turn.up.right").font(MailStyle.icon).frame(width: 44, height: 44)
-                    }.buttonStyle(.plain).modifier(MailReaderActionSurface()).accessibilityLabel("Forward")
+                    }.buttonStyle(.plain).accessibilityLabel("Forward")
                     Menu("Reply", systemImage: "arrowshape.turn.up.left") {
                         Button("Reply", systemImage: "arrowshape.turn.up.left") { feedback.select(); reply(actionMessage, all: false) }
                         Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { feedback.select(); reply(actionMessage, all: true) }
-                    }.labelStyle(.iconOnly).font(MailStyle.icon).frame(width: 44, height: 44).modifier(MailReaderActionSurface())
+                    }.labelStyle(.iconOnly).font(MailStyle.icon).frame(width: 44, height: 44)
                 }
             }
         }

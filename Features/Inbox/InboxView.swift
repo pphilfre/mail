@@ -161,11 +161,7 @@ struct InboxView: View {
             else {
                 HStack {
                     Spacer()
-                    Button { showingCompose = true } label: {
-                        Image(systemName: "square.and.pencil").font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(MailStyle.paper).frame(width: 56, height: 56)
-                            .background(MailStyle.accent, in: .circle)
-                    }.buttonStyle(.plain).accessibilityLabel("Compose")
+                    MailFloatingActionButton(title: "Compose", symbol: "square.and.pencil") { showingCompose = true }
                         .accessibilityIdentifier("composeButton")
                 }.padding(.horizontal, MailStyle.contentPadding).padding(.vertical, 8)
             }
@@ -414,11 +410,7 @@ struct InboxView: View {
     }
     private var inboxHeader: some View {
         InboxHeader(
-            filter: activeFilter, mailbox: Binding(get: { labelFilter == nil ? mailbox : "Custom" }, set: { value in
-                guard value != "Custom" else { return }
-                labelFilter = nil; quickFilter = .all; mailbox = value
-            }),
-            scopeTitle: mailboxTitle, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
+            filter: activeFilter, showFilters: !["Drafts", "Catch Up"].contains(mailbox), allowStarred: !accounts.isEmpty,
             canSelect: !accounts.isEmpty && !["Drafts", "Catch Up"].contains(mailbox), selecting: selecting,
             select: {
                 feedback.select()

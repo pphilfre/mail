@@ -106,14 +106,14 @@ struct MailboxPanel: View {
                     }
                 }
                 Section {
-                    DisclosureGroup("Smart folders") {
+                    DisclosureGroup("Saved searches") {
                         ForEach(SavedMailSearch.decode(savedRaw).filter { search in search.accountID == nil || accounts.contains { $0.id == search.accountID } }) { search in
                             Button {
                                 feedback.select(); account = search.accountID?.uuidString ?? ""; mailbox = "All Mail"
                                 label = "smart:" + search.id.uuidString; close()
                             } label: { row(search.name, symbol: "line.3.horizontal.decrease", selected: label == "smart:" + search.id.uuidString) }
                         }
-                        Button("Create smart folder", systemImage: "plus", action: openSearch)
+                        Button("Create saved search", systemImage: "plus", action: openSearch)
                     }
                     NavigationLink { MailRulesView() } label: { row("Rules", symbol: "line.3.horizontal.decrease", selected: false) }
                 }

@@ -2,23 +2,64 @@ import SwiftUI
 
 enum MailStyle {
     // Paper and ink stay opaque. Native bars and transient controls supply the glass layer.
-    static let accent = adaptive(light: 0x705267, dark: 0xD2B5C9)
+    static var accent: Color {
+        Color(uiColor: UIColor { traits in
+            let choice = UserDefaults.standard.string(forKey: "accentColour") ?? "plum"
+            let hex: UInt32
+            switch choice {
+            case "ocean": hex = traits.userInterfaceStyle == .dark ? 0x8BC8ED : 0x17688F
+            case "forest": hex = traits.userInterfaceStyle == .dark ? 0x9AD9B3 : 0x28774E
+            case "coral": hex = traits.userInterfaceStyle == .dark ? 0xF1B7A8 : 0xA84E3D
+            case "gold": hex = traits.userInterfaceStyle == .dark ? 0xE7C787 : 0x916416
+            case "custom": hex = UInt32(UserDefaults.standard.string(forKey: "customAccentColour") ?? "705267", radix: 16) ?? 0x705267
+            default: hex = traits.userInterfaceStyle == .dark ? 0xD2B5C9 : 0x705267
+            }
+            return UIColor(red: CGFloat((hex >> 16) & 255) / 255,
+                           green: CGFloat((hex >> 8) & 255) / 255,
+                           blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
+    }
     static let success = Color(red: 0.16, green: 0.62, blue: 0.43)
     static let intelligence = adaptive(light: 0x614CC4, dark: 0xBDB0FF)
-    static let canvas = adaptive(light: 0xF1EFEB, dark: 0x19181B)
-    static let paper = adaptive(light: 0xFAF9F6, dark: 0x211F23)
+    static var canvas: Color { surface(light: [0xF1EFEB, 0xEAF0F4, 0xEDF3ED, 0xF5EEEB], dark: [0x19181B, 0x151D24, 0x172019, 0x241A19]) }
+    static var paper: Color { surface(light: [0xFAF9F6, 0xF8FBFD, 0xF9FCF8, 0xFFF9F6], dark: [0x211F23, 0x1E2831, 0x202A22, 0x2C2220]) }
     static let ink = adaptive(light: 0x252428, dark: 0xF2EFF1)
     static let secondaryInk = adaptive(light: 0x666269, dark: 0xB8B2BC)
     static let divider = adaptive(light: 0xDEDAD7, dark: 0x423E45, highContrastLight: 0x8C858C, highContrastDark: 0x8D858F)
-    static let tile = adaptive(light: 0xECE9E6, dark: 0x302D33)
+    static var tile: Color { surface(light: [0xECE9E6, 0xE6EFF5, 0xE9F1E8, 0xF3E7E1], dark: [0x302D33, 0x2A3640, 0x2C382E, 0x3A2D2A]) }
     static let rowSpacing: CGFloat = 6
     static let contentPadding: CGFloat = 20
     static let readingWidth: CGFloat = 680
     static let controlRadius: CGFloat = 10
     static let icon = Font.system(size: 19, weight: .medium)
-    static let heading = Font.system(.largeTitle, design: .serif, weight: .medium)
-    static let readerTitle = Font.system(.title, design: .serif, weight: .medium)
+    static var heading: Font { .system(.largeTitle, design: selectedFontDesign, weight: .medium) }
+    static var readerTitle: Font { .system(.title, design: selectedFontDesign, weight: .medium) }
     static let sectionHeading = Font.system(.subheadline, weight: .semibold)
+
+    static var selectedFontDesign: Font.Design {
+        switch UserDefaults.standard.string(forKey: "mailFont") ?? "serif" {
+        case "rounded": .rounded
+        case "system": .default
+        case "monospaced": .monospaced
+        default: .serif
+        }
+    }
+
+    private static func surface(light: [UInt32], dark: [UInt32]) -> Color {
+        Color(uiColor: UIColor { traits in
+            let index: Int
+            switch UserDefaults.standard.string(forKey: "surfaceColour") ?? "stone" {
+            case "sky": index = 1
+            case "sage": index = 2
+            case "blush": index = 3
+            default: index = 0
+            }
+            let hex = traits.userInterfaceStyle == .dark ? dark[index] : light[index]
+            return UIColor(red: CGFloat((hex >> 16) & 255) / 255,
+                           green: CGFloat((hex >> 8) & 255) / 255,
+                           blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
+    }
 
     private static func adaptive(light: UInt32, dark: UInt32, highContrastLight: UInt32? = nil, highContrastDark: UInt32? = nil) -> Color {
         Color(uiColor: UIColor { traits in
@@ -101,7 +142,7 @@ struct MailRule: View {
 struct MailNavigationTitle: View {
     let title: String
     var body: some View {
-        Text(title).font(.system(.title2, design: .serif, weight: .medium))
+        Text(title).font(.system(.title2, design: MailStyle.selectedFontDesign, weight: .medium))
             .foregroundStyle(MailStyle.ink).lineLimit(1).accessibilityAddTraits(.isHeader)
     }
 }

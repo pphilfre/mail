@@ -73,7 +73,7 @@ struct SettingsView: View {
                 NavigationLink { AccountsView() } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "person.crop.circle")
-                            .font(.title2).foregroundStyle(.white)
+                            .font(.title2).foregroundStyle(MailStyle.accent)
                             .frame(width: 32, height: 44)
                         Text("Accounts").font(.body)
                     }.padding(.vertical, 4)
@@ -89,10 +89,12 @@ struct SettingsView: View {
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
                 }.pickerStyle(.segmented)
+                NavigationLink { AppearanceSettingsView() } label: { SettingsLabel("Colours & type", symbol: "paintpalette") }
+                    .accessibilityIdentifier("appearanceSettingsLink")
             }
             Section {
-                Toggle(isOn: $remoteImages) { HStack { Image(systemName: "photo").foregroundStyle(.white).frame(width: 28); MailInfoLabel(title: "Remote images", information: "Loading images can reveal when you open mail.") } }.accessibilityIdentifier("remoteImagesToggle")
-                Toggle(isOn: $senderPictures) { HStack { Image(systemName: "building.2").foregroundStyle(.white).frame(width: 28); MailInfoLabel(title: "Company icons", information: "Icons load from senders’ websites. They do not verify identity.") } }
+                Toggle(isOn: $remoteImages) { HStack { Image(systemName: "photo").foregroundStyle(MailStyle.accent).frame(width: 28); MailInfoLabel(title: "Remote images", information: "Loading images can reveal when you open mail.") } }.accessibilityIdentifier("remoteImagesToggle")
+                Toggle(isOn: $senderPictures) { HStack { Image(systemName: "building.2").foregroundStyle(MailStyle.accent).frame(width: 28); MailInfoLabel(title: "Company icons", information: "Icons load from senders’ websites. They do not verify identity.") } }
                 Toggle(isOn: $compactInbox) { SettingsLabel("Compact inbox", symbol: "rectangle.compress.vertical") }.accessibilityIdentifier("compactInboxToggle")
                 Picker(selection: $previewLines) {
                     ForEach(0...3, id: \.self) { Text($0 == 0 ? "Off" : "\($0)").tag($0) }
@@ -128,7 +130,9 @@ struct SettingsView: View {
             }
             Section("About") {
                 LabeledContent { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") } label: { SettingsLabel("Version", symbol: "info.circle") }
-
+            }
+            Section {
+                NavigationLink { CreditsView() } label: { SettingsLabel("Credits", symbol: "person.text.rectangle") }
             }
           }
           .listRowBackground(MailStyle.paper)
@@ -138,6 +142,7 @@ struct SettingsView: View {
         .modifier(MailWorkspaceList())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
         .toolbar { ToolbarItem(placement: .principal) { MailNavigationTitle(title: "Settings") } }
         .onChange(of: appearance) { _, _ in feedback.select() }
         .onChange(of: haptics) { _, enabled in if enabled { feedback.select() } }
@@ -152,6 +157,6 @@ private struct SettingsLabel: View {
     let symbol: String
     init(_ title: String, symbol: String) { self.title = title; self.symbol = symbol }
     var body: some View {
-        Label { Text(title) } icon: { Image(systemName: symbol).foregroundStyle(.white).frame(width: 28) }
+        Label { Text(title) } icon: { Image(systemName: symbol).foregroundStyle(MailStyle.accent).frame(width: 28) }
     }
 }
