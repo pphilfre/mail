@@ -13,7 +13,7 @@ final class DispatchUITests: XCTestCase {
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
         attachScreenshot("Portfolio inbox", app: app)
         sample.tap()
-        XCTAssertTrue(app.buttons["readerMoreButton"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Sample message"].waitForExistence(timeout: 15))
         let body = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hi Freddie")).firstMatch
         _ = body.waitForExistence(timeout: 15)
         attachScreenshot("Portfolio reader", app: app)
