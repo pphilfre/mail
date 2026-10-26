@@ -4,6 +4,21 @@ import XCTest
 final class DispatchUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testPortfolioScreenshots() {
+        let app = XCUIApplication()
+        app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"
+        app.launchArguments += ["-appearance", "light"]
+        app.launch()
+        let sample = app.staticTexts["A quieter inbox"].firstMatch
+        XCTAssertTrue(sample.waitForExistence(timeout: 15))
+        attachScreenshot("Portfolio inbox", app: app)
+        sample.tap()
+        XCTAssertTrue(app.buttons["readerMoreButton"].waitForExistence(timeout: 15))
+        let body = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hi Freddie")).firstMatch
+        _ = body.waitForExistence(timeout: 15)
+        attachScreenshot("Portfolio reader", app: app)
+    }
+
     func testRedesignedReaderActionsAndHonestSecurityInspector() {
         let app = XCUIApplication()
         app.launchEnvironment["DISPATCH_UI_TEST_SAMPLE_INBOX"] = "YES"

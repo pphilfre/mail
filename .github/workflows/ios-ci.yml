@@ -130,8 +130,8 @@ jobs:
           DISPATCH_TEST_SCOPE: ${{ needs.plan.outputs.scope }}
           DISPATCH_TEST_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_filter || '' }}
         run: bash scripts/run-test-shard.sh '${{ matrix.shard }}'
-      - name: Export failure screenshots
-        if: failure()
+      - name: Export simulator screenshots
+        if: always()
         continue-on-error: true
         run: |
           if [[ -d build/Tests.xcresult ]]; then
